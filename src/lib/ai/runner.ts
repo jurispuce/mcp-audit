@@ -235,18 +235,26 @@ async function runJob(app: AppDatabase, jobId: string, signal: AbortSignal, deps
 			try {
 				res = await chat(
 					gateway,
-					{ model: job.model, messages, tools, max_tokens: 4096 },
+					// Generous: models that think before acting spend part of this on reasoning.
+					{ model: job.model, messages, tools, max_tokens: 16_000 },
 					{ fetch: deps.fetch, signal }
 				);
 			} catch (e) {
 				if (cancelled()) return stopCancelled();
 				throw e;
 			}
-			messages.push({
-				role: 'assistant',
-				content: res.content,
-				...(res.toolCalls.length ? { tool_calls: res.toolCalls } : {})
-			});
+			// Sent back exactly as received, including any thinking blocks the gateway returned.
+			messages.push(res.message);
+			if (res.toolCalls.length === 0 && res.finishReason === 'content_filter') {
+				throw new LlmError(
+					"The model declined to continue (its provider's safety filter). Proposals made so far stay for review."
+				);
+			}
+			if (res.toolCalls.length === 0 && res.finishReason === 'length') {
+				throw new LlmError(
+					'The model ran out of output tokens before finishing. Try again, or use another model.'
+				);
+			}
 			if (res.toolCalls.length === 0) {
 				const summary = res.content?.trim() || 'The model finished without a summary.';
 				addJobStep(app, jobId, { kind: 'info', text: 'Finished.' });

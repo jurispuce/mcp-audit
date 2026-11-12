@@ -277,4 +277,64 @@ describe('AI job runner (#64)', () => {
 		cancelJob(app, human, job.id);
 		await done;
 	});
+
+	it('sends the assistant message back as the gateway returned it, thinking blocks included', async () => {
+		const bodies: { messages: Record<string, unknown>[] }[] = [];
+		const thinking = [{ type: 'thinking', thinking: '', signature: 'sig-abc' }];
+		const claudeLike: FetchLike = async (_url, init) => {
+			const body = JSON.parse(String(init?.body));
+			bodies.push(body);
+			const first = bodies.length === 1;
+			return new Response(
+				JSON.stringify({
+					choices: [
+						{
+							finish_reason: first ? 'tool_calls' : 'stop',
+							message: first
+								? {
+										role: 'assistant',
+										content: null,
+										thinking_blocks: thinking,
+										tool_calls: [
+											{ id: 't1', type: 'function', function: { name: 'list_artifacts', arguments: '{}' } }
+										]
+									}
+								: { role: 'assistant', content: 'Nothing to propose.' }
+						}
+					]
+				})
+			);
+		};
+		const { job, done } = startJob(
+			app,
+			human,
+			{ action: 'derive_roles', context: { engagement_id: e.id } },
+			{ fetch: claudeLike, env }
+		);
+		await done;
+		expect(getJob(app, job.id).status).toBe('succeeded');
+		const assistant = bodies[1]!.messages.find((m) => m.role === 'assistant')!;
+		expect(assistant.thinking_blocks).toEqual(thinking);
+		expect(bodies[0]).toMatchObject({ max_tokens: 16000, tool_choice: 'auto' });
+	});
+
+	it("a model's refusal ends the job with a clear message", async () => {
+		const refusing: FetchLike = async () =>
+			new Response(
+				JSON.stringify({
+					choices: [{ finish_reason: 'content_filter', message: { role: 'assistant', content: '' } }]
+				})
+			);
+		const { job, done } = startJob(
+			app,
+			human,
+			{ action: 'derive_roles', context: { engagement_id: e.id } },
+			{ fetch: refusing, env }
+		);
+		await done;
+		expect(getJob(app, job.id)).toMatchObject({
+			status: 'failed',
+			error: expect.stringContaining('declined to continue')
+		});
+	});
 });

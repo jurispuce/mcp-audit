@@ -17,7 +17,8 @@ export interface ToolCall {
 
 export type ChatMessage =
 	| { role: 'system' | 'user'; content: string }
-	| { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] }
+	// Other fields the gateway returns (for example LiteLLM's thinking_blocks) are passed back as they came.
+	| { role: 'assistant'; content: string | null; tool_calls?: ToolCall[]; [extra: string]: unknown }
 	| { role: 'tool'; tool_call_id: string; content: string };
 
 export interface ToolDefinition {
@@ -29,6 +30,11 @@ export interface ChatResult {
 	content: string | null;
 	toolCalls: ToolCall[];
 	finishReason: string | null;
+	/**
+	 * The assistant message exactly as the gateway returned it. Models that think before calling tools
+	 * (Claude, through LiteLLM's thinking_blocks) need it sent back unchanged on the next request.
+	 */
+	message: Extract<ChatMessage, { role: 'assistant' }>;
 }
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -36,7 +42,8 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 /** Raised for anything the gateway or model got wrong, with a message a person can act on. */
 export class LlmError extends Error {}
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+/** A long agent turn can take minutes; the gateway itself may time out sooner. */
+const DEFAULT_TIMEOUT_MS = 600_000;
 
 /** `https://gw` and `https://gw/v1` both work: LiteLLM serves the OpenAI paths under /v1. */
 export function endpoint(gw: Gateway, path: string): string {
@@ -101,14 +108,26 @@ export async function chat(
 		{ method: 'POST', body: JSON.stringify(payload) },
 		opts
 	)) as {
-		choices?: { message?: { content?: string | null; tool_calls?: ToolCall[] }; finish_reason?: string }[];
+		choices?: {
+			message?: { content?: string | null; tool_calls?: ToolCall[]; [extra: string]: unknown };
+			finish_reason?: string;
+		}[];
 	};
 	const choice = json.choices?.[0];
 	if (!choice?.message) throw new LlmError('The model returned no answer.');
+	const toolCalls = (choice.message.tool_calls ?? []).filter((c) => c?.function?.name);
+	const message: ChatResult['message'] = {
+		...choice.message,
+		role: 'assistant',
+		content: choice.message.content ?? null
+	};
+	if (toolCalls.length) message.tool_calls = toolCalls;
+	else delete message.tool_calls;
 	return {
-		content: choice.message.content ?? null,
-		toolCalls: (choice.message.tool_calls ?? []).filter((c) => c?.function?.name),
-		finishReason: choice.finish_reason ?? null
+		content: message.content,
+		toolCalls,
+		finishReason: choice.finish_reason ?? null,
+		message
 	};
 }
 
@@ -140,7 +159,8 @@ export async function checkToolCalling(
 			gw,
 			{
 				model,
-				max_tokens: 200,
+				// Room to reason first: some models (Claude Opus 5.5) always think before they answer.
+				max_tokens: 4000,
 				messages: [
 					{ role: 'system', content: 'You are being tested for tool use. Answer only by calling the tool.' },
 					{ role: 'user', content: `Call the ${CHECK_TOOL} tool with value "${word}".` }
