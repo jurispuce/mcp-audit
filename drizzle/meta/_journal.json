@@ -15,6 +15,20 @@
       "when": 1794484352830,
       "tag": "0001_search_index",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794484849809,
+      "tag": "0002_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794484850514,
+      "tag": "0003_revision_append_only",
+      "breakpoints": true
     }
   ]
 }
