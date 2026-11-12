@@ -67,6 +67,10 @@ export interface EntityDefinition {
 	fieldLabels?: Record<string, string>;
 	/** Optional: how a stored value reads in the details tab and history (for example 1 -> "Yes"). */
 	formatValue?(column: string, value: SqlValue): string;
+	/** Optional: type-specific content the item sheet shows (links, guidance, ...), as plain JSON. */
+	extra?(app: AppDatabase, row: Row): unknown;
+	/** Optional: how many links the item has, for the count on the Links tab. */
+	linkCount?(app: AppDatabase, row: Row): number;
 	/** Optional: columns to show in the details tab, in order. Defaults to `columns`. */
 	detailColumns?: readonly string[];
 }

@@ -19,6 +19,8 @@ export interface ItemView {
 	lastChannel: string;
 	updatedAt: Date;
 	counts: { links: number; comments: number; history: number };
+	/** Type-specific content, for example a requirement's links, guidance and criteria. */
+	extra: unknown;
 }
 
 /** Parse "user:abc" from `?item=`. */
@@ -51,7 +53,12 @@ export function getItem(app: AppDatabase, type: string, id: string): ItemView {
 		lastAuthor: authorshipLabel(latest.authorName, latest.authorAgent),
 		lastChannel: latest.channel,
 		updatedAt: new Date(Number(row.updated_at)),
-		counts: { links: 0, comments: countComments(app, type, id), history: history.length }
+		counts: {
+			links: def.linkCount?.(app, row) ?? 0,
+			comments: countComments(app, type, id),
+			history: history.length
+		},
+		extra: def.extra?.(app, row) ?? null
 	};
 }
 

@@ -119,3 +119,103 @@ export const comment = sqliteTable(
 	},
 	(t) => [index('comment_entity').on(t.entityType, t.entityId, t.createdAt)]
 );
+
+// ---- Library: shared across engagements -------------------------------------------------------
+
+/** A law, standard or internal document whose requirements are audited against. */
+export const source = sqliteTable(
+	'source',
+	{
+		...entityColumns(),
+		/** Short stable key, for example "nis2". Import matches on it. */
+		code: text('code').notNull(),
+		type: text('type', { enum: ['law', 'standard', 'internal'] }).notNull(),
+		title: text('title').notNull(),
+		edition: text('edition'),
+		language: text('language').notNull(),
+		licenceNote: text('licence_note'),
+		/** Set for internal sources: the auditee that owns it (table arrives in #35). */
+		auditeeId: text('auditee_id'),
+		/** Set when the source is an uploaded document (table arrives in #41). */
+		artifactId: text('artifact_id')
+	},
+	(t) => [uniqueIndex('source_code').on(t.code)]
+);
+
+export const requirement = sqliteTable(
+	'requirement',
+	{
+		...entityColumns(),
+		sourceId: text('source_id')
+			.notNull()
+			.references(() => source.id),
+		refCode: text('ref_code').notNull(),
+		title: text('title').notNull(),
+		text: text('text'),
+		language: text('language').notNull(),
+		/** The requirement this one is a translation of (same requirement, another language). */
+		translationOf: text('translation_of'),
+		locator: text('locator'),
+		parentId: text('parent_id'),
+		origin: text('origin', { enum: ['external', 'internal'] }).notNull(),
+		status: text('status', { enum: ['proposed', 'confirmed'] }).notNull(),
+		/** Internal requirements: short quote in the original language. */
+		quote: text('quote'),
+		/** Order among siblings, as in the source. */
+		position: integer('position').notNull().default(0)
+	},
+	(t) => [
+		uniqueIndex('requirement_source_ref').on(t.sourceId, t.refCode),
+		index('requirement_parent').on(t.parentId),
+		index('requirement_translation').on(t.translationOf)
+	]
+);
+
+/** Directional typed link between two requirements, within or across sources. Versioned like any item. */
+export const requirementLink = sqliteTable(
+	'requirement_link',
+	{
+		...entityColumns(),
+		fromId: text('from_id')
+			.notNull()
+			.references(() => requirement.id),
+		toId: text('to_id')
+			.notNull()
+			.references(() => requirement.id),
+		type: text('type', { enum: ['details', 'explains', 'implements', 'equivalent', 'conflicts'] }).notNull(),
+		/** Only for implements: full or partial. */
+		coverage: text('coverage', { enum: ['full', 'partial'] }),
+		note: text('note')
+	},
+	(t) => [index('requirement_link_from').on(t.fromId), index('requirement_link_to').on(t.toId)]
+);
+
+/** The auditor's "how to audit this". One per requirement, versioned separately from its text. */
+export const guidance = sqliteTable(
+	'guidance',
+	{
+		...entityColumns(),
+		requirementId: text('requirement_id')
+			.notNull()
+			.references(() => requirement.id),
+		body: text('body').notNull()
+	},
+	(t) => [uniqueIndex('guidance_requirement').on(t.requirementId)]
+);
+
+/** What evidence must show. engagement_id empty means a general criterion. */
+export const criterion = sqliteTable(
+	'criterion',
+	{
+		...entityColumns(),
+		requirementId: text('requirement_id')
+			.notNull()
+			.references(() => requirement.id),
+		engagementId: text('engagement_id'),
+		text: text('text').notNull(),
+		/** JSON array of strings. */
+		expectedEvidence: text('expected_evidence', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		position: integer('position').notNull().default(0)
+	},
+	(t) => [index('criterion_requirement').on(t.requirementId)]
+);

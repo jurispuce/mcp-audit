@@ -3,3 +3,4 @@
  * (item sheet, history, revert, comments) can find them by name. Add new entity modules here.
  */
 import './users';
+import './library';
