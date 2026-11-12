@@ -85,17 +85,19 @@ export function seedSampleEngagement(
 	app: AppDatabase,
 	actor: Actor,
 	files: string,
-	auditor: User
+	auditor: User,
+	options: { name?: string; auditeeName?: string } = {}
 ): Engagement {
-	const existing = listEngagements(app).find((e) => e.name === SAMPLE_ENGAGEMENT_NAME);
+	const name = options.name ?? SAMPLE_ENGAGEMENT_NAME;
+	const existing = listEngagements(app).find((e) => e.name === name);
 	if (existing) return existing;
 	const nis2 = getSourceByCode(app, 'nis2');
 	if (!nis2) throw new Error('The NIS 2 source must be imported before the sample engagement.');
 	const req = (point: string) => findRequirement(app, nis2.id, `Art. 21(2)(${point})`)!.id;
 
 	const e = createEngagement(app, actor, {
-		name: SAMPLE_ENGAGEMENT_NAME,
-		auditeeName: 'Baltic Freight SIA',
+		name,
+		auditeeName: options.auditeeName ?? 'Baltic Freight SIA',
 		auditeeDescription: 'Logistics company, 120 employees, two sites.',
 		startDate: new Date().toISOString().slice(0, 10),
 		workingLanguage: 'en',
@@ -221,3 +223,21 @@ Baltic Freight SIA, draft
 1. Daily backups of the warehouse management system are made at 02:00.
 2. Backups are kept for 30 days at the second site.
 3. A restore test is done once a year.`;
+
+/**
+ * Test only: a fresh copy of the sample engagement under its own name and auditee, so an end-to-end
+ * test can change it without touching what other tests read.
+ */
+export async function createTestEngagement(
+	app: AppDatabase,
+	env: NodeJS.ProcessEnv,
+	name: string
+): Promise<Engagement> {
+	const { users } = await seedTestData(app, env);
+	const admin = users.find((u) => u.role === 'admin')!;
+	const auditor = users.find((u) => u.role === 'auditor')!;
+	return seedSampleEngagement(app, { userId: admin.id, channel: 'ui' }, filesDir(env), auditor, {
+		name,
+		auditeeName: `${name} client`
+	});
+}

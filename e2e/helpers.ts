@@ -42,6 +42,21 @@ export async function seed(request: APIRequestContext): Promise<SeedResult> {
 	return (await res.json()) as SeedResult;
 }
 
+/**
+ * A fresh copy of the sample engagement (scopes, requirements, roles, risks, documents and a draft
+ * plan of two events with evidence), with its own auditee, for a test that changes things.
+ */
+export async function sampleCopy(request: APIRequestContext, name = unique('Sample')) {
+	const res = await request.post('/api/test/engagement', { data: { name } });
+	expect(res.ok(), await res.text()).toBeTruthy();
+	return (await res.json()) as {
+		id: string;
+		name: string;
+		auditeeId: string;
+		events: { id: string; title: string }[];
+	};
+}
+
 /** A new engagement of its own for a test that changes things, created through the real form. */
 export async function createEngagement(page: Page, name = unique('Audit'), auditee = unique('Client')) {
 	await page.goto('/');
