@@ -1,4 +1,4 @@
-import { ADMIN, expect, PASSWORD, postForm, seed, signIn, test } from '../helpers';
+import { ADMIN, expect, PASSWORD, postForm, seed, signIn, test, unique } from '../helpers';
 
 test.beforeEach(async ({ request }) => {
 	await seed(request);
@@ -17,6 +17,18 @@ test('a wrong password gives one message that does not say which part was wrong'
 	await signIn(page, ADMIN, 'not the password');
 	await expect(page.getByRole('alert')).toHaveText('Email or password is not correct.');
 	await expect(page).toHaveURL(/\/login/);
+});
+
+test('repeated wrong passwords lock sign-in for that account for a while (#67)', async ({ page }) => {
+	const email = `${unique('locked')}@example.test`;
+	for (let i = 0; i < 5; i++) {
+		await signIn(page, email, 'not the password');
+		await expect(page.getByRole('alert')).toHaveText('Email or password is not correct.');
+	}
+	await signIn(page, email, 'not the password');
+	await expect(page.getByRole('alert')).toHaveText(
+		/^Too many failed attempts\. Try again in 1[45] minutes\.$/
+	);
 });
 
 test('API calls without a session get 401 JSON, not a redirect', async ({ request }) => {

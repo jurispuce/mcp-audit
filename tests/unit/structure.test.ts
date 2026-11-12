@@ -42,7 +42,8 @@ const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/artifacts.ts': ['artifact_text'],
 	'src/lib/domain/library-documents.ts': ['library_document_text'],
 	'src/lib/domain/ai-settings.ts': ['app_setting'],
-	'src/lib/domain/jobs.ts': ['ai_job']
+	'src/lib/domain/jobs.ts': ['ai_job'],
+	'src/lib/domain/throttle.ts': ['auth_throttle']
 };
 
 const SQL_WRITE =

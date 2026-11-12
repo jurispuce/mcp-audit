@@ -1,0 +1,35 @@
+# Public-internet deployment: Caddy terminates TLS in front of the app. Use with the main file:
+#   docker compose -f docker-compose.yml -f docker-compose.public.yml up -d
+# Needs in .env: PUBLIC_HOST=audit.example.com and ORIGIN=https://audit.example.com.
+# Read docs/public-endpoint.md first: a private network or VPN stays the safer default.
+
+services:
+  app:
+    # Only Caddy reaches the app; nothing is published on the host.
+    ports: !reset []
+    environment:
+      ORIGIN: ${ORIGIN:?Set ORIGIN=https://<your host> in .env}
+      # Trust the client address and protocol Caddy passes on (for rate limiting and secure cookies).
+      ADDRESS_HEADER: x-forwarded-for
+      XFF_DEPTH: '1'
+      PROTOCOL_HEADER: x-forwarded-proto
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set PUBLIC_HOST=<your host> in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy-data:
+  caddy-config:

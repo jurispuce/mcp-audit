@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { revokeAllPersonalTokens, revokeSessions, setPassword } from './auth';
+import { accountKey, clearThrottle } from './throttle';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors';
 import { generateTemporaryPassword, validatePassword } from './password';
 import { registerEntity } from './registry';
@@ -219,10 +220,12 @@ export async function resetPassword(
 	id: string
 ): Promise<{ temporaryPassword: string }> {
 	requireAdmin(app, actor);
-	getUser(app, id);
+	const user = getUser(app, id);
 	const temporaryPassword = generateTemporaryPassword();
 	await setPassword(app, id, temporaryPassword, true);
 	revokeSessions(app, id);
+	// A locked-out user can sign in with the new password at once.
+	clearThrottle(app, accountKey(user.email));
 	return { temporaryPassword };
 }
 

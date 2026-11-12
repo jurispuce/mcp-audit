@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { accountKey, addressKey, assertNotLocked, clearThrottle, POLICIES, recordFailure } from './throttle';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors';
 import { dummyPasswordHash, hashPassword, validatePassword, verifyPassword } from './password';
@@ -77,16 +78,23 @@ function toSessionUser(r: UserJoinRow): SessionUser {
 	};
 }
 
-/** Check email and password; on success start a session. The error never says which part was wrong. */
+/**
+ * Check email and password; on success start a session. The error never says which part was wrong.
+ * Failures are counted per account and per client address; too many lock sign-in for a while, even
+ * with the right password, for any email (so a lock says nothing about whether an account exists).
+ */
 export async function login(
 	app: AppDatabase,
 	email: string,
 	password: string,
-	now = new Date()
+	now = new Date(),
+	address: string | null = null
 ): Promise<{ token: string; expiresAt: Date; user: SessionUser }> {
 	const normalized = String(email ?? '')
 		.trim()
 		.toLowerCase();
+	const keys = [accountKey(normalized), addressKey('login', address)];
+	assertNotLocked(app, keys, now);
 	const row = app.sqlite
 		.prepare(
 			`SELECT u.id, u.name, u.email, u.role, u.active, u.deleted, c.must_change_password, c.password_hash
@@ -97,8 +105,11 @@ export async function login(
 	const hash = row?.password_hash ?? (await dummyPasswordHash());
 	const ok = await verifyPassword(String(password ?? ''), hash);
 	if (!row || !row.password_hash || !ok || row.active !== 1 || row.deleted === 1) {
+		recordFailure(app, keys[0]!, POLICIES.account, now);
+		recordFailure(app, keys[1]!, POLICIES.address, now);
 		throw new UnauthenticatedError('Email or password is not correct.');
 	}
+	clearThrottle(app, keys[0]!);
 	const { token, expiresAt } = createSession(app, row.id, now);
 	return { token, expiresAt, user: toSessionUser(row) };
 }

@@ -61,7 +61,7 @@ Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/
 - The token sits in `env`, not in `args`, because Desktop on Windows does not keep spaces inside arguments.
 - Restart Claude Desktop after editing the file.
 
-If the app is reachable over https from the internet (see #67 first), Desktop's custom connector can be used directly where your organisation has its "Request headers" option: choose "No sign-in" and add the header `authorization` with the value `Bearer mcpa_yourtoken`.
+The "Add custom connector" dialog in claude.ai and Claude Desktop does not work with mcp-audit yet. Anthropic's servers make those calls, so they need a public https address, and they sign in with OAuth. mcp-audit uses personal access tokens. A fixed request header is a beta for a limited set of organizations only. Use the bridge above or Claude Code. See `docs/public-endpoint.md`, Remote MCP clients, for the checked requirements.
 
 ## 4. Load the audit skills
 

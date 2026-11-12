@@ -67,5 +67,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
 		if (!response.headers.has(k)) response.headers.set(k, v);
 	}
+	// Reached over https (directly or through a TLS proxy that says so): browsers stay on https.
+	if (event.url.protocol === 'https:' && !response.headers.has('strict-transport-security')) {
+		response.headers.set('strict-transport-security', 'max-age=31536000');
+	}
 	return response;
 };

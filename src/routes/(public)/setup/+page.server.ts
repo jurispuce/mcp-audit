@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
+import { addressKey, assertNotLocked, POLICIES, recordFailure } from '#lib/domain/throttle.ts';
 import { createSession, SESSION_COOKIE } from '#lib/domain/auth.ts';
-import { ValidationError } from '#lib/domain/errors.ts';
+import { ForbiddenError, ValidationError } from '#lib/domain/errors.ts';
 import { completeSetup, needsSetup } from '#lib/domain/setup.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, sessionCookieOptions } from '#lib/server/http.ts';
@@ -16,8 +17,10 @@ export const actions: Actions = {
 		const data = await event.request.formData();
 		const values = formValues(data, ['code', 'name', 'email']);
 		const app = appDatabase();
+		const throttle = addressKey('setup', event.getClientAddress());
 		let userId: string;
 		try {
+			assertNotLocked(app, [throttle]);
 			if (data.get('password') !== data.get('confirm')) {
 				return formFailure(
 					new ValidationError('The passwords do not match.', {
@@ -34,6 +37,8 @@ export const actions: Actions = {
 			});
 			userId = user.id;
 		} catch (e) {
+			// A wrong set-up code counts towards the lock; the code is the only secret on this page.
+			if (e instanceof ForbiddenError) recordFailure(app, throttle, POLICIES.setup);
 			return formFailure(e, values);
 		}
 		const { token, expiresAt } = createSession(app, userId);

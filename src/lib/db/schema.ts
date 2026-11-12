@@ -616,3 +616,14 @@ export const aiJob = sqliteTable(
 		index('ai_job_user_idx').on(t.userId)
 	]
 );
+
+/**
+ * Failed sign-in, set-up code and token attempts per account or client address, for rate limiting
+ * and lock-out. Written only by src/lib/domain/throttle.ts.
+ */
+export const authThrottle = sqliteTable('auth_throttle', {
+	key: text('key').primaryKey(),
+	failures: integer('failures').notNull(),
+	windowStart: integer('window_start', { mode: 'timestamp_ms' }).notNull(),
+	lockedUntil: integer('locked_until', { mode: 'timestamp_ms' })
+});

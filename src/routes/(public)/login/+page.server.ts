@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { login, SESSION_COOKIE } from '#lib/domain/auth.ts';
-import { UnauthenticatedError } from '#lib/domain/errors.ts';
+import { TooManyAttemptsError, UnauthenticatedError } from '#lib/domain/errors.ts';
 import { needsSetup } from '#lib/domain/setup.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { safeNext, sessionCookieOptions } from '#lib/server/http.ts';
@@ -20,7 +20,9 @@ export const actions: Actions = {
 			const { token, expiresAt, user } = await login(
 				appDatabase(),
 				email,
-				String(data.get('password') ?? '')
+				String(data.get('password') ?? ''),
+				new Date(),
+				event.getClientAddress()
 			);
 			event.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(event, expiresAt));
 			redirect(
@@ -29,6 +31,10 @@ export const actions: Actions = {
 			);
 		} catch (e) {
 			if (e instanceof UnauthenticatedError) return fail(400, { message: e.message, email });
+			if (e instanceof TooManyAttemptsError) {
+				event.setHeaders({ 'retry-after': String(e.retryAfterSeconds) });
+				return fail(429, { message: e.message, email });
+			}
 			throw e;
 		}
 	}

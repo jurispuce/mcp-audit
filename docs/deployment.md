@@ -2,7 +2,7 @@
 
 mcp-audit is one container with one data volume. The same image runs on a laptop, a server on your network, or a VPS. On a server you only need two files: `docker-compose.yml` and `.env`.
 
-> **Not for the open internet yet.** Until issue #67 (public endpoint readiness: TLS proxy, login rate limiting, secure cookies) is done, keep the app on a private network: your machine, your LAN, or a VPN such as Tailscale or WireGuard.
+> **Private network first.** Keep the app on your machine, your LAN, or a VPN such as Tailscale or WireGuard. To reach it over the public internet, follow `docs/public-endpoint.md`: a TLS proxy (Caddy), the proxy header settings, and a checklist.
 
 ## What you need
 
@@ -77,6 +77,8 @@ If you cannot use a VPN, keep `BIND_ADDRESS=127.0.0.1` and reach the app through
 ssh -L 3000:127.0.0.1:3000 you@your-vps
 ```
 
+To serve it publicly over https instead, see `docs/public-endpoint.md`.
+
 ## Upgrade
 
 Migrations run automatically when the new version starts. Back up first, because migrations only go forward.
@@ -120,7 +122,7 @@ All settings are environment variables in `.env`. Only the Compose ones (`BIND_A
 | `HOST_PORT`                                                           | `3000`            | Port on the host.                                                                                                                                           |
 | `MCP_AUDIT_TAG`                                                       | `main`            | Image tag to run.                                                                                                                                           |
 | `ORIGIN`                                                              | empty             | Fixed public URL, for example `https://audit.example.lan`. Empty accepts any host; the protocol then comes from `X-Forwarded-Proto` and is http without it. |
-| `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH`       | empty             | Headers to trust behind a reverse proxy (#67).                                                                                                              |
+| `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH`       | empty             | Headers to trust behind a reverse proxy; `docker-compose.public.yml` sets them (docs/public-endpoint.md).                                                   |
 | `BODY_SIZE_LIMIT`                                                     | `100M`            | Largest request body, for uploading several documents at once. One file may be at most 50 MB.                                                               |
 | `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_ADMIN_NAME` | empty             | Create the first admin at first start instead of using `/setup`.                                                                                            |
 | `BACKUP_PASSPHRASE`                                                   | empty             | Required for backup and restore. At least 12 characters.                                                                                                    |

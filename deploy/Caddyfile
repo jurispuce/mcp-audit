@@ -1,0 +1,26 @@
+# Caddy in front of mcp-audit on a public host: automatic HTTPS (Let's Encrypt) and HTTP/2.
+# Used by docker-compose.public.yml. Set PUBLIC_HOST in .env to the DNS name pointing at this server.
+{$PUBLIC_HOST} {
+	encode zstd gzip
+
+	# Uploads of several documents at once (the app's own limit is BODY_SIZE_LIMIT).
+	request_body {
+		max_size 100MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# Caddy sets X-Forwarded-For and X-Forwarded-Proto; the app trusts them through
+	# ADDRESS_HEADER and PROTOCOL_HEADER (see docker-compose.public.yml).
+	reverse_proxy app:3000 {
+		# AI actions and MCP calls can take a while.
+		transport http {
+			read_timeout 10m
+		}
+		# MCP Streamable HTTP may stream responses: do not buffer them.
+		flush_interval -1
+	}
+}

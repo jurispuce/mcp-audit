@@ -26,6 +26,18 @@ export class ForbiddenError extends DomainError {
 	override readonly code = 'forbidden';
 }
 
+/** Too many failed attempts: refused until `retryAfterSeconds` have passed. */
+export class TooManyAttemptsError extends DomainError {
+	override readonly status = 429;
+	override readonly code = 'too_many_attempts';
+	constructor(
+		message: string,
+		readonly retryAfterSeconds: number
+	) {
+		super(message);
+	}
+}
+
 export class UnauthenticatedError extends DomainError {
 	override readonly status = 401;
 	override readonly code = 'unauthenticated';
