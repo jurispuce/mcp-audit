@@ -481,3 +481,78 @@ export const evidenceItem = sqliteTable(
 	},
 	(t) => [index('evidence_item_engagement').on(t.engagementId), index('evidence_item_event').on(t.eventId)]
 );
+
+/** An auditor note taken during an event: a plain note, a promise or a suspected issue, with mentions. */
+export const note = sqliteTable(
+	'note',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id),
+		type: text('type', { enum: ['note', 'promise', 'issue'] }).notNull(),
+		text: text('text').notNull(),
+		/** JSON array of {type, id, label}: requirement, internal_requirement, artifact, person, evidence_item. */
+		mentions: text('mentions', { mode: 'json' })
+			.$type<{ type: string; id: string; label: string }[]>()
+			.notNull()
+			.default([]),
+		/** When the note was taken (ms); offsets on the event screen count from the event's first note. */
+		at: integer('at').notNull()
+	},
+	(t) => [index('note_event').on(t.eventId), index('note_engagement').on(t.engagementId)]
+);
+
+/** An artifact cited as planned evidence, with where in it and how well it supports the evidence. */
+export const evidenceLink = sqliteTable(
+	'evidence_link',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		artifactId: text('artifact_id')
+			.notNull()
+			.references(() => artifact.id),
+		evidenceItemId: text('evidence_item_id')
+			.notNull()
+			.references(() => evidenceItem.id),
+		locator: text('locator'),
+		excerpt: text('excerpt'),
+		sufficiency: text('sufficiency', { enum: ['supports', 'partial', 'contradicts'] }).notNull(),
+		status: text('status', { enum: ['proposed', 'confirmed'] }).notNull()
+	},
+	(t) => [
+		index('evidence_link_artifact').on(t.artifactId),
+		index('evidence_link_item').on(t.evidenceItemId),
+		index('evidence_link_engagement').on(t.engagementId)
+	]
+);
+
+/** One finding per assessment unit. Approved, it is a conclusion and locked until reopened. */
+export const finding = sqliteTable(
+	'finding',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		assessmentUnitId: text('assessment_unit_id')
+			.notNull()
+			.references(() => assessmentUnit.id),
+		findingValueId: text('finding_value_id').references(() => findingValue.id),
+		rationale: text('rationale'),
+		/** JSON array of evidence item ids the finding relies on. */
+		evidenceItemIds: text('evidence_item_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		confidence: text('confidence', { enum: ['high', 'medium', 'low'] }),
+		status: text('status', { enum: ['proposed', 'draft', 'approved'] }).notNull(),
+		approvedBy: text('approved_by'),
+		approvedAt: integer('approved_at'),
+		/** The finding's own version at approval. */
+		approvedVersion: integer('approved_version')
+	},
+	(t) => [index('finding_engagement').on(t.engagementId), index('finding_unit').on(t.assessmentUnitId)]
+);

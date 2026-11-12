@@ -98,6 +98,11 @@ export function engagementOverview(app: AppDatabase, engagementId: string): Over
 		`SELECT count(*) AS n FROM evidence_item WHERE engagement_id = ? AND deleted = 0 AND proposed = 0 AND status = 'planned'`,
 		e.id
 	);
+	const approved = n(
+		`SELECT count(*) AS n FROM finding f JOIN assessment_unit u ON u.id = f.assessment_unit_id
+		  WHERE f.engagement_id = ? AND f.deleted = 0 AND u.deleted = 0 AND f.status = 'approved'`,
+		e.id
+	);
 	const held = n(
 		`SELECT count(*) AS n FROM event WHERE engagement_id = ? AND deleted = 0 AND proposed = 0 AND status = 'held'`,
 		e.id
@@ -169,8 +174,8 @@ export function engagementOverview(app: AppDatabase, engagementId: string): Over
 			number: 8,
 			title: 'Conclude',
 			next: 'conclude',
-			fact: `0 of ${plural(counts.units, 'assessment unit')} concluded`,
-			done: false,
+			fact: `${approved} of ${plural(counts.units, 'assessment unit')} concluded`,
+			done: counts.units > 0 && approved >= counts.units,
 			href: '/findings/to-approve'
 		}
 	];

@@ -11,3 +11,5 @@ import './risks';
 import './artifacts';
 import './internal';
 import './planning';
+import './execution';
+import './findings';
