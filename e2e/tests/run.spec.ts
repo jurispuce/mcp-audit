@@ -29,6 +29,10 @@ test('event screen: mark held, evidence status with promise who and due, sorted 
 	await expect(rows.first()).toContainText('Leaver list for 2026');
 
 	await page.getByLabel('Status of Leaver list for 2026 with account disable dates').selectOption('promised');
+	await expect(page.getByTestId('evidence-Leaver list for 2026 with account disable dates')).toHaveAttribute(
+		'data-status',
+		'promised'
+	);
 	await page.getByLabel('Promised by').fill('Head of IT');
 	await page.getByLabel('Due').fill('2026-11-20');
 	await page.getByRole('button', { name: 'Save promise' }).click();

@@ -159,7 +159,9 @@ describe('planning tools (#51)', () => {
 			).text
 		).toContain('not found');
 		const { tools } = await client.listTools();
-		expect(tools.map((t) => t.name).filter((n) => /status|approve|agree/.test(n))).toEqual([]);
+		expect(tools.map((t) => t.name).filter((n) => /plan_status|set_status|approve|agree/.test(n))).toEqual(
+			[]
+		);
 		updateEngagement(app, human, e.id, e.version, { ai_allowed: false });
 		expect((await call('get_coverage', { engagement_id: e.id })).text).toContain('switched off');
 	});

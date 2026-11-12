@@ -12,7 +12,7 @@ About 35 tools, grouped by phase. Write tools accept several items per call.
 | Artifacts | list_artifacts, get_artifact_text, register_artifact | Text is returned in pages with locators. register_artifact stores text or a transcript, including one fetched from a third-party MCP server, or records a mentioned document. |
 | Internal requirements | list_internal_requirements, upsert_internal_requirements | Per auditee document, with quote, section and implements links. Always proposed. Never readable from another auditee's engagement. |
 | Planning | list_events, upsert_events, upsert_evidence_items, get_coverage, render_audit_plan | Events and evidence written by AI are drafts until accepted. get_coverage returns, per requirement, the events that include it. render_audit_plan returns Markdown, or saves DOCX or PDF as a generated report. |
-| Execution | upsert_notes, link_evidence, get_event_status, render_post_event_report | upsert_notes writes typed notes with mentions. |
+| Execution | get_event_status, upsert_notes, link_evidence, render_post_event_report | upsert_notes writes typed notes with mentions; a promise on planned evidence sets it to promised. link_evidence proposes links. |
 | Conclusion | get_assessment_unit, list_assessment_units, propose_finding, render_findings_report | get_assessment_unit returns requirement, criteria, risks, evidence links with excerpts, and suspected issues. |
 | Cross-cutting | add_comment, get_history, revert | Work on any entity type. |
 
@@ -35,8 +35,8 @@ The seven skills in `skills/` currently run in files mode: they read and write Y
 | audit-role-discovery | 3 | get_artifact_text, upsert_people |
 | audit-document-analysis | 5 | get_artifact_text, upsert_internal_requirements, set_criteria |
 | audit-plan-builder | 6 | list_events, upsert_events, upsert_evidence_items, get_coverage, render_audit_plan |
-| audit-event-debrief | 7 | upsert_notes, link_evidence, get_event_status, render_post_event_report |
-| audit-assurance-review | 8 | get_assessment_unit, propose_finding, render_findings_report |
+| audit-event-debrief | 7 | get_event_status, upsert_notes, link_evidence, render_post_event_report |
+| audit-assurance-review | 8 | list_assessment_units, get_assessment_unit, propose_finding, render_findings_report |
 | audit-library-curator | after | set_guidance, set_criteria, link_requirements |
 
 Report templates live in the skills' `assets/` folders and are used by the render tools.

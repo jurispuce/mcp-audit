@@ -9,6 +9,25 @@ After an event the auditor has raw material and a plan. Connect the two: say whi
 
 Read `references/engagement-files.md` first, including the auditor notes format. The report template is `assets/post-event-report-template.md`.
 
+## Where the event lives
+
+- **App mode.** When the mcp-audit tools are available (`get_event_status`, `upsert_notes`, `link_evidence`, `render_post_event_report`), the event is in the audit app. Use the tools; do not write YAML or Markdown files.
+- **Files mode.** Without those tools, work in `events/<event-id>/` as described below.
+
+### In app mode
+
+| Step | Use |
+| --- | --- |
+| Find the event | `list_engagements`, then `list_events`; `get_event_status` gives its planned evidence (with status and links), notes and participants |
+| 1. Gather | a transcript from another tool or pasted in chat: `register_artifact` (kind `transcript`); files the auditor uploaded on the event screen: `list_artifacts` and `get_artifact_text` |
+| 2. Structure | `upsert_notes` with `type` note, promise or issue and `mentions` (`{type, id, label}` from `get_event_status` and `get_engagement_overview`). A promise mentioning planned evidence sets it to promised; give `due` only when a date was said. A document mentioned but not received: an `artifact` mention with an empty `id` |
+| 3. Attribute | `link_evidence` with `artifact_id`, `evidence_item_id`, `locator`, a short `excerpt` and `sufficiency`. Links are proposed: the evidence becomes received only when the auditor confirms them |
+| 4. Statuses | statuses follow the confirmed links; for evidence clearly not provided, say so in your summary rather than changing statuses |
+| 5. Report | `render_post_event_report` (Markdown to show; `docx` or `pdf` to save it). It never contains suspected issues, sufficiency or criticality |
+| 6. Tell the auditor | how many links and notes wait on the event screen (Run, the event), and what is still outstanding |
+
+If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor. Everything you write shows in the app as "Claude on behalf of <auditor>".
+
 ## Steps
 
 ### 1. Gather the event's material

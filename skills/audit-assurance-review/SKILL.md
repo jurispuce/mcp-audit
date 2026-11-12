@@ -9,6 +9,25 @@ For each assessment unit (one requirement in one scope), decide what the evidenc
 
 Read `references/engagement-files.md` first. The report template is `assets/findings-report-template.md`.
 
+## Where the findings live
+
+- **App mode.** When the mcp-audit tools are available (`list_assessment_units`, `get_assessment_unit`, `propose_finding`, `render_findings_report`), the findings are in the audit app. Use the tools; do not write YAML files.
+- **Files mode.** Without those tools, work with `findings.yaml` and the engagement files as described below.
+
+### In app mode
+
+| Step | Use |
+| --- | --- |
+| 1. Units | `list_assessment_units`: every requirement-by-scope unit with evidence counts, suspected issues and its current finding, plus the engagement's finding scale (codes such as `na`, `c`, `cp`, `cn`, `minor`, `major`) |
+| 2. The case | `get_assessment_unit`: pinned requirement text, criticality, planned evidence with confirmed and proposed links (locator, excerpt, sufficiency), internal rules and suspected issues |
+| 3-4. Judge and choose | the rules below; the app enforces two of them: a non-conformity must cite evidence that was obtained, and conformity cannot be proposed while a suspected issue is open |
+| 5. Rationale | `propose_finding` with the value code, `rationale`, `evidence_item_ids` relied on and `confidence`. It lands as proposed; an approved finding is locked and refuses changes |
+| 6. Report | `render_findings_report`: approved findings only, or `include_drafts: true` for a draft marked DRAFT; `docx` or `pdf` saves it |
+
+You never approve. The auditor reviews proposals on Findings, To approve: accept as draft, edit, approve, or approve all drafts.
+
+If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor. Everything you write shows in the app as "Claude on behalf of <auditor>".
+
 ## Steps
 
 ### 1. Build the unit list

@@ -32,6 +32,12 @@
 			<span class="au-muted">Engagement</span>
 			<strong>{engagement?.name ?? 'Choose an engagement'}</strong>
 		</a>
+		{#if engagement}
+			<form class="au-rail__search" method="GET" action="/e/{engagement.id}/search" role="search">
+				<label class="au-visually-hidden" for="rail-q">Search this engagement</label>
+				<input id="rail-q" name="q" type="search" placeholder="Search" autocomplete="off" />
+			</form>
+		{/if}
 		{#each DESTINATIONS as d (d.key)}
 			{#if engagement}
 				<a class="au-nav" href={href(d.path)} aria-current={current === d.key ? 'page' : undefined}>
@@ -60,6 +66,11 @@
 		<a class="au-topbar__name" href={switchHref} data-testid="topbar-switcher"
 			>{engagement?.name ?? 'mcp-audit'}</a
 		>
+		{#if engagement}
+			<a class="au-topbar__search" href="/e/{engagement.id}/search" aria-label="Search"
+				><Icon name="search" /></a
+			>
+		{/if}
 	</header>
 
 	<main class="au-main" id="main">

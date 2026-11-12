@@ -273,3 +273,17 @@ a.au-phase:hover .au-phase__name { text-decoration: underline; }
 .au-evidence__state { align-items: flex-end; }
 .au-evidence__state select { min-height: var(--touch-target); max-width: 150px; }
 label.au-btn { cursor: pointer; }
+
+/* Findings */
+.au-finding details summary { cursor: pointer; min-height: var(--touch-target); display: flex; align-items: center; }
+.au-matrix td, .au-matrix th { white-space: nowrap; }
+.au-matrix a { color: inherit; }
+@media (max-width: 767px) { .au-matrix-wrap { display: none; } }
+details.au-item > summary { cursor: pointer; min-height: var(--touch-target); display: flex; align-items: center; font-weight: 600; }
+
+/* Engagement search: a field in the rail, an icon in the phone top bar. */
+.au-rail__search input { width: 100%; min-height: var(--touch-target); }
+.au-topbar__search { display: grid; place-items: center; min-width: var(--touch-target); min-height: var(--touch-target); color: var(--ink); }
+.au-snippet mark { background: var(--accent-soft); color: inherit; }
+/* A title that opens the item sheet, inside a list row: a full-height tap target. */
+.au-titlelink { display: inline-flex; align-items: center; min-height: var(--touch-target); }

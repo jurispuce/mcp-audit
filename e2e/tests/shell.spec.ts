@@ -1,6 +1,6 @@
-import { ADMIN, expect, loginAs, seed, test } from '../helpers';
+import { ADMIN, expect, loginAs, sampleCopy, seed, test } from '../helpers';
 
-const routes = (e: string) => [
+const routes = (e: string, ev: string) => [
 	'/',
 	'/library',
 	'/settings',
@@ -15,12 +15,13 @@ const routes = (e: string) => [
 	`/e/${e}/plan/document`,
 	`/e/${e}/run/today`,
 	`/e/${e}/run/events`,
-	`/e/${e}/run/events/ev1`,
+	`/e/${e}/run/events/${ev}`,
 	`/e/${e}/run/inbox`,
 	`/e/${e}/findings/matrix`,
 	`/e/${e}/findings/to-approve`,
 	`/e/${e}/findings/conclusions`,
-	`/e/${e}/proposals`
+	`/e/${e}/proposals`,
+	`/e/${e}/search?q=access`
 ];
 
 let e = '';
@@ -30,7 +31,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('every route from design/navigation.md exists', async ({ page }) => {
-	for (const route of routes(e)) {
+	const copy = await sampleCopy(page.request);
+	for (const route of routes(copy.id, copy.events[0]!.id)) {
 		const res = await page.goto(route);
 		expect(res?.status(), route).toBe(200);
 	}

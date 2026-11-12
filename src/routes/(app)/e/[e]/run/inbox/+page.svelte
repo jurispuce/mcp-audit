@@ -20,7 +20,9 @@
 		{#each data.items as a (a.id)}
 			<li class="au-item" data-testid="inbox-{a.filename ?? a.title}">
 				<div class="au-row au-between au-wrap">
-					<a href="?item=artifact:{a.id}" data-sveltekit-reset="false"><strong>{a.title}</strong></a>
+					<a class="au-titlelink" href="?item=artifact:{a.id}" data-sveltekit-reset="false"
+						><strong>{a.title}</strong></a
+					>
 					<span class="au-muted"
 						>{ORIGIN[a.origin] ?? a.origin}{a.eventTitle ? ` · ${a.eventTitle}` : ''}</span
 					>

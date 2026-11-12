@@ -85,6 +85,7 @@ export function fillTemplate(template: string, data: TemplateData): string {
 	return (
 		out
 			.join('\n')
+			.replace(/[ \t]+$/gm, '')
 			.replace(/\n{3,}/g, '\n\n')
 			.trim() + '\n'
 	);

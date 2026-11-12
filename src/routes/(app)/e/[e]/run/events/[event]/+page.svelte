@@ -5,7 +5,12 @@
 	import NoteComposer from '#lib/components/run/NoteComposer.svelte';
 
 	let { data, form } = $props();
-	type Result = { message?: string; success?: string; values?: Record<string, string> };
+	type Result = {
+		message?: string;
+		success?: string;
+		values?: Record<string, string>;
+		exported?: { id: string; filename: string };
+	};
 	const result = $derived((form ?? null) as Result | null);
 	const ev = $derived(data.event);
 	const base = $derived(`/e/${data.engagement.id}`);
@@ -99,7 +104,8 @@
 							>{/if}
 					</span>
 					<span class="au-evidence__text">
-						<a href="?item=evidence_item:{x.id}" data-sveltekit-reset="false">{x.text}</a>
+						<a class="au-titlelink" href="?item=evidence_item:{x.id}" data-sveltekit-reset="false">{x.text}</a
+						>
 						<span class="au-muted">
 							{x.requirementRefs.join(', ') || 'No requirement'}{links.length
 								? ` · linked: ${links.map((l) => `${l.artifactTitle}${l.status === 'proposed' ? ' (proposed)' : ''}`).join(', ')}`
@@ -128,7 +134,7 @@
 									><label for="pby-{x.id}">Promised by</label><input
 										id="pby-{x.id}"
 										name="promised_by"
-										value={x.promisedBy ?? ''}
+										defaultValue={x.promisedBy ?? ''}
 									/></span
 								>
 								<span class="au-field"
@@ -136,7 +142,7 @@
 										id="pdue-{x.id}"
 										name="promised_due"
 										type="date"
-										value={x.promisedDue ?? ''}
+										defaultValue={x.promisedDue ?? ''}
 									/></span
 								>
 								<button class="au-btn au-btn--small au-btn--primary" type="submit">Save promise</button>
@@ -240,7 +246,9 @@
 				{@const links = data.links.filter((l) => l.artifactId === a.id)}
 				<li class="au-item" data-testid="artifact-{a.filename ?? a.title}">
 					<div class="au-row au-between au-wrap">
-						<a href="?item=artifact:{a.id}" data-sveltekit-reset="false"><strong>{a.title}</strong></a>
+						<a class="au-titlelink" href="?item=artifact:{a.id}" data-sveltekit-reset="false"
+							><strong>{a.title}</strong></a
+						>
 						<span class="au-muted"
 							>{a.state === 'mentioned' ? 'Mentioned, not received' : (a.kind ?? 'File')}</span
 						>
@@ -300,5 +308,29 @@
 				</li>
 			{/each}
 		</ul>
+	</section>
+	<section class="au-section" aria-labelledby="report-title">
+		<h3 class="au-section__title" id="report-title">Post-event report</h3>
+		<p class="au-muted">
+			For the attendees: what was received, what is outstanding and what was agreed. No suspected issues,
+			sufficiency or criticality.
+		</p>
+		<form method="POST" action="?/report" class="au-row au-wrap" use:enhance={keep}>
+			<button class="au-btn" type="submit" name="format" value="docx">Export report as DOCX</button>
+			<button class="au-btn" type="submit" name="format" value="pdf">Export report as PDF</button>
+		</form>
+		{#if result?.exported}<a
+				class="au-btn au-btn--small"
+				href="{base}/documents/{result.exported.id}/file"
+				download
+				data-testid="download-report">Download {result.exported.filename}</a
+			>{/if}
+		<details class="au-item">
+			<summary>Preview</summary>
+			<article class="au-doc" data-testid="report-preview">
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				{@html data.report.html}
+			</article>
+		</details>
 	</section>
 </div>

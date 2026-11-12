@@ -21,6 +21,9 @@ import {
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import { captureAction, linkActions } from '#lib/server/run.ts';
+import { buildPostEventReport, exportPostEventReport, type ReportFormat } from '#lib/domain/reports.ts';
+import { markdownToHtml } from '#lib/reports/render.ts';
+import { loadConfig } from '#lib/server/config.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ params }) => {
@@ -42,7 +45,11 @@ export const load: PageServerLoad = ({ params }) => {
 			})),
 			links: listLinks(app, params.e, { eventId: event.id }),
 			mentions: mentionOptions(app, params.e, event.id),
-			statuses: EVIDENCE_STATUSES.map((s) => [s, STATUS_LABELS[s]] as [string, string])
+			statuses: EVIDENCE_STATUSES.map((s) => [s, STATUS_LABELS[s]] as [string, string]),
+			report: (() => {
+				const r = buildPostEventReport(app, params.e, event.id);
+				return { html: markdownToHtml(r.markdown), language: r.language, translated: r.translated };
+			})()
 		};
 	} catch (e) {
 		if (e instanceof NotFoundError) error(404, { message: 'Event not found' });
@@ -102,6 +109,22 @@ export const actions: Actions = {
 			};
 		} catch (e) {
 			return formFailure(e, { text, action: 'note' });
+		}
+	},
+	report: async ({ request, locals, params }) => {
+		const format = ((await request.formData()).get('format') === 'pdf' ? 'pdf' : 'docx') as ReportFormat;
+		try {
+			const a = await exportPostEventReport(
+				appDatabase(),
+				uiActor(locals),
+				loadConfig().filesDir,
+				params.e,
+				params.event,
+				format
+			);
+			return { success: `${a.filename} is ready.`, exported: { id: a.id, filename: a.filename } };
+		} catch (e) {
+			return formFailure(e);
 		}
 	},
 	removeNote: async ({ request, locals, params }) => {

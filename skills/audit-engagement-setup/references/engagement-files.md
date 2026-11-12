@@ -208,8 +208,8 @@ Use the tools instead of the files; the steps stay the same. Rough mapping:
 | criteria.yaml | set_criteria |
 | documents/, documents.yaml | list_artifacts, get_artifact_text, register_artifact (`mentioned: true` for a document not received) |
 | plan/ | list_events, upsert_events, upsert_evidence_items, get_coverage, render_audit_plan |
-| events/ | link_evidence, get_event_status, render_post_event_report |
-| findings.yaml | get_assessment_unit, propose_finding |
+| events/ | get_event_status, upsert_notes, link_evidence, render_post_event_report |
+| findings.yaml | list_assessment_units, get_assessment_unit, propose_finding, render_findings_report |
 | log.md, library/log.md | not needed: the app records every version, with you as "Claude on behalf of <auditor>" |
 
 For any item: `add_comment`, `get_history` and `revert` (a revert is a new version; nothing is lost).

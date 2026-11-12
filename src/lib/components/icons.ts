@@ -11,6 +11,7 @@ export const ICONS = {
 	back: 'M15 5l-7 7 7 7',
 	close: 'M6 6l12 12M18 6L6 18',
 	list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
-	signout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10'
+	signout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
+	search: 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4'
 } as const;
 export type IconName = keyof typeof ICONS;
