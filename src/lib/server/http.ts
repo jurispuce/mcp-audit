@@ -2,6 +2,9 @@ import { error, fail, redirect, type ActionFailure, type RequestEvent } from '@s
 import { DomainError, StaleWriteError, ValidationError } from '#lib/domain/errors.ts';
 import type { Actor } from '#lib/domain/write.ts';
 import type { SessionUser } from '#lib/domain/auth.ts';
+import { getEngagement } from '#lib/domain/engagements.ts';
+import { assertItemReadable } from '#lib/domain/guards.ts';
+import type { AppDatabase } from '#lib/db/client.ts';
 
 /** The signed-in user. The auth hook already guarantees one on every non-public route. */
 export function requireUser(locals: App.Locals): SessionUser {
@@ -65,4 +68,14 @@ export function sessionCookieOptions(event: Pick<RequestEvent, 'url'>, expires: 
 		secure: event.url.protocol === 'https:',
 		expires
 	};
+}
+
+/**
+ * The item sheet works inside an engagement (`?engagement=`) or in the shared library. Items of an
+ * auditee are readable only from that auditee's engagements.
+ */
+export function assertItemInContext(app: AppDatabase, url: URL, type: string, id: string): void {
+	const engagementId = url.searchParams.get('engagement');
+	const auditeeId = engagementId ? getEngagement(app, engagementId).auditeeId : null;
+	assertItemReadable(app, type, id, { auditeeId });
 }

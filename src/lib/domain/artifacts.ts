@@ -327,6 +327,15 @@ export function getArtifact(app: AppDatabase, id: string): Artifact {
 	return toArtifact(row);
 }
 
+/** A document of one engagement; another engagement's document is "not found". */
+export function getEngagementArtifact(app: AppDatabase, engagementId: string, id: string): Artifact {
+	const row = app.sqlite
+		.prepare('SELECT engagement_id FROM artifact WHERE id = ? AND deleted = 0')
+		.get(id) as { engagement_id: string } | undefined;
+	if (!row || row.engagement_id !== engagementId) throw new NotFoundError('Document not found');
+	return getArtifact(app, id);
+}
+
 export interface TextPage {
 	artifactId: string;
 	title: string;

@@ -13,6 +13,8 @@
 
 	const current = $derived(engagement ? destinationFor(page.url.pathname, engagement.id) : null);
 	const href = (path: string) => `/e/${engagement!.id}${path}`;
+	// The switcher remembers the destination, so another engagement opens at the same place.
+	const switchHref = $derived(current && current !== 'home' ? `/?at=${current}` : '/');
 	const outside = $derived(
 		page.url.pathname.startsWith('/library')
 			? 'library'
@@ -26,7 +28,7 @@
 <div class="au-app">
 	<nav class="au-rail" aria-label="Main">
 		<span class="au-rail__brand">mcp-audit</span>
-		<a class="au-rail__switch" href="/" data-testid="engagement-switcher">
+		<a class="au-rail__switch" href={switchHref} data-testid="engagement-switcher">
 			<span class="au-muted">Engagement</span>
 			<strong>{engagement?.name ?? 'Choose an engagement'}</strong>
 		</a>
@@ -55,7 +57,9 @@
 	</nav>
 
 	<header class="au-topbar">
-		<a class="au-topbar__name" href="/" data-testid="topbar-switcher">{engagement?.name ?? 'mcp-audit'}</a>
+		<a class="au-topbar__name" href={switchHref} data-testid="topbar-switcher"
+			>{engagement?.name ?? 'mcp-audit'}</a
+		>
 	</header>
 
 	<main class="au-main" id="main">

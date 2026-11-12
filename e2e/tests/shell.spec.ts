@@ -1,42 +1,43 @@
 import { expect, test } from '@playwright/test';
 import { ADMIN, loginAs, seed } from '../helpers';
 
-const ROUTES = [
+const routes = (e: string) => [
 	'/',
 	'/library',
 	'/settings',
-	'/e/demo',
-	'/e/demo/setup/requirements',
-	'/e/demo/setup/scopes',
-	'/e/demo/setup/auditee',
-	'/e/demo/setup/risks',
-	'/e/demo/setup/documents',
-	'/e/demo/plan/events',
-	'/e/demo/plan/document',
-	'/e/demo/run/today',
-	'/e/demo/run/events',
-	'/e/demo/run/events/ev1',
-	'/e/demo/run/inbox',
-	'/e/demo/findings/matrix',
-	'/e/demo/findings/to-approve',
-	'/e/demo/findings/conclusions',
-	'/e/demo/proposals'
+	`/e/${e}`,
+	`/e/${e}/setup/requirements`,
+	`/e/${e}/setup/scopes`,
+	`/e/${e}/setup/auditee`,
+	`/e/${e}/setup/risks`,
+	`/e/${e}/setup/documents`,
+	`/e/${e}/plan/events`,
+	`/e/${e}/plan/document`,
+	`/e/${e}/run/today`,
+	`/e/${e}/run/events`,
+	`/e/${e}/run/events/ev1`,
+	`/e/${e}/run/inbox`,
+	`/e/${e}/findings/matrix`,
+	`/e/${e}/findings/to-approve`,
+	`/e/${e}/findings/conclusions`,
+	`/e/${e}/proposals`
 ];
 
+let e = '';
 test.beforeEach(async ({ page }) => {
-	await seed(page.request);
+	e = (await seed(page.request)).engagement.id;
 	await loginAs(page, ADMIN);
 });
 
 test('every route from design/navigation.md exists', async ({ page }) => {
-	for (const route of ROUTES) {
+	for (const route of routes(e)) {
 		const res = await page.goto(route);
 		expect(res?.status(), route).toBe(200);
 	}
 });
 
 test('the rail shows the five destinations in audit order, then Library and Settings', async ({ page }) => {
-	await page.goto('/e/demo/setup/risks');
+	await page.goto(`/e/${e}/setup/risks`);
 	const rail = page.locator('nav.au-rail');
 	await expect(rail).toBeVisible();
 	await expect(rail.locator('.au-nav')).toHaveText([
@@ -57,10 +58,15 @@ test('the rail shows the five destinations in audit order, then Library and Sett
 });
 
 test('a destination opens its first tab', async ({ page }) => {
-	await page.goto('/e/demo/run');
-	await expect(page).toHaveURL('/e/demo/run/today');
+	await page.goto(`/e/${e}/run`);
+	await expect(page).toHaveURL(`/e/${e}/run/today`);
 	await page.locator('nav.au-rail').getByRole('link', { name: 'Findings' }).click();
-	await expect(page).toHaveURL('/e/demo/findings/matrix');
+	await expect(page).toHaveURL(`/e/${e}/findings/matrix`);
+});
+
+test('an unknown engagement is a 404', async ({ page }) => {
+	const res = await page.goto('/e/00000000-0000-0000-0000-000000000000/setup/requirements');
+	expect(res?.status()).toBe(404);
 });
 
 test('outside an engagement the destinations are shown but not active', async ({ page }) => {

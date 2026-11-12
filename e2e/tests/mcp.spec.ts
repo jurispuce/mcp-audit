@@ -1,33 +1,6 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { AUDITOR, loginAs, seed, unique } from '../helpers';
-
-async function createToken(page: Page, name: string) {
-	await page.goto('/settings/tokens');
-	await page.getByLabel('Token name').fill(name);
-	await page.getByRole('button', { name: 'Create token' }).click();
-	return (await page.getByTestId('new-token').locator('.au-secret').textContent())!.trim();
-}
-
-async function mcpClient(baseURL: string, token: string) {
-	const client = new Client({ name: 'e2e', version: '1.0.0' });
-	await client.connect(
-		new StreamableHTTPClientTransport(new URL('/mcp', baseURL), {
-			requestInit: { headers: { authorization: `Bearer ${token}` } }
-		})
-	);
-	return client;
-}
-
-async function call(client: Client, name: string, args: Record<string, unknown>) {
-	const res = (await client.callTool({ name, arguments: args })) as {
-		isError?: boolean;
-		content: { text: string }[];
-	};
-	expect(res.isError, res.content[0]?.text).toBeFalsy();
-	return JSON.parse(res.content[0]!.text);
-}
+import { call, createToken, mcpClient } from '../mcp-helpers';
 
 test('the MCP endpoint refuses requests without a valid token', async ({ request }) => {
 	const res = await request.post('/mcp', {

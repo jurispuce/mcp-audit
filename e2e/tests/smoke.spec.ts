@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { ADMIN, PASSWORD, seed, signIn } from '../helpers';
 
-test('start, sign in and see the empty engagements list', async ({ page, request }) => {
+test('start, sign in and see the engagements list', async ({ page, request }) => {
 	await seed(request);
 	await signIn(page, ADMIN, PASSWORD);
 	await expect(page).toHaveURL('/');
 	await expect(page.getByRole('heading', { name: 'Engagements' })).toBeVisible();
-	await expect(page.getByTestId('engagements-empty')).toBeVisible();
+	await expect(page.getByRole('list', { name: 'Engagements' })).toContainText('NIS 2 audit, Riga office');
 });
 
 test('health is public and reports version and migrations', async ({ request }) => {

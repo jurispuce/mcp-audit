@@ -58,6 +58,11 @@
 	}
 
 	const key = $derived(page.url.searchParams.get('item'));
+	// Inside an engagement the sheet reads with that engagement's auditee; elsewhere, the shared library.
+	const context = $derived.by(() => {
+		const e = page.data.engagement as { id: string } | undefined;
+		return e ? `?engagement=${encodeURIComponent(e.id)}` : '';
+	});
 	const tab = $derived((page.url.searchParams.get('tab') as Tab | null) ?? 'details');
 
 	let data = $state<SheetData | null>(null);
@@ -71,12 +76,17 @@
 	async function load(k: string) {
 		const at = k.indexOf(':');
 		const res = await fetch(
-			`/api/items/${encodeURIComponent(k.slice(0, at))}/${encodeURIComponent(k.slice(at + 1))}`
+			`/api/items/${encodeURIComponent(k.slice(0, at))}/${encodeURIComponent(k.slice(at + 1))}${context}`
 		);
 		if (key !== k) return;
 		if (!res.ok) {
 			data = null;
-			loadError = res.status === 404 ? 'This item does not exist.' : 'The item could not be loaded.';
+			loadError =
+				res.status === 404
+					? 'This item does not exist.'
+					: res.status === 403
+						? 'This item belongs to another auditee and cannot be opened here.'
+						: 'The item could not be loaded.';
 			return;
 		}
 		data = (await res.json()) as SheetData;
@@ -142,7 +152,7 @@
 			)
 		)
 			return;
-		const res = await fetch(`/api/items/${data.item.type}/${data.item.id}/revert`, {
+		const res = await fetch(`/api/items/${data.item.type}/${data.item.id}/revert${context}`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ toVersion: version, baseVersion: data.item.version })
@@ -161,7 +171,7 @@
 		e.preventDefault();
 		if (!data || !draft.trim()) return;
 		posting = true;
-		const res = await fetch(`/api/items/${data.item.type}/${data.item.id}/comments`, {
+		const res = await fetch(`/api/items/${data.item.type}/${data.item.id}/comments${context}`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ body: draft })

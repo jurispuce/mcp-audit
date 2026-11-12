@@ -5,6 +5,7 @@ import type { AppDatabase } from '#lib/db/client.ts';
 import { mcpActor, type SessionUser } from '#lib/domain/auth.ts';
 import { addComment } from '#lib/domain/comments.ts';
 import { DomainError, NotFoundError } from '#lib/domain/errors.ts';
+import { assertAiAllowed } from '#lib/domain/guards.ts';
 import { assertCanReadRequirement, assertItemReadable } from '#lib/domain/guards.ts';
 import { authorshipLabel } from '#lib/domain/history.ts';
 import { getItemHistory, revertItem } from '#lib/domain/items.ts';
@@ -29,6 +30,8 @@ import { entityTypes } from '#lib/domain/registry.ts';
 import type { Actor } from '#lib/domain/write.ts';
 import '#lib/domain/entities.ts';
 import { APP_VERSION } from '#lib/version.ts';
+import { getEngagement } from '#lib/domain/engagements.ts';
+import { registerSetupTools } from './setup-tools';
 
 /**
  * The MCP server: the domain layer exposed as tools, in the app's own process. Every write is made by
@@ -40,7 +43,9 @@ export const AGENT_NAME = process.env.MCP_AGENT_NAME?.trim() || 'Claude';
 
 const INSTRUCTIONS = `mcp-audit is an audit planning and running database. You act on behalf of the signed-in auditor.
 Rules: every change you make is versioned and shown as "${AGENT_NAME} on behalf of <auditor>". Judgement writes (internal requirements, evidence links, findings, drafted events, roles) are stored as proposed for a person to accept. You cannot approve findings, change plan status or delete files. Results are compact JSON and include ids; pass ids back to other tools.
-Library: search_requirements and get_requirement read; upsert_sources, upsert_requirements, link_requirements, set_guidance and set_criteria write. A requirement can be named by its id or as "<source code>:<reference>", for example "nis2:Art. 21(2)(b)".`;
+Start with list_engagements, then get_engagement_overview to see the phases and what is missing next.
+Set-up: select_requirements, upsert_scopes, set_scope_handling, upsert_people (roles, proposed), upsert_risks. Documents: list_artifacts, get_artifact_text (paged, cite the locator), register_artifact. Internal requirements from the auditee's documents: list_internal_requirements, upsert_internal_requirements (proposed). Engagement tools refuse to run where the auditor switched AI off, and never read another auditee's internal requirements.
+Library: search_requirements and get_requirement read; upsert_sources, upsert_requirements, link_requirements, set_guidance and set_criteria write. A requirement can be named by its id or as "<source code>:<reference>", for example "nis2:Art. 21(2)(b)". Pass engagement_id to get_requirement, add_comment, get_history and revert to work on an engagement's own items.`;
 
 type Json = Record<string, unknown> | unknown[];
 
@@ -49,9 +54,9 @@ function ok(data: Json): CallToolResult {
 }
 
 /** Domain errors become tool errors the model can read and act on; anything else is a server fault. */
-function run(fn: () => Json): CallToolResult {
+function run(fn: () => unknown): CallToolResult {
 	try {
-		return ok(fn());
+		return ok(fn() as Json);
 	} catch (e) {
 		if (e instanceof DomainError) {
 			const fields =
@@ -77,39 +82,19 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 	const actor: Actor = mcpActor(user, AGENT_NAME);
 	const server = new McpServer({ name: 'mcp-audit', version: APP_VERSION }, { instructions: INSTRUCTIONS });
 	const lib = { auditeeId: null }; // library tools read from outside any engagement
+	/** Read context: an engagement's auditee when engagement_id is given, else the shared library. */
+	const ctx = (engagement_id?: string) => {
+		if (!engagement_id) return lib;
+		const e = getEngagement(app, engagement_id);
+		assertAiAllowed(e, actor);
+		return { auditeeId: e.auditeeId };
+	};
+	const inEngagement = z
+		.string()
+		.optional()
+		.describe("Engagement id, to work on that engagement's own items.");
 
-	// ---- Orientation
-
-	server.registerTool(
-		'list_engagements',
-		{
-			title: 'List engagements',
-			description:
-				'Engagements the auditor can work on, with ids. Start here to find the engagement to work in.',
-			annotations: { readOnlyHint: true }
-		},
-		() =>
-			run(() => ({
-				engagements: [],
-				note: 'This version of mcp-audit has no engagements yet; the library is available.'
-			}))
-	);
-
-	server.registerTool(
-		'get_engagement_overview',
-		{
-			title: 'Engagement overview',
-			description: 'Phase progress, counts and what is missing next for one engagement.',
-			inputSchema: { engagement_id: z.string().min(1) },
-			annotations: { readOnlyHint: true }
-		},
-		({ engagement_id }) =>
-			run(() => {
-				throw new NotFoundError(
-					`Engagement ${engagement_id} not found. This version of mcp-audit has no engagements yet.`
-				);
-			})
-	);
+	registerSetupTools(server, app, actor, run);
 
 	// ---- Library: read
 
@@ -149,13 +134,13 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 			title: 'Get requirement',
 			description:
 				'One requirement with its text, parent and children, links in both directions, guidance, general criteria and language versions.',
-			inputSchema: { requirement: reqRef },
+			inputSchema: { requirement: reqRef, engagement_id: inEngagement },
 			annotations: { readOnlyHint: true }
 		},
-		({ requirement }) =>
+		({ requirement, engagement_id }) =>
 			run(() => {
 				const id = resolveRequirementRef(app, requirement);
-				assertCanReadRequirement(app, id, lib);
+				assertCanReadRequirement(app, id, ctx(engagement_id));
 				const r = getRequirement(app, id);
 				const parent = r.parentId ? getRequirement(app, r.parentId) : null;
 				const children = findChildren(app, r.sourceId, r.id);
@@ -366,12 +351,13 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 			inputSchema: {
 				entity_type: entityType,
 				entity_id: z.string().min(1),
-				body: z.string().min(1).max(10000)
+				body: z.string().min(1).max(10000),
+				engagement_id: inEngagement
 			}
 		},
-		({ entity_type, entity_id, body }) =>
+		({ entity_type, entity_id, body, engagement_id }) =>
 			run(() => {
-				assertItemReadable(app, entity_type, entity_id, lib);
+				assertItemReadable(app, entity_type, entity_id, ctx(engagement_id));
 				const c = addComment(app, actor, entity_type, entity_id, body);
 				return { id: c.id, entity_type, entity_id, created_at: c.createdAt.toISOString() };
 			})
@@ -386,13 +372,14 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 			inputSchema: {
 				entity_type: entityType,
 				entity_id: z.string().min(1),
-				limit: z.number().int().min(1).max(100).optional()
+				limit: z.number().int().min(1).max(100).optional(),
+				engagement_id: inEngagement
 			},
 			annotations: { readOnlyHint: true }
 		},
-		({ entity_type, entity_id, limit }) =>
+		({ entity_type, entity_id, limit, engagement_id }) =>
 			run(() => {
-				assertItemReadable(app, entity_type, entity_id, lib);
+				assertItemReadable(app, entity_type, entity_id, ctx(engagement_id));
 				return {
 					versions: getItemHistory(app, entity_type, entity_id)
 						.slice(0, limit ?? 20)
@@ -420,12 +407,13 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 				entity_type: entityType,
 				entity_id: z.string().min(1),
 				to_version: z.number().int().min(1),
-				base_version: z.number().int().min(1)
+				base_version: z.number().int().min(1),
+				engagement_id: inEngagement
 			}
 		},
-		({ entity_type, entity_id, to_version, base_version }) =>
+		({ entity_type, entity_id, to_version, base_version, engagement_id }) =>
 			run(() => {
-				assertItemReadable(app, entity_type, entity_id, lib);
+				assertItemReadable(app, entity_type, entity_id, ctx(engagement_id));
 				const res = revertItem(app, actor, entity_type, entity_id, base_version, to_version);
 				return { entity_type, entity_id, version: res.version, reverted_from: to_version };
 			})

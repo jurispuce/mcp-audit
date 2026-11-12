@@ -66,16 +66,26 @@ describe('MCP endpoint (#30)', () => {
 		expect(tools.map((t) => t.name).sort()).toEqual(
 			[
 				'add_comment',
+				'get_artifact_text',
 				'get_engagement_overview',
 				'get_history',
 				'get_requirement',
 				'link_requirements',
+				'list_artifacts',
 				'list_engagements',
+				'list_internal_requirements',
+				'register_artifact',
 				'revert',
 				'search_requirements',
+				'select_requirements',
 				'set_criteria',
 				'set_guidance',
+				'set_scope_handling',
+				'upsert_internal_requirements',
+				'upsert_people',
 				'upsert_requirements',
+				'upsert_risks',
+				'upsert_scopes',
 				'upsert_sources'
 			].sort()
 		);
@@ -94,7 +104,7 @@ describe('MCP endpoint (#30)', () => {
 });
 
 describe('orientation and library tools (#31)', () => {
-	it('lists no engagements yet, and says so', async () => {
+	it('lists no engagements in an empty database, and refuses an unknown one', async () => {
 		expect((await call('list_engagements')).data).toMatchObject({ engagements: [] });
 		expect((await call('get_engagement_overview', { engagement_id: 'x' })).isError).toBe(true);
 	});

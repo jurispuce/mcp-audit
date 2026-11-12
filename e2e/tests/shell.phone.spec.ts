@@ -1,16 +1,17 @@
 import { expect, test } from '@playwright/test';
 import { ADMIN, loginAs, seed } from '../helpers';
 
+let e = '';
 test.beforeEach(async ({ page }) => {
-	await seed(page.request);
+	e = (await seed(page.request)).engagement.id;
 	await loginAs(page, ADMIN);
 });
 
 test('on a phone: top bar and bottom bar replace the rail', async ({ page }) => {
-	await page.goto('/e/demo/plan/events');
+	await page.goto(`/e/${e}/plan/events`);
 	await expect(page.locator('nav.au-rail')).toBeHidden();
 	await expect(page.locator('header.au-topbar')).toBeVisible();
-	await expect(page.getByTestId('topbar-switcher')).toHaveText('Engagement demo');
+	await expect(page.getByTestId('topbar-switcher')).toHaveText('NIS 2 audit, Riga office');
 	const bar = page.locator('nav.au-bottombar');
 	await expect(bar).toBeVisible();
 	await expect(bar.getByRole('link')).toHaveText(['Home', 'Set-up', 'Plan', 'Run', 'Findings']);
@@ -19,7 +20,12 @@ test('on a phone: top bar and bottom bar replace the rail', async ({ page }) => 
 
 test('on a phone: every tappable element is at least 44px high', async ({ page }) => {
 	for (const route of [
-		'/e/demo/setup/requirements',
+		`/e/${e}`,
+		`/e/${e}/setup/requirements`,
+		`/e/${e}/setup/scopes`,
+		`/e/${e}/setup/auditee`,
+		`/e/${e}/setup/risks`,
+		`/e/${e}/setup/documents`,
 		'/settings',
 		'/settings/users',
 		'/settings/tokens',
@@ -43,6 +49,10 @@ test('on a phone: every tappable element is at least 44px high', async ({ page }
 				})
 				// A card title link stretches over its whole card, so the card is the tap target.
 				.map((el) => (el.matches('.au-item__title a') ? el.closest('.au-item')! : el))
+				// A checkbox or radio inside its label: the whole label row is the tap target.
+				.map((el) =>
+					el.matches('label input[type="checkbox"], label input[type="radio"]') ? el.closest('label')! : el
+				)
 				.filter((el) => el.getBoundingClientRect().height < 44)
 				.map(
 					(el) =>

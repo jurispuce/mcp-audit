@@ -4,11 +4,31 @@ export const PASSWORD = 'test-password-123';
 export const ADMIN = 'admin@example.test';
 export const AUDITOR = 'auditor@example.test';
 
-/** Create the seed users (idempotent). */
-export async function seed(request: APIRequestContext) {
+export interface SeedResult {
+	users: { id: string; email: string; role: string }[];
+	password: string;
+	/** The prototype's sample engagement. Shared by tests: change it only in ways other tests do not read. */
+	engagement: { id: string; name: string; auditeeId: string };
+}
+
+/** Create the seed users, the NIS 2 source and the sample engagement (idempotent). */
+export async function seed(request: APIRequestContext): Promise<SeedResult> {
 	const res = await request.post('/api/test/seed', { data: {} });
 	expect(res.ok(), await res.text()).toBeTruthy();
-	return (await res.json()) as { users: { id: string; email: string; role: string }[]; password: string };
+	return (await res.json()) as SeedResult;
+}
+
+/** A new engagement of its own for a test that changes things, created through the real form. */
+export async function createEngagement(page: Page, name = unique('Audit'), auditee = unique('Client')) {
+	await page.goto('/');
+	const create = page.getByRole('button', { name: 'Create engagement' });
+	if (await create.isVisible()) await create.click();
+	const form = page.locator('form', { has: page.getByRole('heading', { name: 'Create engagement' }) });
+	await form.getByLabel('Engagement name').fill(name);
+	await form.getByLabel('Auditee').fill(auditee);
+	await form.getByRole('button', { name: 'Create engagement' }).click();
+	await expect(page).toHaveURL(/\/e\/[0-9a-f-]{36}$/);
+	return { id: page.url().split('/e/')[1]!, name, auditee };
 }
 
 /** Sign in without the form, through the test-only endpoint. The cookie lands in the page's context. */

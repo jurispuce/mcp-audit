@@ -69,13 +69,13 @@ test('any record opens in the item sheet with details, comments and history, and
 });
 
 test('the item sheet opens directly from a URL on any screen', async ({ page }) => {
-	const { users } = await seed(page.request);
+	const { users, engagement } = await seed(page.request);
 	await loginAs(page, ADMIN);
 	const auditor = users.find((u) => u.role === 'auditor')!;
-	await page.goto(`/e/demo/plan/events?item=user:${auditor.id}&tab=history`);
+	await page.goto(`/e/${engagement.id}/plan/events?item=user:${auditor.id}&tab=history`);
 	const sheet = page.getByTestId('item-sheet');
 	await expect(sheet.getByRole('tab', { name: /History/ })).toHaveAttribute('aria-selected', 'true');
 	await expect(sheet.getByTestId('history')).toContainText('Created');
 	await sheet.getByRole('button', { name: 'Close' }).click();
-	await expect(page).toHaveURL('/e/demo/plan/events');
+	await expect(page).toHaveURL(`/e/${engagement.id}/plan/events`);
 });

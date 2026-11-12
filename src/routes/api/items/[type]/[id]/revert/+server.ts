@@ -1,14 +1,15 @@
 import { json } from '@sveltejs/kit';
 import { getItem, revertItem } from '#lib/domain/items.ts';
 import { appDatabase } from '#lib/server/db.ts';
-import { httpError, uiActor } from '#lib/server/http.ts';
+import { assertItemInContext, httpError, uiActor } from '#lib/server/http.ts';
 import type { RequestHandler } from './$types';
 
 /** Revert an item to an earlier version: a new version that copies it. */
-export const POST: RequestHandler = async ({ params, request, locals }) => {
+export const POST: RequestHandler = async ({ params, request, locals, url }) => {
 	try {
 		const body = (await request.json()) as { toVersion?: number; baseVersion?: number };
 		const app = appDatabase();
+		assertItemInContext(app, url, params.type, params.id);
 		revertItem(
 			app,
 			uiActor(locals),
