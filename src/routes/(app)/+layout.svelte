@@ -1,7 +1,11 @@
 <script lang="ts">
-	let { children } = $props();
+	import { page } from '$app/state';
+	import AppShell from '#lib/components/AppShell.svelte';
+
+	let { data, children } = $props();
+	const engagement = $derived((page.data.engagement as { id: string; name: string } | undefined) ?? null);
 </script>
 
-<main class="au-main" style="margin-left: 0">
+<AppShell user={data.user} {engagement}>
 	{@render children()}
-</main>
+</AppShell>

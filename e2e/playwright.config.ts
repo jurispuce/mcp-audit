@@ -34,7 +34,11 @@ export default defineConfig({
 		: 'list',
 	use: { baseURL, trace: 'off', screenshot: 'only-on-failure' },
 	projects: [
-		{ name: 'desktop', use: { ...devices['Desktop Chrome'] }, testIgnore: /first-start/ },
+		{
+			name: 'desktop',
+			use: { ...devices['Desktop Chrome'] },
+			testIgnore: [/first-start/, /\.phone\.spec\.ts$/]
+		},
 		{ name: 'phone', use: { ...devices['Pixel 7'] }, testMatch: /\.phone\.spec\.ts$/ },
 		...(firstStart
 			? [

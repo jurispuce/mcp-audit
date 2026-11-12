@@ -29,7 +29,10 @@ export default ts.config(
 		languageOptions: { globals: { ...globals.browser, ...globals.node } },
 		rules: {
 			'no-undef': 'off',
-			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }]
+			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+			// The app is always served at the root (no paths.base), and engagement links are built from
+			// the navigation model in src/lib/navigation.ts, so resolve() adds nothing here.
+			'svelte/no-navigation-without-resolve': 'off'
 		}
 	},
 	{
