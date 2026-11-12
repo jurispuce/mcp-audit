@@ -58,30 +58,34 @@ With another proxy (nginx, Traefik, a cloud load balancer), keep the same three 
 
 Checked on 2026-11-12 against Anthropic's connector documentation ([building connectors](https://claude.com/docs/connectors/building), [authentication](https://claude.com/docs/connectors/building/authentication)).
 
-| Client                                                                                                   | How it connects to mcp-audit                                                                                 | Works today                                                                    |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| Claude Code                                                                                              | `claude mcp add --transport http mcp-audit https://<host>/mcp --header "Authorization: Bearer mcpa_…"`       | Yes, over a private network or the public endpoint.                            |
-| Claude Desktop, local configuration                                                                      | The `mcp-remote` bridge in `claude_desktop_config.json`, passing the token as a header (docs/mcp-connect.md) | Yes. The bridge runs on the person's computer, so a private address works too. |
-| claude.ai web, Claude Desktop and mobile "custom connector" (Settings, Connectors, Add custom connector) | Anthropic's servers connect to the URL                                                                       | **Not yet.** See below.                                                        |
+| Client                                                                                                   | How it connects to mcp-audit                                                                                 | Works                                               |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| Claude Code                                                                                              | `claude mcp add --transport http mcp-audit https://<host>/mcp --header "Authorization: Bearer mcpa_…"`       | Over a private network or the public endpoint.      |
+| Claude Desktop, local configuration                                                                      | The `mcp-remote` bridge in `claude_desktop_config.json`, passing the token as a header (docs/mcp-connect.md) | Anywhere; the bridge runs on the person's computer. |
+| claude.ai web, Claude Desktop and mobile "custom connector" (Settings, Connectors, Add custom connector) | Anthropic's servers connect to `https://<host>/mcp` and sign in with OAuth                                   | Only on the public endpoint.                        |
 
-What a custom connector needs, and where mcp-audit stands:
+What a custom connector needs, and how mcp-audit meets it (#75):
 
-- **Public https URL.** Anthropic's servers make the calls, from `160.79.104.0/21`, so `localhost` or a VPN address cannot work. The public endpoint above covers this.
-- **Transport: Streamable HTTP.** mcp-audit serves it on `/mcp`. Legacy HTTP+SSE is not needed.
-- **Authentication: authless, or OAuth 2.0.**
-  - OAuth clients register through Dynamic Client Registration (RFC 7591) or a Client ID Metadata Document, or the person enters a client ID.
-  - Every authorization request uses PKCE (S256).
-  - A `401` must carry `WWW-Authenticate: Bearer resource_metadata="…"` (protected resource metadata, RFC 9728), and the authorization server publishes its metadata (RFC 8414).
-  - The callback is `https://claude.ai/api/mcp/auth_callback`.
-  - Claude follows the 2025-03-26, 2025-06-18 and 2025-11-25 authorization specifications.
-- **Fixed bearer tokens** ("static headers", entered by an organization Owner) are a beta for a limited set of organizations only.
+| Requirement                                                                        | mcp-audit                                                                                                                                           |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A public https URL. Anthropic's servers make the calls, from `160.79.104.0/21`.    | The public endpoint above. A VPN or `localhost` address cannot work.                                                                                |
+| Streamable HTTP                                                                    | `/mcp`                                                                                                                                              |
+| A `401` with `WWW-Authenticate: Bearer resource_metadata="…"` (RFC 9728)           | `/mcp` without a valid token answers so, pointing at `/.well-known/oauth-protected-resource/mcp`.                                                   |
+| Authorization server metadata (RFC 8414)                                           | `/.well-known/oauth-authorization-server`                                                                                                           |
+| Dynamic Client Registration (RFC 7591)                                             | `/oauth/register`: https, loopback http or app-scheme redirect URIs; public clients or clients with a secret; 20 registrations an hour per address. |
+| Authorization code with PKCE S256                                                  | `/oauth/authorize` shows a consent screen to the signed-in person; codes are single use and last 5 minutes.                                         |
+| Callback `https://claude.ai/api/mcp/auth_callback`; Claude Code on a loopback port | Registered by the client; loopback URIs match on any port.                                                                                          |
+| Resource indicator                                                                 | Tokens are issued for `https://<host>/mcp` only and refused anywhere else.                                                                          |
+| Tokens                                                                             | Access tokens last an hour. Refresh tokens rotate on every use; reusing a spent one ends the whole connection.                                      |
 
-mcp-audit authenticates `/mcp` with personal access tokens, so a custom connector cannot connect yet. Authless is not an option (CLAUDE.md rule 7). Supporting custom connectors needs mcp-audit to act as an OAuth 2.0 authorization server for `/mcp`:
+Fixed bearer tokens ("static headers", entered by an organization Owner) remain a beta for a limited set of organizations; with OAuth they are not needed. Authless access is never offered (CLAUDE.md rule 7).
 
-- protected resource and authorization server metadata;
-- dynamic registration;
-- authorization code with PKCE;
-- sign-in and consent screens;
-- access tokens tied to a user, revocable like personal tokens.
+To check it from a terminal:
 
-Until then, use Claude Code or the Desktop bridge.
+```bash
+curl -si https://<host>/mcp -X POST -H 'content-type: application/json' -d '{}' | grep -i www-authenticate
+```
+
+```bash
+curl -s https://<host>/.well-known/oauth-authorization-server
+```

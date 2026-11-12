@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { revokeAllPersonalTokens, revokeSessions, setPassword } from './auth';
 import { accountKey, clearThrottle } from './throttle';
+import { revokeAllConnectedApps } from './oauth';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors';
 import { generateTemporaryPassword, validatePassword } from './password';
 import { registerEntity } from './registry';
@@ -118,6 +119,7 @@ export const userDefinition: EntityDefinition = registerEntity({
 		if (Number(row.active) !== 1) {
 			revokeSessions(app, String(row.id));
 			revokeAllPersonalTokens(app, String(row.id));
+			revokeAllConnectedApps(app, String(row.id));
 		}
 	},
 	search: (row) => ({ name: row.name as string, email: row.email as string }),

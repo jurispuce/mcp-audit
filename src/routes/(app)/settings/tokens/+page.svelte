@@ -11,6 +11,47 @@
 
 <svelte:head><title>Access tokens · Settings · mcp-audit</title></svelte:head>
 
+<section class="au-section" aria-labelledby="apps-title">
+	<h2 class="au-section__title" id="apps-title">Connected apps</h2>
+	<p>
+		Apps you allowed through sign-in, such as Claude added as a custom connector with the address
+		<span class="au-ref">{data.mcpUrl}</span>. They work as you, like a token.
+	</p>
+	{#if data.apps.length === 0}
+		<div class="au-empty" data-testid="no-connected-apps">No apps connected.</div>
+	{:else}
+		<ul class="au-list" aria-label="Connected apps">
+			{#each data.apps as a (a.grantId)}
+				<li class="au-item" data-testid="app-{a.clientName}">
+					<div class="au-item__head">
+						<div>
+							{#if a.clientUri}<span class="au-ref">{a.clientUri}</span>{/if}
+							<h3 class="au-item__title">{a.clientName}</h3>
+						</div>
+						<span class="au-badge au-badge--ok">Connected</span>
+					</div>
+					<div class="au-item__meta">
+						<span>Connected {fmt(a.connectedAt)}</span>
+						<span>Last used {fmt(a.lastUsedAt)}</span>
+					</div>
+					<form
+						class="au-item__actions"
+						method="POST"
+						action="?/disconnect"
+						use:enhance={({ cancel }) => {
+							if (!confirm(`Disconnect "${a.clientName}"? It stops working until you allow it again.`))
+								cancel();
+						}}
+					>
+						<input type="hidden" name="grant" value={a.grantId} />
+						<button class="au-btn au-btn--danger" type="submit">Disconnect {a.clientName}</button>
+					</form>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+</section>
+
 <section class="au-section" aria-labelledby="tokens-title">
 	<h2 class="au-section__title" id="tokens-title">Personal access tokens</h2>
 	<p>

@@ -627,3 +627,70 @@ export const authThrottle = sqliteTable('auth_throttle', {
 	windowStart: integer('window_start', { mode: 'timestamp_ms' }).notNull(),
 	lockedUntil: integer('locked_until', { mode: 'timestamp_ms' })
 });
+
+/**
+ * OAuth 2.0 for /mcp (#75): clients registered dynamically (RFC 7591), one-time authorization codes,
+ * and tokens. Access infrastructure like sessions and personal tokens: not versioned, secrets stored
+ * only as SHA-256 hashes. Written only by src/lib/domain/oauth.ts.
+ */
+export const oauthClient = sqliteTable('oauth_client', {
+	clientId: text('client_id').primaryKey(),
+	secretHash: text('secret_hash'),
+	name: text('name').notNull(),
+	redirectUris: text('redirect_uris', { mode: 'json' }).notNull(),
+	authMethod: text('auth_method').notNull(),
+	clientUri: text('client_uri'),
+	createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull()
+});
+
+export const oauthCode = sqliteTable('oauth_code', {
+	codeHash: text('code_hash').primaryKey(),
+	clientId: text('client_id')
+		.notNull()
+		.references(() => oauthClient.clientId),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id),
+	redirectUri: text('redirect_uri').notNull(),
+	codeChallenge: text('code_challenge').notNull(),
+	resource: text('resource').notNull(),
+	scope: text('scope').notNull(),
+	expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+	usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+	grantId: text('grant_id')
+});
+
+/**
+ * One row per issued token pair. A grant is what the person approved; refreshing rotates the pair
+ * within the grant, and revoking the grant ends every pair in it.
+ */
+export const oauthToken = sqliteTable(
+	'oauth_token',
+	{
+		id: text('id').primaryKey(),
+		grantId: text('grant_id').notNull(),
+		clientId: text('client_id')
+			.notNull()
+			.references(() => oauthClient.clientId),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		accessHash: text('access_hash').notNull(),
+		refreshHash: text('refresh_hash').notNull(),
+		resource: text('resource').notNull(),
+		scope: text('scope').notNull(),
+		accessExpiresAt: integer('access_expires_at', { mode: 'timestamp_ms' }).notNull(),
+		refreshExpiresAt: integer('refresh_expires_at', { mode: 'timestamp_ms' }).notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+		/** Set when the pair was refreshed (rotated) or revoked; a used refresh token never works again. */
+		rotatedAt: integer('rotated_at', { mode: 'timestamp_ms' }),
+		revokedAt: integer('revoked_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [
+		uniqueIndex('oauth_token_access').on(t.accessHash),
+		uniqueIndex('oauth_token_refresh').on(t.refreshHash),
+		index('oauth_token_grant').on(t.grantId),
+		index('oauth_token_user').on(t.userId)
+	]
+);

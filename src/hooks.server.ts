@@ -4,7 +4,12 @@ import { SESSION_COOKIE, validateSession } from '#lib/domain/auth.ts';
 import { issueSetupCode, needsSetup } from '#lib/domain/setup.ts';
 import { failInterruptedJobs } from '#lib/domain/jobs.ts';
 import { ensureInitialAdmin } from '#lib/domain/users.ts';
-import { allowedWhileChangingPassword, isApiPath, isPublicPath } from '#lib/server/access.ts';
+import {
+	allowedWhileChangingPassword,
+	isApiPath,
+	isCrossSiteFormPost,
+	isPublicPath
+} from '#lib/server/access.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { sessionCookieOptions } from '#lib/server/http.ts';
 
@@ -31,6 +36,12 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 /** Every route requires a signed-in user, except the few public ones. */
 export const handle: Handle = async ({ event, resolve }) => {
+	if (isCrossSiteFormPost(event.request, event.url)) {
+		const message = `Cross-site ${event.request.method} form submissions are forbidden`;
+		return event.request.headers.get('accept') === 'application/json'
+			? json({ message }, { status: 403 })
+			: new Response(message, { status: 403 });
+	}
 	const app = appDatabase();
 	const path = event.url.pathname;
 	const token = event.cookies.get(SESSION_COOKIE);

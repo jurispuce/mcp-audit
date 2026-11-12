@@ -25,7 +25,11 @@ export const POLICIES = {
 	/** Per client address on /mcp: 30 bad tokens in 15 minutes. */
 	token: { max: 30, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE },
 	/** Per client address on /setup: 10 wrong codes in 15 minutes. */
-	setup: { max: 10, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE }
+	setup: { max: 10, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE },
+	/** Per client address on the OAuth token endpoint: 30 failed exchanges in 15 minutes. */
+	oauth: { max: 30, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE },
+	/** Per client address: 20 OAuth client registrations an hour (every registration counts). */
+	register: { max: 20, windowMs: 60 * MINUTE, lockMs: 60 * MINUTE }
 } satisfies Record<string, ThrottlePolicy>;
 
 interface Row {
@@ -89,5 +93,7 @@ export function clearThrottle(app: AppDatabase, key: string): void {
 }
 
 export const accountKey = (email: string) => `account:${email.trim().toLowerCase()}`;
-export const addressKey = (kind: 'login' | 'token' | 'setup', address: string | null | undefined) =>
-	`${kind}:${address || 'unknown'}`;
+export const addressKey = (
+	kind: 'login' | 'token' | 'setup' | 'oauth' | 'register',
+	address: string | null | undefined
+) => `${kind}:${address || 'unknown'}`;

@@ -6,8 +6,10 @@ export default defineConfig({
 	plugins: [
 		sveltekit({
 			adapter: adapter({ out: 'build', precompress: true }),
-			// Forms post from the app's own origin; ORIGIN is set at runtime so nothing assumes localhost.
-			csrf: { trustedOrigins: [] }
+			// The cross-site form check is applied in src/hooks.server.ts instead (isCrossSiteFormPost), so
+			// the OAuth token endpoint can take form posts from other servers. '*' only turns off the
+			// built-in copy; forms still must post from the app's own origin.
+			csrf: { trustedOrigins: ['*'] }
 		})
 	],
 	test: {

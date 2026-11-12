@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowedWhileChangingPassword, isApiPath, isPublicPath } from './access';
+import { allowedWhileChangingPassword, isApiPath, isCrossSiteFormPost, isPublicPath } from './access';
 import { safeNext } from './http';
 
 describe('access rules', () => {
@@ -49,5 +49,46 @@ describe('access rules', () => {
 		expect(safeNext('//evil.example')).toBe('/');
 		expect(safeNext('/\\evil.example')).toBe('/');
 		expect(safeNext(null)).toBe('/');
+	});
+});
+
+describe('cross-site form posts (#75)', () => {
+	const url = (p: string) => new URL(`https://audit.example.com${p}`);
+	const post = (headers: Record<string, string>) =>
+		new Request('https://audit.example.com/x', { method: 'POST', headers });
+	const form = { 'content-type': 'application/x-www-form-urlencoded' };
+
+	it('refuses form posts from another origin or without one, as SvelteKit does', () => {
+		expect(isCrossSiteFormPost(post({ ...form, origin: 'https://evil.example' }), url('/login'))).toBe(true);
+		expect(isCrossSiteFormPost(post(form), url('/settings/tokens'))).toBe(true);
+		expect(isCrossSiteFormPost(post({}), url('/logout'))).toBe(true);
+		expect(
+			isCrossSiteFormPost(post({ 'content-type': 'multipart/form-data; boundary=x' }), url('/e/1'))
+		).toBe(true);
+	});
+
+	it('allows same-origin forms, JSON and reads', () => {
+		expect(isCrossSiteFormPost(post({ ...form, origin: 'https://audit.example.com' }), url('/login'))).toBe(
+			false
+		);
+		expect(isCrossSiteFormPost(post({ 'content-type': 'application/json' }), url('/mcp'))).toBe(false);
+		expect(isCrossSiteFormPost(new Request('https://audit.example.com/x'), url('/login'))).toBe(false);
+	});
+
+	it('lets OAuth clients post to the token and revocation endpoints from their servers', () => {
+		expect(isCrossSiteFormPost(post(form), url('/oauth/token'))).toBe(false);
+		expect(isCrossSiteFormPost(post(form), url('/oauth/revoke'))).toBe(false);
+		expect(isCrossSiteFormPost(post(form), url('/oauth/authorize'))).toBe(true);
+	});
+
+	it('makes the OAuth metadata and client endpoints public, but not authorize', () => {
+		for (const p of [
+			'/.well-known/oauth-protected-resource/mcp',
+			'/oauth/token',
+			'/oauth/register',
+			'/oauth/revoke'
+		])
+			expect(isPublicPath(p, false), p).toBe(true);
+		expect(isPublicPath('/oauth/authorize', false)).toBe(false);
 	});
 });

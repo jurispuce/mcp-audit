@@ -61,7 +61,16 @@ Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/
 - The token sits in `env`, not in `args`, because Desktop on Windows does not keep spaces inside arguments.
 - Restart Claude Desktop after editing the file.
 
-The "Add custom connector" dialog in claude.ai and Claude Desktop does not work with mcp-audit yet. Anthropic's servers make those calls, so they need a public https address, and they sign in with OAuth. mcp-audit uses personal access tokens. A fixed request header is a beta for a limited set of organizations only. Use the bridge above or Claude Code. See `docs/public-endpoint.md`, Remote MCP clients, for the checked requirements.
+## 3b. claude.ai, Claude Desktop or mobile as a custom connector
+
+This needs the app on a public https address (`docs/public-endpoint.md`): Anthropic's servers make the calls, so a private or VPN address cannot work. No token is needed; you sign in instead.
+
+1. In claude.ai or Claude Desktop: Settings, Connectors, Add custom connector. On Team and Enterprise plans an organization Owner may need to add it first.
+2. Name it "mcp-audit" and enter the address `https://<your host>/mcp`. Leave the advanced OAuth fields empty: Claude registers itself.
+3. Choose Connect. A window opens on mcp-audit: sign in if asked, check the app's name, and choose **Allow access**.
+4. The connector shows the mcp-audit tools. Everything it writes is versioned as "Claude on behalf of <you>", using the name the app registered with.
+
+The connection lasts until you disconnect it in Settings, Access tokens, Connected apps, or an admin deactivates your account. Mobile uses the connectors added on the web.
 
 ## 4. Load the audit skills
 
