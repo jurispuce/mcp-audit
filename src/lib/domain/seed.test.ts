@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from '#lib/db/test-db.ts';
 import { login } from './auth';
 import { SEED_PASSWORD, seedTestData } from './seed';
+import { listSources } from './library';
 import { countUsers } from './users';
 
 describe('seed', () => {
@@ -20,6 +21,7 @@ describe('seed', () => {
 		await seedTestData(app, env);
 		expect(users.map((u) => u.role)).toEqual(['admin', 'auditor']);
 		expect(countUsers(app)).toBe(2);
+		expect(listSources(app).map((s) => s.code)).toEqual(['nis2']);
 		await expect(login(app, 'auditor@example.test', SEED_PASSWORD)).resolves.toBeTruthy();
 		app.close();
 	});

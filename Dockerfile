@@ -30,6 +30,7 @@ COPY --from=build --chown=node:node /app/build ./build
 COPY --from=build --chown=node:node /app/server.js /app/server-env.js ./
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --from=build --chown=node:node /app/scripts ./scripts
+COPY --from=build --chown=node:node /app/seed ./seed
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME ["/data"]

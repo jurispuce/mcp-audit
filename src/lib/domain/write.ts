@@ -161,10 +161,18 @@ export function write(
 		switch (op.op) {
 			case 'create':
 			case 'update': {
-				if (existing && Number(existing.deleted) === 1 && op.op === 'update') {
+				// `deleted: false` in an update restores a deleted item with new values (used by import).
+				const { deleted: deletedFlag, ...data } = op.data;
+				const restoring =
+					op.op === 'update' &&
+					existing &&
+					Number(existing.deleted) === 1 &&
+					(deletedFlag === false || deletedFlag === 0);
+				if (existing && Number(existing.deleted) === 1 && op.op === 'update' && !restoring) {
 					throw new ValidationError(`${def.type} ${op.id} is deleted. Revert to restore it first.`);
 				}
-				changes = def.parse(op.data, existing);
+				changes = def.parse(data, existing);
+				if (restoring) changes.deleted = 0;
 				break;
 			}
 			case 'delete': {

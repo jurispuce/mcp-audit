@@ -270,6 +270,13 @@ describe('soft delete and revert (#16)', () => {
 		expect(listActive(app, testItem)).toHaveLength(1);
 	});
 
+	it('restores a deleted item with new values when an update says deleted: false', () => {
+		const id = String(createEntity(app, uiActor, testItem, { title: 'x' }).row.id);
+		deleteEntity(app, uiActor, testItem, id, 1);
+		const res = updateEntity(app, uiActor, testItem, id, 2, { title: 'back', deleted: false });
+		expect(res.row).toMatchObject({ title: 'back', deleted: 0, current_version: 3 });
+	});
+
 	it('refuses to edit a deleted item, to delete twice, and to revert to the current version', () => {
 		const id = String(createEntity(app, uiActor, testItem, { title: 'x' }).row.id);
 		deleteEntity(app, uiActor, testItem, id, 1);

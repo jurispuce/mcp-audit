@@ -1,6 +1,8 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { setPassword } from './auth';
 import { ForbiddenError } from './errors';
+import { builtInSources, importBuiltInSource } from './library-import';
+import { getSourceByCode } from './library';
 import { countUsers, createFirstAdmin, createUser, listUsers, type User } from './users';
 
 /**
@@ -43,5 +45,10 @@ export async function seedTestData(
 		}
 	}
 	users = byEmail();
+
+	// The bundled library sources (NIS 2 Article 21), so screens have requirements to show.
+	for (const b of builtInSources()) {
+		if (!getSourceByCode(app, b.code)) importBuiltInSource(app, actor, b.file);
+	}
 	return { users: Object.values(SEED_USERS).map((s) => users.get(s.email)!), password: SEED_PASSWORD };
 }

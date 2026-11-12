@@ -1,0 +1,84 @@
+# NIS 2 Directive, Article 21(1) and 21(2): cybersecurity risk-management measures.
+# Text of Directive (EU) 2022/2555 as published in OJ L 333, 27.12.2022 (CELEX 32022L2555).
+# Check the wording against EUR-Lex before quoting it in a report.
+id: nis2
+title: NIS 2 Directive (EU) 2022/2555
+type: law
+edition: '2022'
+language: en
+licence_note: Public EU law. Reuse of EUR-Lex documents is authorised under Commission Decision 2011/833/EU.
+requirements:
+  - id: 'Art. 21'
+    title: Cybersecurity risk-management measures
+    locator: Article 21
+  - id: 'Art. 21(1)'
+    parent: 'Art. 21'
+    title: Appropriate and proportionate measures
+    locator: Article 21(1)
+    text: >-
+      Member States shall ensure that essential and important entities take appropriate and proportionate
+      technical, operational and organisational measures to manage the risks posed to the security of network
+      and information systems which those entities use for their operations or for the provision of their
+      services, and to prevent or minimise the impact of incidents on recipients of their services and on other
+      services.
+
+      Taking into account the state-of-the-art and, where applicable, relevant European and international
+      standards, as well as the cost of implementation, the measures referred to in the first subparagraph
+      shall ensure a level of security of network and information systems appropriate to the risks posed. When
+      assessing the proportionality of those measures, due account shall be taken of the degree of the
+      entity's exposure to risks, the entity's size and the likelihood of occurrence of incidents and their
+      severity, including their societal and economic impact.
+  - id: 'Art. 21(2)'
+    parent: 'Art. 21'
+    title: Minimum measures
+    locator: Article 21(2)
+    text: >-
+      The measures referred to in paragraph 1 shall be based on an all-hazards approach that aims to protect
+      network and information systems and the physical environment of those systems from incidents, and shall
+      include at least the following:
+  - id: 'Art. 21(2)(a)'
+    parent: 'Art. 21(2)'
+    title: Risk analysis and information system security policies
+    text: policies on risk analysis and information system security;
+  - id: 'Art. 21(2)(b)'
+    parent: 'Art. 21(2)'
+    title: Incident handling
+    text: incident handling;
+  - id: 'Art. 21(2)(c)'
+    parent: 'Art. 21(2)'
+    title: Business continuity and crisis management
+    text: business continuity, such as backup management and disaster recovery, and crisis management;
+  - id: 'Art. 21(2)(d)'
+    parent: 'Art. 21(2)'
+    title: Supply chain security
+    text: >-
+      supply chain security, including security-related aspects concerning the relationships between each
+      entity and its direct suppliers or service providers;
+  - id: 'Art. 21(2)(e)'
+    parent: 'Art. 21(2)'
+    title: Security in acquisition, development and maintenance
+    text: >-
+      security in network and information systems acquisition, development and maintenance, including
+      vulnerability handling and disclosure;
+  - id: 'Art. 21(2)(f)'
+    parent: 'Art. 21(2)'
+    title: Assessing the effectiveness of risk-management measures
+    text: policies and procedures to assess the effectiveness of cybersecurity risk-management measures;
+  - id: 'Art. 21(2)(g)'
+    parent: 'Art. 21(2)'
+    title: Basic cyber hygiene and cybersecurity training
+    text: basic cyber hygiene practices and cybersecurity training;
+  - id: 'Art. 21(2)(h)'
+    parent: 'Art. 21(2)'
+    title: Cryptography and encryption
+    text: policies and procedures regarding the use of cryptography and, where appropriate, encryption;
+  - id: 'Art. 21(2)(i)'
+    parent: 'Art. 21(2)'
+    title: Human resources security, access control and asset management
+    text: human resources security, access control policies and asset management;
+  - id: 'Art. 21(2)(j)'
+    parent: 'Art. 21(2)'
+    title: Multi-factor authentication and secured communications
+    text: >-
+      the use of multi-factor authentication or continuous authentication solutions, secured voice, video and
+      text communications and secured emergency communication systems within the entity, where appropriate.

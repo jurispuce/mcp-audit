@@ -574,7 +574,7 @@ export function setGuidance(
 			op: 'update',
 			id: String(row.id),
 			baseVersion: base,
-			data: { body, deleted: 0 } as never
+			data: { body, deleted: false }
 		});
 	}
 	return updateEntity(app, actor, guidanceDefinition, String(row.id), base, { body });
