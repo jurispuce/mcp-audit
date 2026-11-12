@@ -4,6 +4,11 @@ test('on first start, /setup creates the first admin with the code from the log'
 	page,
 	request
 }) => {
+	const codeRes = await request.get('/api/test/setup-code');
+	test.skip(
+		codeRes.status() === 404,
+		'This server already has users; first start runs once per fresh data volume.'
+	);
 	await page.goto('/');
 	await expect(page).toHaveURL('/setup');
 	await page.goto('/login');

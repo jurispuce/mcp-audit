@@ -10,7 +10,10 @@ import http from 'node:http';
 const useForwardedProto = !process.env.ORIGIN && !process.env.PROTOCOL_HEADER;
 if (useForwardedProto) process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
 
-const { handler } = await import('./build/handler.js');
+// A variable path keeps the type checker out of the generated build folder.
+const entry = './build/handler.js';
+/** @type {{ handler: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void }} */
+const { handler } = await import(entry);
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 3000);
