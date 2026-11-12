@@ -4,7 +4,7 @@
 
 services:
   app:
-    image: ghcr.io/jurispuce/mcp-audit:${MCP_AUDIT_TAG:-latest}
+    image: ghcr.io/jurispuce/mcp-audit:${MCP_AUDIT_TAG:-main}
     build:
       context: .
       args:

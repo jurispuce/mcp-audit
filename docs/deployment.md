@@ -93,7 +93,7 @@ Check the new version:
 curl -s http://127.0.0.1:3000/health
 ```
 
-`MCP_AUDIT_TAG` in `.env` chooses the image tag: `latest` (newest release), `main` (newest build of the default branch) or a version such as `v0.2.0`. Pinning a version is safest for a team.
+`MCP_AUDIT_TAG` in `.env` chooses the image tag: `main` (the default: newest build of the default branch), `latest` (newest release, once a version tag exists) or a version such as `v0.2.0`. Pinning a version is safest for a team.
 
 ## Roll back
 
@@ -118,7 +118,7 @@ All settings are environment variables in `.env`. Only the Compose ones (`BIND_A
 | --------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `BIND_ADDRESS`                                                        | `127.0.0.1`       | Host address the port is published on. Use a LAN or VPN address to share.                                                                                   |
 | `HOST_PORT`                                                           | `3000`            | Port on the host.                                                                                                                                           |
-| `MCP_AUDIT_TAG`                                                       | `latest`          | Image tag to run.                                                                                                                                           |
+| `MCP_AUDIT_TAG`                                                       | `main`            | Image tag to run.                                                                                                                                           |
 | `ORIGIN`                                                              | empty             | Fixed public URL, for example `https://audit.example.lan`. Empty accepts any host; the protocol then comes from `X-Forwarded-Proto` and is http without it. |
 | `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH`       | empty             | Headers to trust behind a reverse proxy (#67).                                                                                                              |
 | `BODY_SIZE_LIMIT`                                                     | `100M`            | Largest request body, for uploading several documents at once. One file may be at most 50 MB.                                                               |
