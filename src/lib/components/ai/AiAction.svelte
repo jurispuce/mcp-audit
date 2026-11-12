@@ -146,7 +146,11 @@
 		{/if}
 	</div>
 	{#if blocked}
-		<p class="au-muted" id="ai-{action}-why">{blocked}</p>
+		<p class="au-muted" id="ai-{action}-why">
+			{blocked}{#if ai?.allowed && !ai.available}<a class="au-aiaction__setup" href="/settings/ai"
+					>Open Settings, AI</a
+				>{/if}
+		</p>
 	{:else if hint && !job}
 		<p class="au-muted" id="ai-{action}-hint">{hint}</p>
 	{/if}

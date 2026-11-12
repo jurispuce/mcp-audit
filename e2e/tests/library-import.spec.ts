@@ -12,8 +12,11 @@ test('upload a law, import it through Claude, review, edit and publish it, then 
 	baseURL
 }) => {
 	const code = unique('law').toLowerCase();
-	// 1. Upload the document on Library, Import.
-	await page.goto('/library/import');
+	// 1. Upload the document on Library, Import, reached from the Sources tab.
+	await page.goto('/library');
+	await page.getByRole('link', { name: 'Import requirements' }).click();
+	await expect(page).toHaveURL('/library/import');
+	await expect(page.getByRole('heading', { name: '1. Upload the document' })).toBeVisible();
 	await page.getByLabel('Upload a law or standard').setInputFiles({
 		name: `${code}.pdf`,
 		mimeType: 'application/pdf',
@@ -24,7 +27,10 @@ test('upload a law, import it through Claude, review, edit and publish it, then 
 	await page.getByRole('button', { name: 'Upload', exact: true }).click();
 	await expect(page.getByRole('status')).toHaveText('1 document added.');
 	await expect(page.getByTestId(`libdoc-${code}.pdf`)).toContainText('Text read');
-	await page.getByTestId(`libdoc-${code}.pdf`).getByRole('button', { name: 'Use in the prompt' }).click();
+	await page
+		.getByTestId(`libdoc-${code}.pdf`)
+		.getByRole('button', { name: 'Extract from this document' })
+		.click();
 	await page.getByLabel('Source code for the import').fill(code);
 	await page.getByLabel('Map it to').selectOption('nis2');
 	await expect(page.getByTestId('import-prompt')).toHaveValue(new RegExp(`code "${code}"`));

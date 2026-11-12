@@ -66,6 +66,9 @@
 			<input id="library-q" name="q" type="search" defaultValue={data.q} placeholder="Code, title or text" />
 		</div>
 		<button class="au-btn" type="submit" style="align-self: flex-end">Search</button>
+		<a class="au-btn au-btn--primary" href="/library/import" style="align-self: flex-end"
+			>Import requirements</a
+		>
 	</form>
 
 	{#if data.q}
