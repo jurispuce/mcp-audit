@@ -14,6 +14,10 @@ services:
         required: false
     environment:
       DATA_DIR: /data
+    # Lets the app reach services on the host, such as a LiteLLM proxy running outside Docker, at
+    # http://host.docker.internal:<port> (built in on Docker Desktop; this adds it on Linux).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       # Default: reachable from this machine only. Set BIND_ADDRESS to a private-network
       # address (LAN or VPN) to share it with the team. See docs/deployment.md.

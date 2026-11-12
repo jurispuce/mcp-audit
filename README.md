@@ -23,6 +23,47 @@ The app listens on http://127.0.0.1:3000 by default. Everything it stores (the S
 
 Settings are environment variables, listed with defaults in `.env.example`. Backups: `docs/backup.md`. Connect Claude through MCP: `docs/mcp-connect.md`. To share the app with the team on a private network, set `BIND_ADDRESS` to the host's LAN or VPN address.
 
+## Connect the in-app AI to LiteLLM
+
+The AI buttons (Derive roles, Extract requirements, Draft plan, Process event materials, Propose findings, and the library's Extract requirements and Propose mapping) call models through a [LiteLLM](https://docs.litellm.ai/) proxy. These steps assume LiteLLM is already running; to run one next to the app instead, see `docs/deployment.md`, In-app AI.
+
+You need:
+
+- **The proxy's address, as the app container sees it.** Inside the container, `localhost` is the container itself:
+
+  | Where LiteLLM runs                             | Address to use                                                                                                  |
+  | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+  | On another server                              | Its URL, for example `https://llm.example.com`                                                                  |
+  | On the same machine, outside Docker            | `http://host.docker.internal:4000` (the Compose file maps this name to the host)                                |
+  | In another Compose project on the same machine | Put both on a shared Docker network and use `http://<litellm service name>:4000`, or use the host address above |
+  | As the `litellm` service in this Compose file  | `http://litellm:4000`                                                                                           |
+
+- **A key** the proxy accepts: preferably a LiteLLM virtual key limited to the models the app should use, or the master key.
+- **The model names** as LiteLLM knows them (the `model_name` entries of its config, for example `claude`). Each model must support tool calling; the app checks that.
+
+Check that the app can reach the proxy:
+
+```bash
+docker compose exec app node -e "fetch('http://host.docker.internal:4000/v1/models',{headers:{authorization:'Bearer sk-your-key'}}).then(r=>r.text()).then(console.log,console.error)"
+```
+
+It should print the model list. Replace the address and key with yours.
+
+Then, signed in as an admin, open **Settings → AI**:
+
+1. **Gateway:** enter the address and the key, then **Save gateway**. The key is stored write-only and never shown again. As an alternative, set `LITELLM_BASE_URL` and `LITELLM_API_KEY` in `.env` and restart; values saved in Settings take precedence.
+2. **Models:** **Load models from gateway** lists what the proxy offers. Add each model to use by its name. Adding one runs a tool-calling check; a model that fails it is listed with the reason and cannot be used.
+3. **Model per action:** choose a default model and, optionally, a different one per button. **Save models**.
+
+The buttons now work. They stay disabled, saying why, until a checked model is set, and on any engagement where "AI may work on this engagement" is off. On an engagement's Home, **Edit details → Model for in-app AI** limits that engagement to one model, for example a local one for confidential material. What a button reads (documents, notes) goes to the model behind the proxy, and everything it writes waits as proposals for review.
+
+| What the app says                                                             | Check                                                                        |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Could not reach the AI gateway at …                                           | The address as the container sees it (table above), and the check command    |
+| The AI gateway answered 401 … Check the gateway key.                          | The key; with a virtual key, that it allows these models                     |
+| … failed the tool-calling check: The AI gateway answered 400 or 404 …         | The model name exactly as LiteLLM's config names it                          |
+| … failed the tool-calling check: The model answered without calling the tool. | The model or its LiteLLM route does not support tool calling; choose another |
+
 ## Development
 
 Needs Node.js 22.12 or later.
