@@ -21,7 +21,7 @@ docker compose up -d
 
 The app listens on http://127.0.0.1:3000 by default. Everything it stores (the SQLite database and uploaded files) lives in the `mcp-audit-data` volume; the rest of the container is read-only. `GET /health` returns the version and migration state.
 
-Settings are environment variables, listed with defaults in `.env.example`. To share the app with the team on a private network, set `BIND_ADDRESS` to the host's LAN or VPN address.
+Settings are environment variables, listed with defaults in `.env.example`. Backups: `docs/backup.md`. To share the app with the team on a private network, set `BIND_ADDRESS` to the host's LAN or VPN address.
 
 ## Development
 

@@ -27,7 +27,8 @@ const SOURCES = [...files(path.join(ROOT, 'src')), ...files(path.join(ROOT, 'scr
 
 /** Only these may open the database or import the low-level database modules. */
 const DB_LAYER = /^src\/lib\/(db|domain)\//;
-const DB_OPENERS = new Set(['src/lib/server/db.ts']);
+/** Backup and restore copy the database file as a whole; they never write tables. */
+const DB_OPENERS = new Set(['src/lib/server/db.ts', 'scripts/backup.mjs', 'scripts/restore.mjs']);
 
 /**
  * Domain files allowed to issue SQL writes, and the tables each may write.
