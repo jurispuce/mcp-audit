@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AiAction from '#lib/components/ai/AiAction.svelte';
+	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -231,9 +233,14 @@
 		{/if}
 	</div>
 	<p class="au-muted">
-		Rules the auditee set for itself in these documents, each implementing an external requirement. Claude can
-		propose them from the documents through the set-up skill; you accept or reject each.
+		Rules the auditee set for itself in these documents, each implementing an external requirement. AI can
+		propose them from the documents, here or from Claude through the set-up skill; you accept or reject each.
 	</p>
+	<AiAction
+		action="extract_internal"
+		label="Extract requirements"
+		hint="Reads the documents not analysed yet and proposes internal requirements mapped to the selected ones."
+	/>
 
 	{#if data.carryOver && !e.carryOverInternal}
 		<div class="au-alert au-alert--info" role="status" data-testid="carry-over">
@@ -335,12 +342,12 @@
 	{/if}
 
 	{#if proposed.length}
-		<div class="au-row au-between">
-			<h3 class="au-section__title">Proposed ({proposed.length})</h3>
+		<ProposalBar types={['internal']}>
 			<form method="POST" action="?/acceptAll" use:enhance={after}>
 				<button class="au-btn au-btn--primary au-btn--small" type="submit">Accept all</button>
 			</form>
-		</div>
+		</ProposalBar>
+		<h3 class="au-section__title">Proposed ({proposed.length})</h3>
 		<ul class="au-list" aria-label="Proposed internal requirements">
 			{#each proposed as r (r.id)}
 				<li>

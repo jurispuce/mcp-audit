@@ -649,6 +649,33 @@ export function updateEvidence(
 	return listEvidence(app, engagementId).find((x) => x.id === id)!;
 }
 
+/** Accept one drafted evidence item. Accepting it under a drafted event accepts the event too. */
+export function acceptEvidence(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	id: string
+): EvidenceItem {
+	requireHuman(actor, 'Accepting drafted evidence');
+	const x = listEvidence(app, engagementId).find((e) => e.id === id);
+	if (!x) throw new NotFoundError('Evidence item not found');
+	const ev = getEvent(app, engagementId, x.eventId);
+	app.sqlite.transaction(() => {
+		if (ev.proposed)
+			updateEntity(
+				app,
+				actor,
+				eventDefinition,
+				ev.id,
+				ev.version,
+				{ proposed: 0 },
+				'Accepted with its evidence'
+			);
+		if (x.proposed) updateEntity(app, actor, evidenceDefinition, id, x.version, { proposed: 0 }, 'Accepted');
+	})();
+	return listEvidence(app, engagementId).find((e) => e.id === id)!;
+}
+
 export function removeEvidence(app: AppDatabase, actor: Actor, engagementId: string, id: string): void {
 	const row = evidenceRow(app, engagementId, id);
 	deleteEntity(app, actor, evidenceDefinition, id, Number(row.current_version), 'Planned evidence removed');

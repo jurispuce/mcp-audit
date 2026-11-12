@@ -124,10 +124,24 @@ All settings are environment variables in `.env`. Only the Compose ones (`BIND_A
 | `BODY_SIZE_LIMIT`                                                     | `100M`            | Largest request body, for uploading several documents at once. One file may be at most 50 MB.                                                               |
 | `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_ADMIN_NAME` | empty             | Create the first admin at first start instead of using `/setup`.                                                                                            |
 | `BACKUP_PASSPHRASE`                                                   | empty             | Required for backup and restore. At least 12 characters.                                                                                                    |
+| `LITELLM_BASE_URL`, `LITELLM_API_KEY`                                 | empty             | Default AI gateway address and key for the in-app AI actions. Settings, AI overrides them. See "In-app AI" below.                                           |
 | `TZ`                                                                  | `Europe/Riga`     | Time zone for logs and report dates.                                                                                                                        |
 | `TEST_SEED_ENABLED`                                                   | `false`           | Test environments only: seed data and a password-free test login. Never in production.                                                                      |
 | `DATA_DIR`                                                            | `/data`           | Where the database and files live inside the container. Leave as is.                                                                                        |
 | `HOST`, `PORT`                                                        | `0.0.0.0`, `3000` | Address and port inside the container. Leave as is.                                                                                                         |
+
+## In-app AI (optional)
+
+The AI buttons (Derive roles, Extract requirements, Draft plan, Process event materials, Propose findings, and the library's Extract requirements and Propose mapping) reach models through a [LiteLLM](https://docs.litellm.ai/) gateway, so Claude, other providers and local models all work. Without a gateway the buttons stay disabled and say why; Claude Desktop or Claude Code through MCP works either way.
+
+1. Run a gateway. To run it next to the app, copy `litellm.config.example.yaml` to `litellm.config.yaml`, list your models in it, put the provider keys it names in `.env` (for example `ANTHROPIC_API_KEY`), and uncomment the `litellm` service in `docker-compose.yml`. Then `docker compose up -d`.
+2. Sign in as an admin and open **Settings, AI**:
+   - **Gateway**: the address, for example `http://litellm:4000` for the Compose service, and the gateway key (`LITELLM_MASTER_KEY`). The key is write-only: it is never shown again. `LITELLM_BASE_URL` and `LITELLM_API_KEY` in `.env` work as defaults.
+   - **Models**: add each model by the name the gateway uses, or load the list from the gateway. Adding a model runs the tool-calling check: every AI action is an agent loop that calls tools, so a model that fails the check is listed with the reason and cannot be used.
+   - **Model per action**: a default, and optionally a different model per button.
+3. Per engagement, on Home, **Edit details**: "AI may work on this engagement" switches AI off entirely; "Model for in-app AI" limits the engagement to one checked model, for example a local one for confidential material.
+
+What a button does: the server sends the matching skill's instructions and a fixed set of the app's MCP tools to the model, and runs each tool call it returns through the same domain rules as an MCP client. Everything is written as "<model> on behalf of <you>" and stored as proposed; review it on the screen's proposal bar or on the engagement's Proposals list. Progress shows under the button, which can be cancelled; a failure says what went wrong. The documents a button reads are sent to the model provider behind the gateway, so choose the model per engagement accordingly.
 
 ## Health
 

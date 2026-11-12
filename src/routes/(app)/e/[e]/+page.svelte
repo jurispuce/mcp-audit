@@ -34,7 +34,8 @@
 		working_language: e.workingLanguage,
 		report_language: e.reportLanguage,
 		description: e.description ?? '',
-		ai_allowed: e.aiAllowed
+		ai_allowed: e.aiAllowed,
+		llm_profile: e.llmProfile ?? ''
 	});
 	const shown = $derived<Record<string, unknown>>(
 		result?.conflict
@@ -164,6 +165,21 @@
 						<input type="checkbox" name="ai_allowed" checked={shown.ai_allowed === true} />
 						AI may work on this engagement
 					</label>
+					{#if data.models.length || e.llmProfile}
+						<div class="au-field" data-invalid={f.llm_profile ? '' : undefined}>
+							<label for="f-llm_profile">Model for in-app AI</label>
+							<select id="f-llm_profile" name="llm_profile">
+								<option value="" selected={!s('llm_profile')}>Any: the model set per action</option>
+								{#each [...new Set([...data.models, ...(e.llmProfile ? [e.llmProfile] : [])])] as m (m)}
+									<option value={m} selected={s('llm_profile') === m}>Only {m}</option>
+								{/each}
+							</select>
+							{#if f.llm_profile}<span class="au-field__error">{f.llm_profile}</span>
+							{:else}<span class="au-muted"
+									>Limit this engagement to one model, for example a local one for confidential material.</span
+								>{/if}
+						</div>
+					{/if}
 					<div class="au-row">
 						<button class="au-btn au-btn--primary" type="submit">Save details</button>
 						<button
@@ -186,7 +202,11 @@
 				<dt>Languages</dt>
 				<dd>Working {e.workingLanguage.toUpperCase()}, report {e.reportLanguage.toUpperCase()}</dd>
 				<dt>AI</dt>
-				<dd>{e.aiAllowed ? 'Allowed' : 'Switched off'}</dd>
+				<dd>
+					{e.aiAllowed ? 'Allowed' : 'Switched off'}{e.aiAllowed && e.llmProfile
+						? `, limited to ${e.llmProfile}`
+						: ''}
+				</dd>
 				{#if e.description}<dt>Description</dt>
 					<dd>{e.description}</dd>{/if}
 				<dt>Version</dt>

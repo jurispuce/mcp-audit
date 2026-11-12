@@ -66,6 +66,10 @@ test('upload a law, import it through Claude, review, edit and publish it, then 
 	const card = page.getByTestId(`import-${code}`);
 	await expect(card).toContainText('4 requirements, 4 still proposed');
 	await expect(card).toContainText('Claude on behalf of Ada Admin');
+	// The preview starts closed when other imports wait too (tests share the library).
+	const preview = card.locator('details');
+	if ((await preview.getAttribute('open')) === null)
+		await card.getByText('Preview and edit the requirements').click();
 	const r51 = card.getByTestId('proposed-5.1');
 	await r51.getByRole('button', { name: 'Edit 5.1' }).click();
 	await r51.getByLabel('Title').fill('Risk assessment once a year');

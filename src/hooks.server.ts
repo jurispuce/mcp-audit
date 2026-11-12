@@ -2,6 +2,7 @@ import { json, redirect } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, validateSession } from '#lib/domain/auth.ts';
 import { issueSetupCode, needsSetup } from '#lib/domain/setup.ts';
+import { failInterruptedJobs } from '#lib/domain/jobs.ts';
 import { ensureInitialAdmin } from '#lib/domain/users.ts';
 import { allowedWhileChangingPassword, isApiPath, isPublicPath } from '#lib/server/access.ts';
 import { appDatabase } from '#lib/server/db.ts';
@@ -12,6 +13,8 @@ export const init: ServerInit = async () => {
 	const app = appDatabase();
 	const created = await ensureInitialAdmin(app);
 	if (created) console.log(`Created the first admin ${created.email} from INITIAL_ADMIN_EMAIL.`);
+	const interrupted = failInterruptedJobs(app);
+	if (interrupted) console.log(`Closed ${interrupted} AI action(s) the previous run left open.`);
 	if (needsSetup(app)) {
 		console.log(
 			`\nNo users yet. Open /setup in the browser and enter this set-up code: ${issueSetupCode()}\n`

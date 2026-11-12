@@ -36,8 +36,9 @@ services:
       start_period: 20s
       retries: 3
 
-  # Optional: LiteLLM gateway for the in-app AI actions (milestone 7).
-  # Uncomment, put provider keys in .env, and set LITELLM_BASE_URL=http://litellm:4000 for the app.
+  # Optional: LiteLLM gateway for the in-app AI buttons. Copy litellm.config.example.yaml to
+  # litellm.config.yaml, put the provider keys and LITELLM_MASTER_KEY in .env, uncomment, and set the
+  # gateway to http://litellm:4000 in Settings, AI (or LITELLM_BASE_URL in .env).
   # litellm:
   #   image: ghcr.io/berriai/litellm:main-stable
   #   command: ['--config', '/app/config.yaml', '--port', '4000']

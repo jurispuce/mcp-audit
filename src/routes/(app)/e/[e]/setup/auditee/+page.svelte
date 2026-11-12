@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AiAction from '#lib/components/ai/AiAction.svelte';
+	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ItemCard from '#lib/components/ItemCard.svelte';
@@ -48,6 +50,19 @@
 
 <FormMessage form={result} />
 
+<AiAction
+	action="derive_roles"
+	label="Derive roles from documents"
+	hint="Reads the auditee's documents and proposes the roles to engage with, for you to accept."
+/>
+
+<ProposalBar types={['role']}>
+	<form method="POST" action="?/acceptAll" use:enhance={after}>
+		<input type="hidden" name="auditee_id" value={data.auditee.id} />
+		<button class="au-btn au-btn--primary au-btn--small" type="submit">Accept all</button>
+	</form>
+</ProposalBar>
+
 <section class="au-section" aria-labelledby="auditee-title">
 	<div class="au-row au-between">
 		<h2 class="au-section__title" id="auditee-title">{data.auditee.name}</h2>
@@ -84,13 +99,7 @@
 
 {#if proposed.length}
 	<section class="au-section" aria-labelledby="proposed-title">
-		<div class="au-row au-between">
-			<h2 class="au-section__title" id="proposed-title">Proposed roles ({proposed.length})</h2>
-			<form method="POST" action="?/acceptAll" use:enhance={after}>
-				<input type="hidden" name="auditee_id" value={data.auditee.id} />
-				<button class="au-btn au-btn--primary au-btn--small" type="submit">Accept all</button>
-			</form>
-		</div>
+		<h2 class="au-section__title" id="proposed-title">Proposed roles ({proposed.length})</h2>
 		<ul class="au-list" aria-label="Proposed roles">
 			{#each proposed as p (p.id)}
 				<li>

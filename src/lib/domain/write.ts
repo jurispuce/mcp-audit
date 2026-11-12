@@ -17,6 +17,8 @@ export interface Actor {
 	userId: string;
 	agent?: string | null;
 	channel: Channel;
+	/** Recorded on each revision this actor writes when the write has no note of its own. */
+	note?: string | null;
 }
 
 export type SqlValue = string | number | bigint | null;
@@ -266,7 +268,7 @@ export function write(
 				actor.userId,
 				actor.agent ?? null,
 				actor.channel,
-				op.note ?? null,
+				op.note ?? actor.note ?? null,
 				revertedFrom,
 				now
 			);

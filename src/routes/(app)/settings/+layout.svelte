@@ -5,7 +5,12 @@
 	let { data, children } = $props();
 	const tabs = $derived([
 		{ href: resolve('/(app)/settings'), label: 'Account' },
-		...(data.user.role === 'admin' ? [{ href: resolve('/(app)/settings/users'), label: 'Users' }] : []),
+		...(data.user.role === 'admin'
+			? [
+					{ href: resolve('/(app)/settings/users'), label: 'Users' },
+					{ href: resolve('/(app)/settings/ai'), label: 'AI' }
+				]
+			: []),
 		{ href: resolve('/(app)/settings/tokens'), label: 'Access tokens' }
 	]);
 </script>

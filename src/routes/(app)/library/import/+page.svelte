@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ClaudePrompt from '#lib/components/library/ClaudePrompt.svelte';
@@ -124,9 +125,15 @@
 		<ClaudePrompt label="1. Import prompt" prompt={importPrompt} testid="import-prompt" />
 		<ClaudePrompt label="2. Mapping prompt" prompt={mapPrompt} testid="map-prompt" />
 		<p class="au-muted">
-			The in-app buttons "Extract requirements" and "Propose mapping" arrive with the in-app AI (milestone 7)
-			and land on the same review screens.
+			Or let the in-app AI do the import here: it reads the chosen library document and writes a proposed
+			source for you to review. Map it afterwards with "Propose mapping" on Library, Mapping.
 		</p>
+		<AiAction
+			action="library_extract"
+			label="Extract requirements"
+			context={{ document_id: documentId, source_code: code.trim().toLowerCase() || undefined }}
+			validate={() => (documentId ? null : 'Choose the library document to extract from.')}
+		/>
 	</div>
 </section>
 

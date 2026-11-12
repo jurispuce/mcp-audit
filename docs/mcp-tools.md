@@ -44,7 +44,7 @@ Report templates live in the skills' `assets/` folders and are used by the rende
 
 ## In-app AI actions
 
-Five buttons, each running the matching skill on the server through the same internal tools.
+Five engagement buttons and two library buttons, each running the matching skill on the server through the same internal tools.
 
 | Button | Where | Skill | Result |
 | --- | --- | --- | --- |
@@ -53,6 +53,8 @@ Five buttons, each running the matching skill on the server through the same int
 | Draft plan | Plan, Events | audit-plan-builder | Proposed events and planned evidence |
 | Process event materials | Event screen | audit-event-debrief | Proposed evidence links, statuses, draft report |
 | Propose finding(s) | Findings | audit-assurance-review | Proposed findings with rationale |
+| Extract requirements | Library, Import | audit-library-curator | A proposed source with its requirements, reviewed on Library, Review |
+| Propose mapping | Library, Mapping | audit-library-curator | Proposed links to the chosen source, reviewed on Library, Mapping |
 
 How it works:
 
@@ -61,3 +63,12 @@ How it works:
 - Everything written is marked proposed and versioned as AI on behalf of the user who pressed the button.
 - A proposal bar on the screen leads to a review list: accept, edit or reject each, or accept all.
 - Per engagement: `ai_allowed` switches AI off; `llm_profile` limits the engagement to one model. A model must pass the tool-calling check before it can run an action.
+
+Implementation (`src/lib/ai/runner.ts`):
+
+- The job runs the MCP server in process with the actor `{ user: who pressed the button, agent: the model, channel: ai }` and the action's name as revision note, so the review list can say which action proposed what.
+- Each action gets a fixed tool allowlist (`ACTION_TOOLS`): the reads it needs plus its skill's proposal writes. No render, revert or comment tools. The model cannot leave the engagement: a different `engagement_id` is refused and the job's own is filled in; library actions refuse any `engagement_id`.
+- System prompt: a short preamble (no one to ask, proposals only, finish with a summary) and the skill's `SKILL.md` in app mode. The first user message carries `Action:` and `Context:` lines and the task in words.
+- At most 30 rounds; tool results over 30,000 characters are cut. Jobs are recorded in `ai_job` (status, steps, summary, error); a restart closes jobs left running. Only the starter or an admin can cancel.
+- Settings live in `app_setting`: `ai.gateway` (address and write-only key), `ai.models` (each with its tool-calling check), `ai.assignments` (model per action and a default).
+- Tests use `e2e/fake-llm.mjs`, a scripted OpenAI-compatible gateway that calls the real tools.

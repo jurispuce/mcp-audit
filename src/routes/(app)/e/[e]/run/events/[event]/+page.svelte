@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ArtifactLinker from '#lib/components/run/ArtifactLinker.svelte';
@@ -64,6 +65,13 @@
 	</header>
 
 	<FormMessage form={result} />
+
+	<AiAction
+		action="process_event"
+		label="Process event materials"
+		context={{ event_id: ev.id }}
+		hint="Reads this event's notes and documents and proposes evidence links, promises and issues."
+	/>
 
 	{#if proposed.length}
 		<div class="au-proposal" data-testid="link-proposals">

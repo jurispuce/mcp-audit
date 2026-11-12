@@ -50,5 +50,21 @@ export default defineConfig({
 				]
 			: [])
 	],
-	webServer: external ? undefined : [server('main', 4173), server('first-start', 4174)]
+	webServer: [
+		...(external ? [] : [server('main', 4173), server('first-start', 4174)]),
+		// The scripted stand-in for a LiteLLM gateway that in-app AI tests point the app at. With
+		// E2E_LLM_URL set, it is already running where the app can reach it (CI starts it for the containers).
+		...(process.env.E2E_LLM_URL
+			? []
+			: [
+					{
+						command: 'node e2e/fake-llm.mjs',
+						cwd: path.resolve(import.meta.dirname, '..'),
+						url: 'http://127.0.0.1:4999/v1/models',
+						reuseExistingServer: true,
+						timeout: 20_000,
+						env: { PORT: '4999' }
+					}
+				])
+	]
 });

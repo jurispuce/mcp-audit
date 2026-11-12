@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { assertProfileUsable } from './ai-settings';
+import { isHuman } from './guards';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { NotFoundError, ValidationError } from './errors';
 import { normalizeLanguage } from './library';
@@ -561,6 +563,11 @@ export function updateEngagement(
 	baseVersion: number,
 	data: Record<string, unknown>
 ): Engagement {
+	// AI may not set it at all (humanOnly); for a person, it must be a model that passed the check.
+	if ('llm_profile' in data && isHuman(actor)) {
+		const profile = typeof data.llm_profile === 'string' ? data.llm_profile.trim() : '';
+		if (profile && profile !== getEngagement(app, id).llmProfile) assertProfileUsable(app, profile);
+	}
 	updateEntity(app, actor, engagementDefinition, id, baseVersion, data);
 	return getEngagement(app, id);
 }

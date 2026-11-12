@@ -40,7 +40,9 @@ const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/auth.ts': ['user_credential', 'session', 'personal_token'],
 	'src/lib/domain/comments.ts': ['comment'],
 	'src/lib/domain/artifacts.ts': ['artifact_text'],
-	'src/lib/domain/library-documents.ts': ['library_document_text']
+	'src/lib/domain/library-documents.ts': ['library_document_text'],
+	'src/lib/domain/ai-settings.ts': ['app_setting'],
+	'src/lib/domain/jobs.ts': ['ai_job']
 };
 
 const SQL_WRITE =

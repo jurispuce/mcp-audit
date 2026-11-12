@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AiAction from '#lib/components/ai/AiAction.svelte';
+	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -62,16 +64,19 @@
 <PlanHeader plan={data.plan} engagement={e} />
 <FormMessage form={result} />
 
+<AiAction
+	action="draft_plan"
+	label="Draft plan"
+	hint="Groups the selected requirements into events and plans the evidence for each, as drafts."
+/>
+
+<ProposalBar types={['event', 'evidence']} testid="drafts-bar">
+	<form method="POST" action="?/acceptAll" use:enhance={after}>
+		<button class="au-btn au-btn--small au-btn--primary" type="submit">Accept all</button>
+	</form>
+</ProposalBar>
 {#if drafts.length}
-	<div class="au-alert au-alert--info au-row au-between" data-testid="drafts-bar">
-		<span
-			>{drafts.length} drafted {drafts.length === 1 ? 'event waits' : 'events wait'} for review. They stay editable
-			before you accept them.</span
-		>
-		<form method="POST" action="?/acceptAll" use:enhance={after}>
-			<button class="au-btn au-btn--small au-btn--primary" type="submit">Accept all</button>
-		</form>
-	</div>
+	<p class="au-muted">Drafted events stay editable before you accept them.</p>
 {/if}
 
 <section class="au-section" aria-labelledby="events-title">

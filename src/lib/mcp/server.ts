@@ -94,8 +94,12 @@ const entityType = z
 	.min(1)
 	.describe('Item type, for example requirement, source, guidance, criterion, requirement_link.');
 
-export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer {
-	const actor: Actor = mcpActor(user, AGENT_NAME);
+export function createMcpServer(
+	app: AppDatabase,
+	user: SessionUser,
+	/** In-app AI jobs pass their own actor (channel ai, the model as agent); MCP clients use the default. */
+	actor: Actor = mcpActor(user, AGENT_NAME)
+): McpServer {
 	const server = new McpServer({ name: 'mcp-audit', version: APP_VERSION }, { instructions: INSTRUCTIONS });
 	const lib = { auditeeId: null }; // library tools read from outside any engagement
 	/** Read context: an engagement's auditee when engagement_id is given, else the shared library. */

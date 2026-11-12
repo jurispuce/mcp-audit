@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import MappingRow from '#lib/components/library/MappingRow.svelte';
@@ -73,6 +74,13 @@
 					</form>
 				{/if}
 			</div>
+			<AiAction
+				action="library_mapping"
+				label="Propose mapping"
+				context={{ from_source: m.from.code, to_source: m.to.code }}
+				hint="Proposes links from {m.from.code} to {m.to
+					.code} with a reason for each; you accept, edit or reject them below."
+			/>
 			<div class="au-meter" aria-hidden="true">
 				<i style:width="{m.rows.length ? Math.round((m.mapped / m.rows.length) * 100) : 0}%"></i>
 			</div>

@@ -209,7 +209,9 @@ test('AI-drafted events are proposed, editable, and accepted, rejected or accept
 	await client.close();
 
 	await page.goto(`/e/${id}/plan/events`);
-	await expect(page.getByTestId('drafts-bar')).toContainText('3 drafted events wait for review');
+	await expect(page.getByTestId('drafts-bar')).toContainText(
+		'3 drafted events proposed from “Claude through MCP”'
+	);
 	await expect(page.getByTestId('event-Access and identity interview')).toHaveAttribute(
 		'data-state',
 		'proposed'

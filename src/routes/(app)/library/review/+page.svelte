@@ -13,6 +13,8 @@
 		async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) =>
 			update({ reset: false });
 	const typeLabel: Record<string, string> = { law: 'Law', standard: 'Standard' };
+	// Previews the person opened stay open while they edit (a save reloads the data).
+	let opened = $state<Record<string, boolean>>({});
 </script>
 
 <svelte:head><title>Review · Library · mcp-audit</title></svelte:head>
@@ -74,7 +76,10 @@
 						>
 					</form>
 				</div>
-				<details open={data.imports.length === 1}>
+				<details
+					open={opened[s.id] ?? data.imports.length === 1}
+					ontoggle={(ev) => (opened[s.id] = (ev.currentTarget as HTMLDetailsElement).open)}
+				>
 					<summary>Preview and edit the requirements</summary>
 					<ul class="au-list" aria-label="Requirements of {s.title}">
 						{#each s.rows as r (r.id)}

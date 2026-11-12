@@ -60,9 +60,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Start the scripted stand-in for an AI gateway (in-app AI tests)
+        run: |
+          (PORT=4999 node e2e/fake-llm.mjs > fake-llm.log 2>&1 &)
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:4999/v1/models > /dev/null && break; sleep 1; done
+
       - name: Start containers (fresh volumes, read-only root filesystem)
         run: |
-          docker run -d --name app   -p 3000:3000 -e TEST_SEED_ENABLED=true --read-only --tmpfs /tmp mcp-audit:ci
+          docker run -d --name app   -p 3000:3000 -e TEST_SEED_ENABLED=true --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
           docker run -d --name first -p 3001:3000 -e TEST_SEED_ENABLED=true --read-only --tmpfs /tmp mcp-audit:ci
           # 'prod' uses .env.example as shipped, including its empty settings such as ORIGIN=
           docker run -d --name prod  -p 3002:3000 --env-file .env.example -e BACKUP_PASSPHRASE= --read-only --tmpfs /tmp mcp-audit:ci
@@ -85,6 +90,7 @@ jobs:
           CI: 'true'
           E2E_BASE_URL: http://127.0.0.1:3000
           E2E_FIRST_START_URL: http://127.0.0.1:3001
+          E2E_LLM_URL: http://host.docker.internal:4999
 
       - name: Backup and restore on a fresh volume
         run: IMAGE=mcp-audit:ci scripts/backup-restore-check.sh

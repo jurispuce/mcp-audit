@@ -85,6 +85,13 @@
       "when": 1794497872715,
       "tag": "0011_library_import",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794499621265,
+      "tag": "0012_ai_jobs",
+      "breakpoints": true
     }
   ]
 }

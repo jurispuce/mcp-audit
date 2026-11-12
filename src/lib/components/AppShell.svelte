@@ -7,9 +7,12 @@
 	interface Props {
 		user: { name: string };
 		engagement: { id: string; name: string } | null;
+		/** Unreviewed AI proposals in the engagement. */
+		proposals?: number;
 		children: Snippet;
 	}
-	let { user, engagement, children }: Props = $props();
+	let { user, engagement, proposals = 0, children }: Props = $props();
+	const proposalsLabel = $derived(`${proposals} ${proposals === 1 ? 'proposal' : 'proposals'} to review`);
 
 	const current = $derived(engagement ? destinationFor(page.url.pathname, engagement.id) : null);
 	const href = (path: string) => `/e/${engagement!.id}${path}`;
@@ -47,6 +50,17 @@
 				<span class="au-nav" aria-disabled="true"><Icon name={d.icon} />{d.label}</span>
 			{/if}
 		{/each}
+		{#if engagement && proposals > 0}
+			<a
+				class="au-nav"
+				href={href('/proposals')}
+				aria-current={page.url.pathname === href('/proposals') ? 'page' : undefined}
+				data-testid="rail-proposals"
+			>
+				<Icon name="spark" />Proposals
+				<span class="au-badge au-badge--ai" aria-label={proposalsLabel}>{proposals}</span>
+			</a>
+		{/if}
 		<div class="au-rail__sep"></div>
 		<a class="au-nav" href="/library" aria-current={outside === 'library' ? 'page' : undefined}>
 			<Icon name="library" />Library
@@ -67,9 +81,19 @@
 			>{engagement?.name ?? 'mcp-audit'}</a
 		>
 		{#if engagement}
-			<a class="au-topbar__search" href="/e/{engagement.id}/search" aria-label="Search"
-				><Icon name="search" /></a
-			>
+			<span class="au-row">
+				{#if proposals > 0}
+					<a
+						class="au-topbar__proposals"
+						href={href('/proposals')}
+						aria-label={proposalsLabel}
+						data-testid="topbar-proposals"><Icon name="spark" />{proposals}</a
+					>
+				{/if}
+				<a class="au-topbar__search" href="/e/{engagement.id}/search" aria-label="Search"
+					><Icon name="search" /></a
+				>
+			</span>
 		{/if}
 	</header>
 

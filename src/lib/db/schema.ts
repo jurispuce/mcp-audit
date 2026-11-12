@@ -588,3 +588,31 @@ export const libraryDocumentText = sqliteTable('library_document_text', {
 	pageStarts: text('page_starts', { mode: 'json' }).$type<number[]>().notNull(),
 	extractedAt: integer('extracted_at', { mode: 'timestamp_ms' }).notNull()
 });
+
+/**
+ * In-app AI jobs: one row per button press. Operational state, not audit data, so not versioned; the
+ * proposals a job writes are versioned like any other write. Written only by src/lib/domain/jobs.ts.
+ */
+export const aiJob = sqliteTable(
+	'ai_job',
+	{
+		id: text('id').primaryKey(),
+		action: text('action').notNull(),
+		engagementId: text('engagement_id'),
+		userId: text('user_id').notNull(),
+		model: text('model').notNull(),
+		status: text('status', { enum: ['running', 'succeeded', 'failed', 'cancelled'] }).notNull(),
+		context: text('context', { mode: 'json' }).notNull(),
+		steps: text('steps', { mode: 'json' }).notNull(),
+		summary: text('summary'),
+		error: text('error'),
+		cancelRequested: integer('cancel_requested').notNull().default(0),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+		finishedAt: integer('finished_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [
+		index('ai_job_engagement_idx').on(t.engagementId, t.createdAt),
+		index('ai_job_user_idx').on(t.userId)
+	]
+);

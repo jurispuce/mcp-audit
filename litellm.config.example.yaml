@@ -1,0 +1,19 @@
+# LiteLLM gateway for mcp-audit's in-app AI. Copy to litellm.config.yaml and keep the models you use.
+# Keys come from the environment (.env), never from this file. Docs: https://docs.litellm.ai/docs/proxy/configs
+model_list:
+  # Claude through the Anthropic API (ANTHROPIC_API_KEY in .env). Replace the placeholder with a
+  # current model id from Anthropic's model list; model_name is what you enter in Settings, AI.
+  - model_name: claude
+    litellm_params:
+      model: anthropic/<model id>
+      api_key: os.environ/ANTHROPIC_API_KEY
+  # A local model through Ollama on the host, for confidential engagements.
+  # It must pass the tool-calling check in Settings, AI before it can run an action.
+  # - model_name: local-qwen
+  #   litellm_params:
+  #     model: ollama_chat/qwen3:32b
+  #     api_base: http://host.docker.internal:11434
+
+general_settings:
+  # The key mcp-audit sends (Settings, AI, Gateway key). Set LITELLM_MASTER_KEY in .env.
+  master_key: os.environ/LITELLM_MASTER_KEY
