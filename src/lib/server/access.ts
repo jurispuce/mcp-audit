@@ -7,6 +7,8 @@ const PUBLIC_PATHS = [
 	/^\/icons\//,
 	/^\/favicon\.(ico|svg|png)$/,
 	/^\/robots\.txt$/,
+	// MCP clients probe for OAuth metadata after a 401; there is none, so let them get a plain 404.
+	/^\/\.well-known\//,
 	/^\/_app\//
 ];
 

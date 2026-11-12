@@ -118,3 +118,25 @@ export function getHistory(app: AppDatabase, def: EntityDefinition, id: string):
 export function authorshipLabel(authorName: string, agent: string | null): string {
 	return agent ? `${agent} on behalf of ${authorName}` : authorName;
 }
+
+/** Who made the current version of an item, as the interface shows it, and when. */
+export function latestAuthorship(
+	app: AppDatabase,
+	entityType: string,
+	entityId: string
+): { by: string; at: Date; channel: Channel } | null {
+	const row = app.sqlite
+		.prepare(
+			`SELECT r.author_agent, r.channel, r.created_at, coalesce(u.name, r.author_user) AS name
+			   FROM revision r LEFT JOIN "user" u ON u.id = r.author_user
+			  WHERE r.entity_type = ? AND r.entity_id = ? ORDER BY r.version DESC LIMIT 1`
+		)
+		.get(entityType, entityId) as
+		{ author_agent: string | null; channel: Channel; created_at: number; name: string } | undefined;
+	if (!row) return null;
+	return {
+		by: authorshipLabel(row.name, row.author_agent),
+		at: new Date(row.created_at),
+		channel: row.channel
+	};
+}

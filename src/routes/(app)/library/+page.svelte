@@ -116,7 +116,7 @@
 		{#if data.source}<input type="hidden" name="source" value={data.source.code} />{/if}
 		<div class="au-field au-grow">
 			<label for="library-q">Search requirements{data.source ? ` in ${data.source.title}` : ''}</label>
-			<input id="library-q" name="q" type="search" value={data.q} placeholder="Code, title or text" />
+			<input id="library-q" name="q" type="search" defaultValue={data.q} placeholder="Code, title or text" />
 		</div>
 		<button class="au-btn" type="submit" style="align-self: flex-end">Search</button>
 	</form>

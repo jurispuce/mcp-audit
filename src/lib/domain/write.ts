@@ -57,6 +57,16 @@ export interface EntityDefinition {
 	 * Throw to roll the whole write back (for example to keep at least one admin).
 	 */
 	afterWrite?(app: AppDatabase, actor: Actor, row: Row, existing: Row | null, op: WriteOp): void;
+	/**
+	 * Optional guard rail: for rows where this returns a column, AI writes (MCP, in-app AI) always leave
+	 * that column at `proposed`. An AI write that tries to set another value is refused; an AI edit of a
+	 * confirmed row puts it back to proposed for a person to confirm.
+	 */
+	judgement?(row: Row): { column: string; proposed: string } | null;
+	/** Optional guard rail: columns only a person in the app may change (approval, plan status). */
+	humanOnly?: readonly string[];
+	/** Optional guard rail: the engagement a row belongs to, so AI writes respect its ai_allowed switch. */
+	engagementOf?(app: AppDatabase, row: Row): { id: string; aiAllowed: boolean } | null;
 	/** Optional: text fields to keep in the full-text index. */
 	search?(row: Row): Record<string, string | null>;
 	/** Short human label for lists, history and the item sheet. */
@@ -202,6 +212,8 @@ export function write(
 			if (!allowed.has(col)) throw new Error(`${def.type}.parse returned unknown column ${col}`);
 		}
 
+		if (actor.channel !== 'ui') applyAiGuardRails(app, def, op, existing, changes);
+
 		let id: string;
 		let version: number;
 		if (op.op === 'create') {
@@ -272,6 +284,48 @@ export function write(
 	};
 
 	return run();
+}
+
+/**
+ * Rules that keep AI in the proposing role (CLAUDE.md rules 2 and 3), applied to every MCP and in-app
+ * AI write before anything is stored.
+ */
+function applyAiGuardRails(
+	app: AppDatabase,
+	def: EntityDefinition,
+	op: WriteOp,
+	existing: Row | null,
+	changes: Row
+): void {
+	const merged: Row = { ...(existing ?? {}), ...changes };
+
+	const engagement = def.engagementOf?.(app, merged);
+	if (engagement && !engagement.aiAllowed) {
+		throw new ForbiddenError(
+			'AI is switched off for this engagement. A person can make this change in the app.'
+		);
+	}
+
+	for (const col of def.humanOnly ?? []) {
+		if (
+			col in changes &&
+			!sameValue(existing?.[col], changes[col]) &&
+			!(op.op === 'create' && changes[col] == null)
+		) {
+			throw new ForbiddenError(`Only a person in the app can change ${def.fieldLabels?.[col] ?? col}.`);
+		}
+	}
+
+	if (op.op === 'delete') return;
+	const j = def.judgement?.(merged);
+	if (!j) return;
+	const requested = op.op === 'revert' ? undefined : (op.data as Record<string, unknown>)[j.column];
+	if (requested !== undefined && requested !== null && requested !== j.proposed) {
+		throw new ForbiddenError(
+			`AI can only propose: ${def.type} ${j.column} stays "${j.proposed}" until a person confirms it.`
+		);
+	}
+	changes[j.column] = j.proposed;
 }
 
 /** Turn "UNIQUE constraint failed: user.email" into a validation error on that field. */

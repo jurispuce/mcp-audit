@@ -41,7 +41,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.cookies.delete(SESSION_COOKIE, { path: '/' });
 	}
 
-	if (!session && !isPublicPath(path)) {
+	// /mcp authenticates every request with a personal access token (the route checks it).
+	const tokenAuthenticated = path === '/mcp';
+
+	if (!session && !isPublicPath(path) && !tokenAuthenticated) {
 		if (isApiPath(path)) {
 			return json(
 				{ message: 'Sign in or send a personal access token.', code: 'unauthenticated' },

@@ -1,6 +1,7 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { searchText } from '#lib/db/fts.ts';
 import { NotFoundError, ValidationError } from './errors';
+import { latestAuthorship } from './history';
 import { registerEntity } from './registry';
 import {
 	createEntity,
@@ -196,6 +197,8 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 				});
 		}
 	},
+	/** Internal requirements are a judgement: AI may only propose them. */
+	judgement: (row) => (row.origin === 'internal' ? { column: 'status', proposed: 'proposed' } : null),
 	search: (row) => ({
 		ref_code: row.ref_code as string,
 		title: row.title as string,
@@ -491,6 +494,8 @@ export interface LinkView {
 	coverage: string | null;
 	note: string | null;
 	other: Requirement;
+	/** "Name" or "Claude on behalf of Name": who made the link as it is now. */
+	by: string | null;
 }
 
 export function linksOf(app: AppDatabase, requirementId: string): LinkView[] {
@@ -510,7 +515,8 @@ export function linksOf(app: AppDatabase, requirementId: string): LinkView[] {
 			direction,
 			coverage: (l.coverage as string | null) ?? null,
 			note: (l.note as string | null) ?? null,
-			other: getRequirement(app, String(direction === 'out' ? l.to_id : l.from_id))
+			other: getRequirement(app, String(direction === 'out' ? l.to_id : l.from_id)),
+			by: latestAuthorship(app, 'requirement_link', String(l.id))?.by ?? null
 		};
 	});
 }
@@ -539,13 +545,22 @@ export interface GuidanceView {
 	id: string;
 	body: string;
 	version: number;
+	by: string | null;
+	at: string | null;
 }
 
 export function getGuidance(app: AppDatabase, requirementId: string): GuidanceView | null {
 	const row = app.sqlite.prepare('SELECT * FROM guidance WHERE requirement_id = ?').get(requirementId) as
 		Row | undefined;
 	if (!row || Number(row.deleted) === 1) return null;
-	return { id: String(row.id), body: String(row.body), version: Number(row.current_version) };
+	const who = latestAuthorship(app, 'guidance', String(row.id));
+	return {
+		id: String(row.id),
+		body: String(row.body),
+		version: Number(row.current_version),
+		by: who?.by ?? null,
+		at: who?.at.toISOString() ?? null
+	};
 }
 
 /**
@@ -586,6 +601,7 @@ export interface CriterionView {
 	expectedEvidence: string[];
 	engagementId: string | null;
 	version: number;
+	by: string | null;
 }
 
 /** General criteria (no engagement) of a requirement, in order. */
@@ -605,7 +621,8 @@ export function criteriaOf(
 		text: String(c.text),
 		expectedEvidence: parseEvidence(c.expected_evidence),
 		engagementId: (c.engagement_id as string | null) ?? null,
-		version: Number(c.current_version)
+		version: Number(c.current_version),
+		by: latestAuthorship(app, 'criterion', String(c.id))?.by ?? null
 	}));
 }
 
@@ -689,3 +706,116 @@ export function requirementExtra(app: AppDatabase, requirementId: string) {
 
 requirementDefinition.extra = (app, row) => requirementExtra(app, String(row.id));
 requirementDefinition.linkCount = (app, row) => linksOf(app, String(row.id)).length;
+
+// ---- Helpers for tools (MCP and in-app AI)
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Accepts a requirement id or "<source code>:<reference>", and returns the id. */
+export function resolveRequirementRef(app: AppDatabase, ref: string): string {
+	const value = String(ref ?? '').trim();
+	if (UUID.test(value)) {
+		getRequirement(app, value);
+		return value;
+	}
+	const at = value.indexOf(':');
+	if (at > 0) {
+		const src = app.sqlite
+			.prepare('SELECT id FROM source WHERE code = ? AND deleted = 0')
+			.get(value.slice(0, at).trim().toLowerCase()) as { id: string } | undefined;
+		const found = src ? findRequirement(app, src.id, value.slice(at + 1).trim()) : null;
+		if (found) return found.id;
+	}
+	throw new NotFoundError(`No requirement "${value}". Use an id or "<source code>:<reference>".`);
+}
+
+/** Create or update external sources matched by code. */
+export function upsertSources(
+	app: AppDatabase,
+	actor: Actor,
+	sources: {
+		code: string;
+		title: string;
+		type?: string;
+		edition?: string;
+		language?: string;
+		licence_note?: string;
+	}[]
+): { id: string; code: string; result: 'created' | 'updated' | 'unchanged' }[] {
+	return app.sqlite.transaction(() =>
+		sources.map((s) => {
+			const code = String(s.code ?? '')
+				.trim()
+				.toLowerCase();
+			const row = app.sqlite.prepare('SELECT * FROM source WHERE code = ?').get(code) as Row | undefined;
+			if (row?.auditee_id)
+				throw new ValidationError(`${code} is an internal source; it is changed through its engagement.`);
+			const data: Record<string, unknown> = { code, title: s.title };
+			for (const key of ['type', 'edition', 'language', 'licence_note'] as const)
+				if (s[key] !== undefined) data[key] = s[key];
+			if (!row) {
+				const created = createEntity(app, actor, sourceDefinition, {
+					type: 'standard',
+					language: 'en',
+					...data
+				});
+				return { id: String(created.row.id), code, result: 'created' as const };
+			}
+			const res = write(app, actor, sourceDefinition, {
+				op: 'update',
+				id: String(row.id),
+				baseVersion: Number(row.current_version),
+				data: Number(row.deleted) === 1 ? { ...data, deleted: false } : data
+			});
+			return {
+				id: String(row.id),
+				code,
+				result: res.changed ? ('updated' as const) : ('unchanged' as const)
+			};
+		})
+	)();
+}
+
+/**
+ * Set a requirement's general criteria. replace: keep criteria with the same text (updating their
+ * expected evidence), add new ones, remove the rest. add: only add the new ones.
+ */
+export function setCriteria(
+	app: AppDatabase,
+	actor: Actor,
+	requirementId: string,
+	criteria: { text: string; expected_evidence?: string[] }[],
+	mode: 'replace' | 'add' = 'replace'
+): { added: number; updated: number; removed: number; unchanged: number } {
+	return app.sqlite.transaction(() => {
+		const current = criteriaOf(app, requirementId);
+		const byText = new Map(current.map((c) => [c.text.trim(), c]));
+		const wanted = new Set<string>();
+		const result = { added: 0, updated: 0, removed: 0, unchanged: 0 };
+		for (const c of criteria) {
+			const text = String(c.text ?? '').trim();
+			if (!text || wanted.has(text)) continue;
+			wanted.add(text);
+			const have = byText.get(text);
+			if (!have) {
+				addCriterion(app, actor, requirementId, { text, expectedEvidence: c.expected_evidence ?? [] });
+				result.added++;
+			} else if (
+				c.expected_evidence &&
+				JSON.stringify(cleanEvidence(c.expected_evidence)) !== JSON.stringify(have.expectedEvidence)
+			) {
+				updateCriterion(app, actor, have.id, have.version, { expectedEvidence: c.expected_evidence });
+				result.updated++;
+			} else result.unchanged++;
+		}
+		if (mode === 'replace') {
+			for (const c of current) {
+				if (!wanted.has(c.text.trim())) {
+					removeCriterion(app, actor, c.id, c.version);
+					result.removed++;
+				}
+			}
+		}
+		return result;
+	})();
+}

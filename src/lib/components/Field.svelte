@@ -7,6 +7,7 @@
 		error?: string | undefined;
 		hint?: string | undefined;
 	}
+	// The value is the starting value only (defaultValue), so text typed before the page hydrates is kept.
 	let { label, name, error, hint, value, type = 'text', id: givenId, ...rest }: Props = $props();
 	const id = $derived(givenId ?? `f-${name}`);
 	const describedBy = $derived(error ? `${id}-err` : hint ? `${id}-hint` : undefined);
@@ -18,7 +19,7 @@
 		{id}
 		{name}
 		{type}
-		{value}
+		defaultValue={value}
 		aria-invalid={error ? 'true' : undefined}
 		aria-describedby={describedBy}
 		{...rest}

@@ -148,178 +148,7 @@ export function importSourceYaml(
 		};
 
 		const items = doc.requirements as FileRequirement[];
-		const idByRef = new Map<string, string>();
-		const status = new Map<string, 'created' | 'updated' | 'restored' | 'unchanged'>();
-		const positions = new Map<string, number>();
-
-		// Pass 1: requirements, with their parent when it is already known.
-		for (const r of items) {
-			const ref = s(r.id);
-			const parentRef = s(r.parent);
-			const pos = positions.get(parentRef) ?? 0;
-			positions.set(parentRef, pos + 1);
-			const data: Record<string, unknown> = {
-				source_id: sourceId,
-				ref_code: ref,
-				title: s(r.title),
-				text: r.text == null ? null : String(r.text).trim(),
-				language: s(r.language) || language,
-				locator: r.locator ?? null,
-				origin: 'external',
-				status: 'confirmed',
-				position: pos
-			};
-			// Set the parent now when it is already known (usual case: parents come first in the file).
-			const knownParent = parentRef
-				? (idByRef.get(parentRef) ?? findRequirement(app, sourceId, parentRef)?.id ?? null)
-				: null;
-			if (!parentRef || knownParent) data.parent_id = knownParent;
-			const existing = app.sqlite
-				.prepare('SELECT * FROM requirement WHERE source_id = ? AND ref_code = ?')
-				.get(sourceId, ref) as Row | undefined;
-			if (!existing) {
-				idByRef.set(ref, String(createEntity(app, actor, requirementDefinition, data, { note }).row.id));
-				status.set(ref, 'created');
-			} else {
-				const restoring = Number(existing.deleted) === 1;
-				const res = write(app, actor, requirementDefinition, {
-					op: 'update',
-					id: String(existing.id),
-					baseVersion: Number(existing.current_version),
-					data: restoring ? { ...data, deleted: false } : data,
-					note
-				});
-				idByRef.set(ref, String(existing.id));
-				status.set(ref, restoring ? 'restored' : res.changed ? 'updated' : 'unchanged');
-			}
-		}
-
-		// Pass 2: parents that came later in the file than their children.
-		for (const r of items) {
-			const id = idByRef.get(s(r.id))!;
-			const parentRef = s(r.parent);
-			let parentId: string | null = null;
-			if (parentRef) {
-				parentId = idByRef.get(parentRef) ?? findRequirement(app, sourceId, parentRef)?.id ?? null;
-				if (!parentId) report.warnings.push(`${s(r.id)}: parent ${parentRef} not found; placed at the top.`);
-			}
-			const current = readRow(app, requirementDefinition, id)!;
-			if ((current.parent_id ?? null) !== parentId) {
-				write(app, actor, requirementDefinition, {
-					op: 'update',
-					id,
-					baseVersion: Number(current.current_version),
-					data: { parent_id: parentId },
-					note
-				});
-				if (status.get(s(r.id)) === 'unchanged') status.set(s(r.id), 'updated');
-			}
-		}
-
-		// Pass 3: translations, links, guidance and criteria.
-		const resolve = (target: unknown): string | null => {
-			let srcCode = code;
-			let ref: string;
-			if (target && typeof target === 'object') {
-				const t = target as Record<string, unknown>;
-				srcCode = s(t.source || code).toLowerCase();
-				ref = s(t.id ?? t.ref);
-			} else {
-				ref = s(target);
-				const at = ref.indexOf(':');
-				if (at > 0 && getSourceByCode(app, ref.slice(0, at))) {
-					srcCode = ref.slice(0, at).toLowerCase();
-					ref = ref.slice(at + 1).trim();
-				}
-			}
-			if (!ref) return null;
-			if (srcCode === code) return idByRef.get(ref) ?? findRequirement(app, sourceId, ref)?.id ?? null;
-			const other = getSourceByCode(app, srcCode);
-			return other ? (findRequirement(app, other.id, ref)?.id ?? null) : null;
-		};
-
-		for (const r of items) {
-			const ref = s(r.id);
-			const id = idByRef.get(ref)!;
-
-			if (r.translation_of) {
-				const target = resolve(r.translation_of);
-				if (!target)
-					report.warnings.push(`${ref}: translation_of ${JSON.stringify(r.translation_of)} not found.`);
-				else {
-					const current = readRow(app, requirementDefinition, id)!;
-					const other = readRow(app, requirementDefinition, target)!;
-					const root = (other.translation_of as string | null) ?? target;
-					if (current.translation_of !== root) {
-						write(app, actor, requirementDefinition, {
-							op: 'update',
-							id,
-							baseVersion: Number(current.current_version),
-							data: { translation_of: root },
-							note
-						});
-					}
-				}
-			}
-
-			for (const l of Array.isArray(r.links) ? (r.links as FileLink[]) : []) {
-				const type = s(l.type);
-				if (!(LINK_TYPES as readonly string[]).includes(type)) {
-					report.warnings.push(`${ref}: unknown link type ${type || '(none)'}; skipped.`);
-					continue;
-				}
-				const to = resolve(l.to);
-				if (!to) {
-					report.warnings.push(`${ref}: link target ${JSON.stringify(l.to)} not found; skipped.`);
-					continue;
-				}
-				const dup = app.sqlite
-					.prepare(
-						'SELECT id FROM requirement_link WHERE from_id = ? AND to_id = ? AND type = ? AND deleted = 0'
-					)
-					.get(id, to, type);
-				if (dup) {
-					report.links.existing++;
-					continue;
-				}
-				addLink(app, actor, {
-					fromId: id,
-					toId: to,
-					type,
-					coverage: l.coverage == null ? (type === 'implements' ? 'full' : null) : s(l.coverage),
-					note: l.note == null ? null : s(l.note)
-				});
-				report.links.created++;
-			}
-
-			const body = s(r.guidance);
-			if (body) {
-				const current = getGuidance(app, id);
-				if (!current) {
-					setGuidance(app, actor, id, body);
-					report.guidance.created++;
-				} else if (current.body !== body) {
-					setGuidance(app, actor, id, body, current.version);
-					report.guidance.updated++;
-				}
-			}
-
-			const have = new Set(criteriaOf(app, id).map((c) => c.text));
-			for (const c of Array.isArray(r.criteria) ? r.criteria : []) {
-				const text = typeof c === 'object' && c ? s((c as Record<string, unknown>).text) : s(c);
-				if (!text || have.has(text)) continue;
-				const evidence =
-					typeof c === 'object' && c ? (c as Record<string, unknown>).expected_evidence : undefined;
-				addCriterion(app, actor, id, {
-					text,
-					expectedEvidence: Array.isArray(evidence) ? evidence.map(String) : s(evidence)
-				});
-				have.add(text);
-				report.criteria.created++;
-			}
-		}
-
-		for (const v of status.values()) report.requirements[v]++;
+		applyRequirements(app, actor, { sourceId, code, language }, items, note, report, false);
 
 		const inFile = new Set(items.map((r) => s(r.id)));
 		report.notInFile = (
@@ -332,6 +161,281 @@ export function importSourceYaml(
 		return report;
 	});
 	return run();
+}
+
+/**
+ * Create or update requirements of one source, then their parents, translations, links, guidance and
+ * criteria. `partial` (used by the MCP upsert) leaves parent and position alone unless they are given.
+ */
+function applyRequirements(
+	app: AppDatabase,
+	actor: Actor,
+	src: { sourceId: string; code: string; language: string },
+	items: FileRequirement[],
+	note: string,
+	report: ImportReport,
+	partial: boolean
+): void {
+	const { sourceId, code, language } = src;
+	const idByRef = new Map<string, string>();
+	const status = new Map<string, 'created' | 'updated' | 'restored' | 'unchanged'>();
+	const positions = new Map<string, number>();
+
+	// Pass 1: requirements, with their parent when it is already known.
+	for (const r of items) {
+		const ref = s(r.id);
+		const parentRef = s(r.parent);
+		const pos = positions.get(parentRef) ?? 0;
+		positions.set(parentRef, pos + 1);
+		const existing = app.sqlite
+			.prepare('SELECT * FROM requirement WHERE source_id = ? AND ref_code = ?')
+			.get(sourceId, ref) as Row | undefined;
+		const data: Record<string, unknown> = {
+			source_id: sourceId,
+			ref_code: ref,
+			title: s(r.title),
+			text: r.text == null ? null : String(r.text).trim(),
+			language: s(r.language) || language,
+			locator: r.locator ?? null,
+			origin: 'external',
+			status: 'confirmed'
+		};
+		// A partial upsert changes only the fields it names.
+		if (partial && existing) {
+			for (const key of ['title', 'text', 'locator', 'language'] as const) if (!(key in r)) delete data[key];
+		}
+		// A partial upsert keeps an existing requirement's place unless it is given.
+		if (!partial || !existing) data.position = partial ? siblingCount(app, sourceId, parentRef) : pos;
+		// Set the parent now when it is already known (usual case: parents come first in the file).
+		const knownParent = parentRef
+			? (idByRef.get(parentRef) ?? findRequirement(app, sourceId, parentRef)?.id ?? null)
+			: null;
+		if (partial && existing && !('parent' in r)) {
+			// leave the parent as it is
+		} else if (!parentRef || knownParent) data.parent_id = knownParent;
+		if (!existing) {
+			idByRef.set(ref, String(createEntity(app, actor, requirementDefinition, data, { note }).row.id));
+			status.set(ref, 'created');
+		} else {
+			const restoring = Number(existing.deleted) === 1;
+			const res = write(app, actor, requirementDefinition, {
+				op: 'update',
+				id: String(existing.id),
+				baseVersion: Number(existing.current_version),
+				data: restoring ? { ...data, deleted: false } : data,
+				note
+			});
+			idByRef.set(ref, String(existing.id));
+			status.set(ref, restoring ? 'restored' : res.changed ? 'updated' : 'unchanged');
+		}
+	}
+
+	// Pass 2: parents that came later in the file than their children.
+	for (const r of items) {
+		if (partial && !('parent' in r)) continue;
+		const id = idByRef.get(s(r.id))!;
+		const parentRef = s(r.parent);
+		let parentId: string | null = null;
+		if (parentRef) {
+			parentId = idByRef.get(parentRef) ?? findRequirement(app, sourceId, parentRef)?.id ?? null;
+			if (!parentId) report.warnings.push(`${s(r.id)}: parent ${parentRef} not found; placed at the top.`);
+		}
+		const current = readRow(app, requirementDefinition, id)!;
+		if ((current.parent_id ?? null) !== parentId) {
+			write(app, actor, requirementDefinition, {
+				op: 'update',
+				id,
+				baseVersion: Number(current.current_version),
+				data: { parent_id: parentId },
+				note
+			});
+			if (status.get(s(r.id)) === 'unchanged') status.set(s(r.id), 'updated');
+		}
+	}
+
+	// Pass 3: translations, links, guidance and criteria.
+	const resolve = (target: unknown): string | null => {
+		let srcCode = code;
+		let ref: string;
+		if (target && typeof target === 'object') {
+			const t = target as Record<string, unknown>;
+			srcCode = s(t.source || code).toLowerCase();
+			ref = s(t.id ?? t.ref);
+		} else {
+			ref = s(target);
+			const at = ref.indexOf(':');
+			if (at > 0 && getSourceByCode(app, ref.slice(0, at))) {
+				srcCode = ref.slice(0, at).toLowerCase();
+				ref = ref.slice(at + 1).trim();
+			}
+		}
+		if (!ref) return null;
+		if (srcCode === code) return idByRef.get(ref) ?? findRequirement(app, sourceId, ref)?.id ?? null;
+		const other = getSourceByCode(app, srcCode);
+		return other ? (findRequirement(app, other.id, ref)?.id ?? null) : null;
+	};
+
+	for (const r of items) {
+		const ref = s(r.id);
+		const id = idByRef.get(ref)!;
+
+		if (r.translation_of) {
+			const target = resolve(r.translation_of);
+			if (!target)
+				report.warnings.push(`${ref}: translation_of ${JSON.stringify(r.translation_of)} not found.`);
+			else {
+				const current = readRow(app, requirementDefinition, id)!;
+				const other = readRow(app, requirementDefinition, target)!;
+				const root = (other.translation_of as string | null) ?? target;
+				if (current.translation_of !== root) {
+					write(app, actor, requirementDefinition, {
+						op: 'update',
+						id,
+						baseVersion: Number(current.current_version),
+						data: { translation_of: root },
+						note
+					});
+				}
+			}
+		}
+
+		for (const l of Array.isArray(r.links) ? (r.links as FileLink[]) : []) {
+			const type = s(l.type);
+			if (!(LINK_TYPES as readonly string[]).includes(type)) {
+				report.warnings.push(`${ref}: unknown link type ${type || '(none)'}; skipped.`);
+				continue;
+			}
+			const to = resolve(l.to);
+			if (!to) {
+				report.warnings.push(`${ref}: link target ${JSON.stringify(l.to)} not found; skipped.`);
+				continue;
+			}
+			const dup = app.sqlite
+				.prepare(
+					'SELECT id FROM requirement_link WHERE from_id = ? AND to_id = ? AND type = ? AND deleted = 0'
+				)
+				.get(id, to, type);
+			if (dup) {
+				report.links.existing++;
+				continue;
+			}
+			addLink(app, actor, {
+				fromId: id,
+				toId: to,
+				type,
+				coverage: l.coverage == null ? (type === 'implements' ? 'full' : null) : s(l.coverage),
+				note: l.note == null ? null : s(l.note)
+			});
+			report.links.created++;
+		}
+
+		const body = s(r.guidance);
+		if (body) {
+			const current = getGuidance(app, id);
+			if (!current) {
+				setGuidance(app, actor, id, body);
+				report.guidance.created++;
+			} else if (current.body !== body) {
+				setGuidance(app, actor, id, body, current.version);
+				report.guidance.updated++;
+			}
+		}
+
+		const have = new Set(criteriaOf(app, id).map((c) => c.text));
+		for (const c of Array.isArray(r.criteria) ? r.criteria : []) {
+			const text = typeof c === 'object' && c ? s((c as Record<string, unknown>).text) : s(c);
+			if (!text || have.has(text)) continue;
+			const evidence =
+				typeof c === 'object' && c ? (c as Record<string, unknown>).expected_evidence : undefined;
+			addCriterion(app, actor, id, {
+				text,
+				expectedEvidence: Array.isArray(evidence) ? evidence.map(String) : s(evidence)
+			});
+			have.add(text);
+			report.criteria.created++;
+		}
+	}
+
+	for (const v of status.values()) report.requirements[v]++;
+}
+
+function siblingCount(app: AppDatabase, sourceId: string, parentRef: string): number {
+	const parent = parentRef ? findRequirement(app, sourceId, parentRef) : null;
+	return (
+		app.sqlite
+			.prepare('SELECT count(*) AS n FROM requirement WHERE source_id = ? AND parent_id IS ? AND deleted = 0')
+			.get(sourceId, parent?.id ?? null) as { n: number }
+	).n;
+}
+
+export interface UpsertRequirementInput {
+	ref: string;
+	title?: string;
+	text?: string | null;
+	parent?: string | null;
+	locator?: string | null;
+	language?: string;
+	translation_of?: string | { source: string; id: string } | null;
+}
+
+/**
+ * Create or update requirements of an existing external source, matched by reference code. Only the
+ * fields given change; parent and position stay unless given. One transaction for the whole list.
+ */
+export function upsertRequirements(
+	app: AppDatabase,
+	actor: Actor,
+	sourceCode: string,
+	items: UpsertRequirementInput[],
+	note = 'Upserted'
+): ImportReport {
+	const src = app.sqlite
+		.prepare('SELECT * FROM source WHERE code = ? AND deleted = 0')
+		.get(sourceCode.toLowerCase()) as Row | undefined;
+	if (!src) throw new NotFoundError(`No source ${sourceCode}. Create it with upsert_sources first.`);
+	if (src.auditee_id)
+		throw new ValidationError(`${sourceCode} is an internal source; it is changed through its engagement.`);
+	const seen = new Set<string>();
+	const fileItems: FileRequirement[] = items.map((i, n) => {
+		const ref = s(i.ref);
+		if (!ref) throw new ValidationError(`Item ${n + 1} has no ref.`);
+		if (seen.has(ref)) throw new ValidationError(`${ref} appears twice.`);
+		seen.add(ref);
+		const exists = findRequirement(app, String(src.id), ref);
+		if (!exists && !s(i.title)) throw new ValidationError(`${ref} is new and needs a title.`);
+		const item: FileRequirement = { id: ref };
+		for (const key of ['title', 'text', 'parent', 'locator', 'language', 'translation_of'] as const) {
+			if (key in i) (item as Record<string, unknown>)[key] = i[key];
+		}
+		return item;
+	});
+	const report: ImportReport = {
+		source: {
+			id: String(src.id),
+			code: String(src.code),
+			title: String(src.title),
+			created: false,
+			updated: false
+		},
+		requirements: { created: 0, updated: 0, restored: 0, unchanged: 0 },
+		notInFile: [],
+		links: { created: 0, existing: 0 },
+		guidance: { created: 0, updated: 0 },
+		criteria: { created: 0 },
+		warnings: []
+	};
+	app.sqlite.transaction(() =>
+		applyRequirements(
+			app,
+			actor,
+			{ sourceId: String(src.id), code: String(src.code), language: String(src.language) },
+			fileItems,
+			note,
+			report,
+			true
+		)
+	)();
+	return report;
 }
 
 // ---- Sources that ship with the app

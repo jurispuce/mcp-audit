@@ -93,6 +93,7 @@
 									>{l.coverage === 'full' ? 'Full coverage' : 'Partial coverage'}</span
 								>{/if}
 							{#if l.note}<span class="au-muted">{l.note}</span>{/if}
+							{#if l.by}<span class="au-muted" data-testid="link-by">by {l.by}</span>{/if}
 						</button>
 						<button
 							type="button"

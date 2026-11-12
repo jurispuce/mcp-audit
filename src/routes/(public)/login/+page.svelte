@@ -29,7 +29,7 @@
 			type="email"
 			autocomplete="username"
 			required
-			value={form?.email ?? ''}
+			defaultValue={form?.email ?? ''}
 		/>
 		<Field label="Password" name="password" type="password" autocomplete="current-password" required />
 		<button class="au-btn au-btn--primary" type="submit" disabled={busy}>Sign in</button>

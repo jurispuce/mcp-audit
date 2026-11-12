@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api } from '#lib/api.ts';
+	import { formatWhen } from '#lib/format.ts';
 	import RequirementPicker from './RequirementPicker.svelte';
 	import type { RequirementExtra } from './types';
 
@@ -166,7 +167,11 @@
 				<button class="au-btn" type="submit" disabled={guidance === (extra.guidance?.body ?? '')}
 					>Save guidance</button
 				>
-				{#if extra.guidance}<span class="au-muted">Guidance version {extra.guidance.version}</span>{/if}
+				{#if extra.guidance}<span class="au-muted" data-testid="guidance-meta"
+						>Guidance version {extra.guidance.version}{#if extra.guidance.by}&nbsp;· {extra.guidance
+								.by}{/if}{#if extra.guidance.at}&nbsp;·
+							{formatWhen(extra.guidance.at)}{/if}</span
+					>{/if}
 				{#if guidanceSaved}<span class="au-muted" role="status">{guidanceSaved}</span>{/if}
 			</div>
 		</form>
@@ -199,6 +204,7 @@
 						</div>
 					{:else}
 						<p>{c.text}</p>
+						{#if c.by}<p class="au-muted">{c.by}</p>{/if}
 						{#if c.expectedEvidence.length}
 							<p class="au-muted">Expected evidence:</p>
 							<ul class="au-evidence-list">

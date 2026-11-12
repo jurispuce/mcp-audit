@@ -249,3 +249,25 @@ test('pair two requirements as translations from the item sheet (#29)', async ({
 	await versions.getByRole('button', { name: 'Unpair' }).click();
 	await expect(versions).toContainText('Only in LV.');
 });
+
+test('text typed before the page has loaded its scripts is kept', async ({ page }) => {
+	// Hold the app's JavaScript back, type, then let the page hydrate.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route('**/_app/immutable/**', async (route) => {
+		await held;
+		await route.continue();
+	});
+	await page.goto('/library', { waitUntil: 'commit' });
+	await page.getByLabel('Search requirements').fill('encryption');
+	release();
+	await page.waitForFunction(
+		() =>
+			document.querySelector('#library-q') &&
+			(window as unknown as { __sveltekit_dev?: unknown }) !== undefined
+	);
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByLabel('Search requirements')).toHaveValue('encryption');
+	await page.getByRole('button', { name: 'Search' }).click();
+	await expect(page.getByTestId('search-results')).toContainText('Art. 21(2)(h)');
+});

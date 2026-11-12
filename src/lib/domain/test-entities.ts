@@ -14,6 +14,7 @@ export function createTestEntityTables(app: AppDatabase): void {
 	app.sqlite.exec(`
 		CREATE TABLE test_item (${COMMON}, title TEXT NOT NULL, body TEXT);
 		CREATE TABLE test_link (${COMMON}, from_id TEXT NOT NULL, to_id TEXT NOT NULL, type TEXT NOT NULL);
+		CREATE TABLE test_guarded (${COMMON}, title TEXT NOT NULL, status TEXT NOT NULL, approved INTEGER NOT NULL DEFAULT 0, engagement_id TEXT);
 	`);
 }
 
@@ -55,3 +56,31 @@ export const testLink: EntityDefinition = {
 
 export const uiActor: Actor = { userId: 'u-auditor', channel: 'ui' };
 export const mcpActor: Actor = { userId: 'u-auditor', agent: 'Claude', channel: 'mcp' };
+
+/** Fixture engagements for guard-rail tests: id -> ai_allowed. */
+export const testEngagements = new Map<string, boolean>();
+
+/**
+ * Stands in for findings, events and other judgement items until their tables exist: a status that AI
+ * may only set to proposed, an approval only a person may change, and an engagement with ai_allowed.
+ */
+export const testGuarded: EntityDefinition = {
+	type: 'test_guarded',
+	table: 'test_guarded',
+	columns: ['title', 'status', 'approved', 'engagement_id'],
+	parse(input, existing) {
+		const out: Row = {};
+		if ('title' in input || !existing) out.title = String(input.title ?? 'x');
+		if ('status' in input || !existing) out.status = String(input.status ?? 'confirmed');
+		if ('approved' in input) out.approved = input.approved ? 1 : 0;
+		if ('engagement_id' in input) out.engagement_id = (input.engagement_id as string | null) ?? null;
+		return out;
+	},
+	judgement: () => ({ column: 'status', proposed: 'proposed' }),
+	humanOnly: ['approved'],
+	engagementOf: (_app, row) => {
+		const id = row.engagement_id == null ? null : String(row.engagement_id);
+		return id && testEngagements.has(id) ? { id, aiAllowed: testEngagements.get(id)! } : null;
+	},
+	label: (row) => String(row.title)
+};
