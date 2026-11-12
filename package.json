@@ -12,7 +12,7 @@
 		"build": "vite build",
 		"start": "node server.js",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "svelte-kit sync || echo ''; [ -f scripts/install-hooks.mjs ] && node scripts/install-hooks.mjs || true",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
 		"lint": "eslint .",
 		"format": "prettier --write .",
@@ -36,6 +36,7 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.24.1",
 		"globals": "^17.14.0",
+		"lint-staged": "^17.6.0",
 		"prettier": "^3.10.1",
 		"prettier-plugin-svelte": "^4.1.1",
 		"svelte": "^5.57.3",
@@ -54,5 +55,12 @@
 		"@fontsource/ibm-plex-sans": "^5.3.0",
 		"better-sqlite3": "^13.1.1",
 		"drizzle-orm": "^0.45.4"
+	},
+	"lint-staged": {
+		"*.{ts,js,mjs,svelte}": [
+			"prettier --write",
+			"eslint --fix --no-warn-ignored"
+		],
+		"*.{json,md,css,html,yml,yaml}": "prettier --write"
 	}
 }

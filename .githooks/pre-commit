@@ -1,0 +1,3 @@
+#!/bin/sh
+# Format and lint the staged files. Installed by `npm install` (scripts/install-hooks.mjs).
+exec npx --no-install lint-staged

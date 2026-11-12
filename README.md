@@ -45,6 +45,38 @@ The dev server runs on http://localhost:5173.
 | `npm test`       | Unit tests (Vitest)                             |
 | `npm run verify` | Format check, lint, type check and unit tests   |
 
+## Testing
+
+Every issue adds its tests as it is built: unit tests for domain rules, Playwright tests for screens and flows.
+
+| Command                        | What it runs                                                                                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm test`                     | Unit tests (Vitest). The domain layer runs against an in-memory SQLite database created from the migrations (`createTestDatabase()`).           |
+| `npm run build && npm run e2e` | Playwright end-to-end tests. Starts the production build twice with fresh data folders under `.e2e/`: one normal, one for the first-start flow. |
+| `npm run seed`                 | Creates the test users in a running app (`admin@example.test` and `auditor@example.test`, password `test-password-123`).                        |
+
+End-to-end tests can also run against containers, which is what CI does:
+
+```bash
+docker run -d -p 3000:3000 -e TEST_SEED_ENABLED=true ghcr.io/jurispuce/mcp-audit:main
+docker run -d -p 3001:3000 -e TEST_SEED_ENABLED=true ghcr.io/jurispuce/mcp-audit:main
+E2E_BASE_URL=http://127.0.0.1:3000 E2E_FIRST_START_URL=http://127.0.0.1:3001 npm run e2e
+```
+
+`TEST_SEED_ENABLED=true` turns on the seed and a password-free test login under `/api/test/`. Without it those endpoints do not exist; never set it in production.
+
+Tests are organised by flow under `e2e/tests/`; files ending in `.phone.spec.ts` run with a phone viewport.
+
+## Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request:
+
+1. Format check, lint, type check and unit tests.
+2. Builds the Docker image, starts it with fresh volumes and a read-only root filesystem, checks the reported version and that test endpoints are closed in a normal container, runs Playwright against it, and runs `scripts/backup-restore-check.sh`.
+3. On the default branch, publishes `ghcr.io/jurispuce/mcp-audit:main` for amd64 and arm64. A tag such as `v0.1.0` publishes `:v0.1.0` and `:latest`.
+
+A pre-commit hook (installed by `npm install`) formats and lints the staged files.
+
 ## Code layout
 
 | Folder           | Holds                                                                                      |
