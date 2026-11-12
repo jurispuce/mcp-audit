@@ -7,7 +7,30 @@ description: "Maintain the reusable audit requirement library after or between e
 
 The library is what makes the second audit faster than the first. After an engagement, carry over what was learned about how to audit each requirement, without carrying over anything about the client.
 
-Read `references/engagement-files.md` first. Source files live in `library/sources/` in the shape shown in `audit-engagement-setup`.
+Read `references/engagement-files.md` first.
+
+## Where the library lives
+
+Check which tools you have before you start.
+
+- **App mode.** When the mcp-audit tools are available (`search_requirements`, `get_requirement`, `set_guidance`, `set_criteria`, `link_requirements`, `upsert_sources`, `upsert_requirements`), the library is in the audit app. Use the tools; do not write YAML files. Every change you make is versioned and shown to the team as "Claude on behalf of <auditor>", so the app keeps the log for you.
+- **Files mode.** Without those tools, the library is in `library/sources/*.yaml`, in the shape shown in `audit-engagement-setup`, with changes logged in `library/log.md`.
+
+The steps below are the same in both modes; where they differ, the app-mode way is given first.
+
+### In app mode
+
+| To | Use |
+| --- | --- |
+| Find requirements | `search_requirements` (code, title or text; diacritics ignored), then `get_requirement` for text, links, guidance and criteria |
+| Name a requirement | its id, or `"<source code>:<reference>"`, for example `"nis2:Art. 21(2)(d)"` |
+| Improve guidance | `set_guidance` with the full new text; pass `base_version` from `get_requirement` so you never overwrite someone's newer edit |
+| Refine general criteria | `set_criteria` with `mode: add` to add, or `mode: replace` with the complete list when the auditor agreed to the whole set |
+| Map sources | `link_requirements` in batches; put the one-line justification in `note`, and start the note with "Low confidence:" where it applies |
+| Import or update a standard | `upsert_sources`, then `upsert_requirements` (only the fields you give change) |
+| Undo | `get_history` and `revert` on the item |
+
+If a tool answers `stale_write`, someone changed the item since you read it: fetch it again, show the auditor the difference, and redo the change on top. If it answers `forbidden`, do not look for a way around it; tell the auditor what was refused and why.
 
 ## What can be improved
 
@@ -42,17 +65,19 @@ Rewrite each lesson so it would make sense to an auditor who never saw this clie
 
 ### 3. Propose changes
 
-Show the auditor each change as before and after, per requirement. Do not write to the library until they agree; library changes affect every future engagement. Then update the source file, set `updated` on the requirement, and log the change in `library/log.md`.
+Show the auditor each change as before and after, per requirement. Do not write to the library until they agree; library changes affect every future engagement. Then write it: in app mode with `set_guidance`, `set_criteria` and `link_requirements`; in files mode by updating the source file, setting `updated` on the requirement and logging the change in `library/log.md`.
+
+In app mode, finish by telling the auditor where to see the result: Library, open the requirement; the guidance, criteria and links show "Claude on behalf of <auditor>", and the History tab of each item can revert it.
 
 Existing engagements are unaffected: they pinned their requirements at selection time. Say so when the auditor asks whether a change will alter an audit in progress.
 
 ### 4. Cross-source mapping
 
-When asked to map one source to another, work requirement by requirement, propose links with a one-line justification each, and mark low-confidence links so the auditor reviews those first. A many-to-many mapping is normal. Do not force a link where the two texts merely share a topic.
+When asked to map one source to another, work requirement by requirement, propose links with a one-line justification each, and mark low-confidence links so the auditor reviews those first. A many-to-many mapping is normal. Do not force a link where the two texts merely share a topic. In app mode, read both sides with `get_requirement` first: existing links show up there and `link_requirements` reports a link that already exists instead of duplicating it.
 
 ## Judgement notes
 
 - The confidentiality rule is the one that matters most here. When unsure whether something identifies the client, leave it out.
 - Keep guidance practical and short. If it reads like the standard restated, it adds nothing.
 - Do not reproduce licensed standard text into guidance or notes.
-- Never delete existing guidance; replace it with an improved version and note what changed in the log.
+- Never delete existing guidance; replace it with an improved version and note what changed in the log (files mode) or in a comment on the guidance with `add_comment` (app mode).

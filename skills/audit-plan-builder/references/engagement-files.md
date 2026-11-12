@@ -201,6 +201,7 @@ Use the tools instead of the files; the steps stay the same. Rough mapping:
 
 | File | MCP tools |
 | --- | --- |
+| library/sources/*.yaml | search_requirements, get_requirement, upsert_sources, upsert_requirements, link_requirements, set_guidance, set_criteria |
 | engagement.yaml, scopes, roles, risks | get_engagement_overview, upsert_scopes, upsert_people, upsert_risks |
 | requirements.yaml | search_requirements, select_requirements, set_scope_handling |
 | internal-requirements.yaml | upsert_requirements, link_requirements |
@@ -209,4 +210,6 @@ Use the tools instead of the files; the steps stay the same. Rough mapping:
 | plan/ | upsert_events, upsert_evidence_items, render_audit_plan |
 | events/ | link_evidence, get_event_status, render_post_event_report |
 | findings.yaml | get_assessment_unit, propose_finding |
-| log.md | not needed: the app records every version |
+| log.md, library/log.md | not needed: the app records every version, with you as "Claude on behalf of <auditor>" |
+
+For any item: `add_comment`, `get_history` and `revert` (a revert is a new version; nothing is lost).
