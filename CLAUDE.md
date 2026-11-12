@@ -20,6 +20,7 @@ An audit planning and running app: a versioned audit database with a thin respon
 
 - Build issue by issue, in number order within a milestone. One issue, one branch, one pull request that references the issue.
 - An issue is done when every acceptance criterion is met and covered by a test where a test makes sense.
+- Tick each acceptance criterion checkbox in the GitHub issue as soon as it is met, not only at the end. Leave a box unticked if it could not be verified, and say why.
 - When an issue turns out to be wrong or incomplete, say so and update the issue before building around it.
 - The prototype is the reference for behaviour and layout, not for code. It is one HTML file with in-memory data and simulated AI. Do not copy its code structure.
 
