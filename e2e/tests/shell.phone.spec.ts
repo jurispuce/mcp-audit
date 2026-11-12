@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN, loginAs, seed } from '../helpers';
+import { ADMIN, expect, loginAs, seed, test } from '../helpers';
 
 let e = '';
 test.beforeEach(async ({ page }) => {
@@ -26,6 +25,9 @@ test('on a phone: every tappable element is at least 44px high', async ({ page }
 		`/e/${e}/setup/auditee`,
 		`/e/${e}/setup/risks`,
 		`/e/${e}/setup/documents`,
+		`/e/${e}/plan/events`,
+		`/e/${e}/plan/coverage`,
+		`/e/${e}/plan/document`,
 		'/settings',
 		'/settings/users',
 		'/settings/tokens',

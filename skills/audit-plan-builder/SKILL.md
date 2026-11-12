@@ -9,6 +9,24 @@ Produce a plan the auditee can agree to and the auditor can run: a set of events
 
 Read `references/engagement-files.md` first. The plan document template is `assets/audit-plan-template.md`.
 
+## Where the plan lives
+
+- **App mode.** When the mcp-audit tools are available (`list_events`, `upsert_events`, `upsert_evidence_items`, `get_coverage`, `render_audit_plan`), the plan is in the audit app. Use the tools; do not write YAML files.
+- **Files mode.** Without those tools, work in the engagement's `plan/` folder as described below.
+
+### In app mode
+
+| Step | Use |
+| --- | --- |
+| Find the engagement | `list_engagements`, then `get_engagement_overview` for the selected requirements (with criticality), scopes and roles |
+| 1. Draft events | `list_events` first (do not duplicate), then `upsert_events`: `participants` are role names recorded for the auditee (record missing ones with `upsert_people`, or name them in `participants_note`); `requirements` as `"<source>:<reference>"`. An event with the same title is updated rather than added |
+| 2. Coverage | `get_coverage`: `uncovered` must be empty before the plan is sent; each requirement shows its criticality and events |
+| 3. Evidence | `upsert_evidence_items` with the `event_id` from step 1, `kind`, `requirements` and, for per-scope requirements, `scope`. Leave `criticality` out to take the highest linked risk level |
+| 4. Document | `render_audit_plan` with no format returns the Markdown to show the auditor; `format: docx` or `pdf` saves the file with the engagement's documents |
+| 5. Revise | the same tools; events and evidence keep their ids |
+
+Everything you draft is shown on Plan, Events as proposed: the auditor edits, accepts, rejects or accepts all, and only accepted events reach the plan document. Plan status (draft, sent, agreed) is set by the auditor in the app; no tool changes it. If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor.
+
 ## Steps
 
 ### 1. Draft events
@@ -21,7 +39,7 @@ For each event set format, proposed date and time, duration, participants (role 
 - A requirement may appear in several events when it needs more than one viewpoint (rule owner and the people who follow the rule). This is normal for high-risk requirements.
 - Per-scope requirements need an event in each scope, or one event with people from each scope.
 
-Write events to `plan/events.yaml` with `proposed_by: claude`.
+Write events to `plan/events.yaml` with `proposed_by: claude` (app mode: `upsert_events`).
 
 ### 2. Check coverage
 
@@ -46,13 +64,13 @@ Set criticality from the risk list: evidence for a requirement linked to a high 
 
 ### 4. Produce the plan document
 
-Fill `assets/audit-plan-template.md` in the report language and save it as `plan/audit-plan.md`. The plan goes to the auditee as a whole. It lists events, formats, times, participants, requirements and what to prepare. Leave out criticality, the risk list and the auditor's reasoning: those are the auditor's working papers.
+Fill `assets/audit-plan-template.md` in the report language and save it as `plan/audit-plan.md` (app mode: `render_audit_plan`, which fills the same template). The plan goes to the auditee as a whole. It lists events, formats, times, participants, requirements and what to prepare. Leave out criticality, the risk list and the auditor's reasoning: those are the auditor's working papers.
 
 ### 5. Revise
 
 The plan usually changes after the auditee replies. Apply changes to the YAML files, keep event and evidence ids stable, re-run the coverage check and regenerate the document. Set `plan_status` in `engagement.yaml` only when the auditor says the plan was sent or agreed.
 
-Log the run and finish with the summary, leading with anything uncovered.
+Log the run (files mode only) and finish with the summary, leading with anything uncovered. In app mode, end by telling the auditor how many events and evidence items wait for review on Plan, Events.
 
 ## Judgement notes
 

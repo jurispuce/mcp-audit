@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN, PASSWORD, seed, signIn } from '../helpers';
+import { ADMIN, expect, PASSWORD, seed, signIn, test } from '../helpers';
 
 test('start, sign in and see the engagements list', async ({ page, request }) => {
 	await seed(request);

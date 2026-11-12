@@ -5,7 +5,11 @@
 	import '../../design/tokens.css';
 	import '../../design/components.css';
 
+	import { onMount } from 'svelte';
+
 	let { children } = $props();
+	// Lets end-to-end tests wait until buttons with client-side behaviour respond.
+	onMount(() => document.documentElement.setAttribute('data-hydrated', ''));
 </script>
 
 <div class="au">

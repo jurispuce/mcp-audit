@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN, loginAs, seed } from '../helpers';
+import { ADMIN, expect, loginAs, seed, test } from '../helpers';
 
 const routes = (e: string) => [
 	'/',
@@ -12,6 +11,7 @@ const routes = (e: string) => [
 	`/e/${e}/setup/risks`,
 	`/e/${e}/setup/documents`,
 	`/e/${e}/plan/events`,
+	`/e/${e}/plan/coverage`,
 	`/e/${e}/plan/document`,
 	`/e/${e}/run/today`,
 	`/e/${e}/run/events`,

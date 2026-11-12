@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { AUDITOR, loginAs, seed, unique } from '../helpers';
+import { AUDITOR, expect, loginAs, seed, test, unique } from '../helpers';
 
 test('a user creates a token that is shown once, and can revoke it', async ({ page }) => {
 	await seed(page.request);

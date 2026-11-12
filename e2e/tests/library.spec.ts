@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { AUDITOR, loginAs, seed, unique } from '../helpers';
+import type { Page } from '@playwright/test';
+import { AUDITOR, expect, loginAs, seed, test, unique } from '../helpers';
 
 test.beforeEach(async ({ page }) => {
 	await seed(page.request); // includes the bundled NIS 2 Article 21 source
@@ -9,7 +9,11 @@ test.beforeEach(async ({ page }) => {
 /** Import a YAML source by pasting it on the Library screen. */
 async function importYaml(page: Page, yaml: string) {
 	await page.goto('/library');
-	await page.getByRole('button', { name: 'Import source' }).click();
+	// The toggle works once the page has hydrated; under load the first click can come earlier.
+	await expect(async () => {
+		await page.getByRole('button', { name: 'Import source' }).click();
+		await expect(page.getByLabel('Or paste the YAML')).toBeVisible({ timeout: 1000 });
+	}).toPass();
 	await page.getByLabel('Or paste the YAML').fill(yaml);
 	await page.getByRole('button', { name: 'Import source' }).click();
 	await expect(page.getByTestId('import-report')).toBeVisible();
@@ -122,11 +126,11 @@ test('add a typed link by searching for the target; it shows from both ends and 
 	await links.getByLabel('Coverage').selectOption('partial');
 	await links.getByRole('button', { name: 'Add link' }).click();
 
-	const row = links.getByTestId('link-row');
+	// The NIS 2 requirement is shared by other tests; look only at this test's link.
+	const row = links.getByTestId('link-row').filter({ hasText: code });
 	await expect(row).toHaveCount(1);
 	await expect(links.getByRole('heading', { name: 'Implemented by' })).toBeVisible();
 	await expect(row).toContainText('Partial coverage');
-	await expect(sheet.getByRole('tab', { name: /Links/ })).toContainText('1');
 
 	// The other end shows the link the other way round.
 	await row.getByRole('button', { name: new RegExp(`Access rights ${code}`) }).click();

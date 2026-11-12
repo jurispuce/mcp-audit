@@ -17,7 +17,7 @@ The app has five destinations inside an engagement, in the order the audit runs:
 | --- | --- | --- | --- |
 | Home | 1 Define the engagement | none | Continue to the next open phase |
 | Set-up | 2 Select requirements, 3 Understand the auditee, 4 Set scope handling, 5 Extract internal requirements | Requirements, Scopes, Auditee, Risks, Documents | Depends on tab: Select, Add scope, Add person, Add risk, Upload |
-| Plan | 6 Plan events | Events, Audit plan | Add event; Export plan |
+| Plan | 6 Plan events | Events, Coverage, Audit plan | Add event; Export plan |
 | Run | 7 Run events | Today, All events, Inbox | Add note or photo |
 | Findings | 8 Conclude | Matrix, To approve, Conclusions | Approve |
 
@@ -41,7 +41,8 @@ Copy these as the route table. `:e` is the engagement id.
 /e/:e/setup/auditee            Description and people
 /e/:e/setup/risks
 /e/:e/setup/documents          Uploads and extraction
-/e/:e/plan/events
+/e/:e/plan/events              Events, AI drafts, planned evidence per event
+/e/:e/plan/coverage            Requirements by the events that cover them
 /e/:e/plan/document            Audit plan preview and export
 /e/:e/run/today
 /e/:e/run/events

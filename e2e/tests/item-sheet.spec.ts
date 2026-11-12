@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN, loginAs, seed, unique } from '../helpers';
+import { ADMIN, expect, loginAs, seed, test, unique } from '../helpers';
 
 test('any record opens in the item sheet with details, comments and history, and can be reverted', async ({
 	page

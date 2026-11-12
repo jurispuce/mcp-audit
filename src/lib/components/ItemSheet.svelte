@@ -321,6 +321,7 @@
 							<li data-version={h.version}>
 								<div class="au-history__what">
 									<span><span class="au-ref">v{h.version}</span> · {h.summary}</span>
+									{#if h.note}<span data-testid="history-note">{h.note}</span>{/if}
 									{#each h.changes as c (c.field)}
 										<span class="au-muted">
 											{c.label}:

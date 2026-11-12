@@ -8,6 +8,7 @@ import { countUsers, createFirstAdmin, createUser, listUsers, type User } from '
 import { createEngagement, listEngagements, listScopes, getEngagement, type Engagement } from './engagements';
 import { findRequirement } from './library';
 import { addPerson } from './people';
+import { addEvent, addEvidence } from './planning';
 import { addRisk } from './risks';
 import { addScope, selectRequirements, setScopeHandling, setScopeMode, updateScope } from './selection';
 import { registerTextArtifact } from './artifacts';
@@ -77,7 +78,8 @@ export const SAMPLE_ENGAGEMENT_NAME = 'NIS 2 audit, Riga office';
 /**
  * The prototype's "Load sample engagement", on the bundled NIS 2 Article 21 instead of the prototype's
  * ISO 27001 sample (ISO texts are not bundled): Baltic Freight SIA with two scopes, six selected
- * requirements (two per scope), two roles, two risks and two documents. Created once.
+ * requirements (two per scope), two roles, two risks, two documents, and a draft plan of two events
+ * with planned evidence. Created once.
  */
 export function seedSampleEngagement(
 	app: AppDatabase,
@@ -115,13 +117,16 @@ export function seedSampleEngagement(
 		{ requirementId: mfa, scopeHandling: 'per_scope' }
 	]);
 
-	addPerson(app, actor, e.auditeeId, {
+	const head = addPerson(app, actor, e.auditeeId, {
 		role: 'Head of IT',
 		name: 'Ilze Kalniņa',
 		unit: 'IT',
 		email: 'ilze.kalnina@example.com'
 	});
-	addPerson(app, actor, e.auditeeId, { role: 'Warehouse manager', unit: 'Warehouse' });
+	const warehouseManager = addPerson(app, actor, e.auditeeId, {
+		role: 'Warehouse manager',
+		unit: 'Warehouse'
+	});
 	addRisk(app, actor, e.id, {
 		title: 'Leaver accounts stay active',
 		level: 'high',
@@ -134,6 +139,43 @@ export function seedSampleEngagement(
 		origin: 'auditee_register',
 		requirement_ids: [backup],
 		scope_ids: [String(warehouse.id)]
+	});
+
+	// A first plan: two events with planned evidence, still in draft.
+	const day = (n: number) => new Date(Date.parse(e.startDate) + n * 864e5).toISOString().slice(0, 10);
+	const interview = addEvent(app, actor, e.id, {
+		title: 'Access and identity interview',
+		format: 'interview',
+		date: day(1),
+		start_time: '10:00',
+		duration_min: 60,
+		participant_ids: [head.id],
+		requirement_ids: [access, mfa]
+	});
+	addEvidence(app, actor, e.id, interview.id, {
+		text: 'Leaver list for 2026 with account disable dates',
+		kind: 'record',
+		requirement_ids: [access]
+	});
+	addEvidence(app, actor, e.id, interview.id, {
+		text: 'Access review records for the last two cycles',
+		kind: 'record',
+		requirement_ids: [access]
+	});
+	const walkthrough = addEvent(app, actor, e.id, {
+		title: 'Backup walkthrough',
+		format: 'site_visit',
+		date: day(2),
+		start_time: '13:00',
+		duration_min: 45,
+		participant_ids: [warehouseManager.id],
+		requirement_ids: [backup]
+	});
+	addEvidence(app, actor, e.id, walkthrough.id, {
+		text: 'Record of the last restore test',
+		kind: 'record',
+		requirement_ids: [backup],
+		scope_id: String(warehouse.id)
 	});
 
 	registerTextArtifact(app, actor, files, e.id, {

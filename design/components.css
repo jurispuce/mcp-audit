@@ -235,3 +235,27 @@ a.au-phase:hover .au-phase__name { text-decoration: underline; }
 .au-field--inline select { min-height: var(--touch-target); }
 .au-checklist { gap: 0; }
 .au-checklist .au-check-row { min-height: var(--touch-target); }
+
+/* Plan header and event cards. */
+.au-plan-head { gap: var(--space-2); }
+.au-wrap { flex-wrap: wrap; }
+.au-pill { display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-full); background: var(--surface); overflow: hidden; }
+.au-pill a, .au-pill button { min-height: var(--touch-target); display: inline-flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-3); border: 0; background: none; color: var(--ink); font: inherit; text-decoration: none; cursor: pointer; }
+.au-pill button { border-left: 1px solid var(--border); padding: 0 var(--space-3); }
+.au-pill--proposed { border-style: dashed; }
+.au-meter { height: 8px; border-radius: var(--radius-full); background: var(--surface-sunken); overflow: hidden; }
+.au-meter i { display: block; height: 100%; background: var(--ok); }
+.au-item--gap { border-left: 4px solid var(--danger); }
+.au-evidence-panel { margin: var(--space-2) 0 var(--space-4) var(--space-4); padding-left: var(--space-3); border-left: 2px solid var(--border); }
+.au-pill form { display: contents; }
+.au-picker-box { margin-top: var(--space-2); }
+
+/* A rendered report (audit plan preview). */
+.au-doc { overflow-x: auto; }
+.au-doc h1 { font-size: 22px; margin: 0 0 var(--space-3); }
+.au-doc h2 { font-size: 18px; margin: var(--space-5) 0 var(--space-2); }
+.au-doc h3 { font-size: 15px; margin: var(--space-4) 0 var(--space-2); }
+.au-doc p, .au-doc li { line-height: 1.5; }
+.au-doc table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.au-doc th, .au-doc td { border: 1px solid var(--border); padding: var(--space-2); text-align: left; vertical-align: top; }
+.au-doc th { background: var(--surface-sunken); }

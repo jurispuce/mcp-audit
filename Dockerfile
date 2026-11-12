@@ -31,6 +31,8 @@ COPY --from=build --chown=node:node /app/server.js /app/server-env.js ./
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --from=build --chown=node:node /app/scripts ./scripts
 COPY --from=build --chown=node:node /app/seed ./seed
+# Report templates the render functions fill (audit plan, post-event report, findings report).
+COPY --from=build --chown=node:node /app/skills ./skills
 RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME ["/data"]

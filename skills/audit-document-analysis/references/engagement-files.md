@@ -207,7 +207,7 @@ Use the tools instead of the files; the steps stay the same. Rough mapping:
 | internal-requirements.yaml | list_internal_requirements, upsert_internal_requirements (with `implements`) |
 | criteria.yaml | set_criteria |
 | documents/, documents.yaml | list_artifacts, get_artifact_text, register_artifact (`mentioned: true` for a document not received) |
-| plan/ | upsert_events, upsert_evidence_items, render_audit_plan |
+| plan/ | list_events, upsert_events, upsert_evidence_items, get_coverage, render_audit_plan |
 | events/ | link_evidence, get_event_status, render_post_event_report |
 | findings.yaml | get_assessment_unit, propose_finding |
 | log.md, library/log.md | not needed: the app records every version, with you as "Claude on behalf of <auditor>" |

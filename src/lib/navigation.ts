@@ -32,6 +32,7 @@ export const DESTINATIONS: Destination[] = [
 		path: '/plan',
 		tabs: [
 			{ label: 'Events', path: '/plan/events' },
+			{ label: 'Coverage', path: '/plan/coverage' },
 			{ label: 'Audit plan', path: '/plan/document' }
 		]
 	},

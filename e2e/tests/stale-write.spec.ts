@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN, loginAs, seed, unique } from '../helpers';
+import { ADMIN, expect, loginAs, seed, test, unique } from '../helpers';
 
 test('a save based on an old version is refused, the newer version is shown, and the change can be redone', async ({
 	page,

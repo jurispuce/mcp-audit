@@ -1,6 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { makePdf } from '../../tests/fixtures/make-docs';
-import { ADMIN, createEngagement, loginAs, seed, unique } from '../helpers';
+import { ADMIN, createEngagement, expect, loginAs, seed, test, unique } from '../helpers';
 import { call, createToken, mcpClient } from '../mcp-helpers';
 
 test.beforeEach(async ({ page }) => {
@@ -58,7 +58,7 @@ test('select requirements, pin them and see assessment units follow scopes (#37,
 	const nis2 = page.getByRole('list', { name: /NIS 2 .* requirements/ });
 	await nis2.getByLabel(/Art\. 21\(2\)\(b\)/).check();
 	await nis2.getByLabel(/Art\. 21\(2\)\(i\)/).check();
-	await page.getByRole('button', { name: 'Select ticked' }).click();
+	await page.locator('details', { has: nis2 }).getByRole('button', { name: 'Select ticked' }).click();
 	await expect(page.getByRole('status')).toHaveText('2 selected.');
 	await expect(page.getByTestId('units-count')).toHaveText('2 selected · 2 assessment units');
 	await expect(page.getByTestId('selected-Art. 21(2)(b)')).toContainText('pinned v1');

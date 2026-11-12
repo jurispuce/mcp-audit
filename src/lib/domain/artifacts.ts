@@ -544,6 +544,46 @@ export function registerTextArtifact(
 	})();
 }
 
+/** A report the app generated (audit plan, post-event report, findings report), kept as an artifact. */
+export function registerGeneratedArtifact(
+	app: AppDatabase,
+	actor: Actor,
+	filesDir: string,
+	engagementId: string,
+	input: {
+		title: string;
+		filename: string;
+		mimeType: string;
+		bytes: Uint8Array;
+		text: string;
+		language?: string | null;
+	}
+): Artifact {
+	getEngagement(app, engagementId);
+	const hash = storeFile(filesDir, input.bytes);
+	const now = new Date();
+	return app.sqlite.transaction(() => {
+		const row = createEntity(app, actor, artifactDefinition, {
+			engagement_id: engagementId,
+			origin: 'generated',
+			state: 'received',
+			file_hash: hash,
+			filename: input.filename,
+			mime_type: input.mimeType,
+			size: input.bytes.length,
+			received_at: now.getTime(),
+			kind: 'generated_report',
+			text_status: 'extracted'
+		}).row;
+		updateEntity(app, actor, artifactDefinition, String(row.id), 1, {
+			title: input.title,
+			language: input.language ?? null
+		});
+		saveText(app, String(row.id), { status: 'extracted', text: input.text, pageStarts: [0] }, now);
+		return getArtifact(app, String(row.id));
+	})();
+}
+
 export function updateArtifact(
 	app: AppDatabase,
 	actor: Actor,

@@ -1,4 +1,28 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test as base, type APIRequestContext, type Page } from '@playwright/test';
+
+/**
+ * Playwright's test, with page.goto waiting until the page has hydrated: buttons that only open a
+ * form on the client do nothing when clicked earlier, which made tests flaky under load.
+ */
+export const test = base.extend({
+	page: async ({ page }, use) => {
+		const goto = page.goto.bind(page);
+		page.goto = async (url, options) => {
+			const res = await goto(url, options);
+			// A test that asks for waitUntil: 'commit' wants the page before it hydrates.
+			if (
+				options?.waitUntil !== 'commit' &&
+				res &&
+				res.ok() &&
+				(res.headers()['content-type'] ?? '').includes('text/html')
+			)
+				await page.waitForSelector('html[data-hydrated]', { state: 'attached' });
+			return res;
+		};
+		await use(page);
+	}
+});
+export { expect };
 
 export const PASSWORD = 'test-password-123';
 export const ADMIN = 'admin@example.test';
@@ -50,7 +74,7 @@ export const unique = (prefix: string) =>
 
 /** POST a form the way a browser would, with the Origin header SvelteKit's CSRF check expects. */
 export async function postForm(page: Page, path: string, form: Record<string, string> = {}) {
-	const origin = new URL(page.url() === 'about:blank' ? '/' : page.url(), test.info().project.use.baseURL)
+	const origin = new URL(page.url() === 'about:blank' ? '/' : page.url(), base.info().project.use.baseURL)
 		.origin;
 	return page.request.post(path, { form, headers: { origin } });
 }

@@ -32,6 +32,7 @@ import '#lib/domain/entities.ts';
 import { APP_VERSION } from '#lib/version.ts';
 import { getEngagement } from '#lib/domain/engagements.ts';
 import { registerSetupTools } from './setup-tools';
+import { registerPlanTools } from './plan-tools';
 
 /**
  * The MCP server: the domain layer exposed as tools, in the app's own process. Every write is made by
@@ -44,7 +45,7 @@ export const AGENT_NAME = process.env.MCP_AGENT_NAME?.trim() || 'Claude';
 const INSTRUCTIONS = `mcp-audit is an audit planning and running database. You act on behalf of the signed-in auditor.
 Rules: every change you make is versioned and shown as "${AGENT_NAME} on behalf of <auditor>". Judgement writes (internal requirements, evidence links, findings, drafted events, roles) are stored as proposed for a person to accept. You cannot approve findings, change plan status or delete files. Results are compact JSON and include ids; pass ids back to other tools.
 Start with list_engagements, then get_engagement_overview to see the phases and what is missing next.
-Set-up: select_requirements, upsert_scopes, set_scope_handling, upsert_people (roles, proposed), upsert_risks. Documents: list_artifacts, get_artifact_text (paged, cite the locator), register_artifact. Internal requirements from the auditee's documents: list_internal_requirements, upsert_internal_requirements (proposed). Engagement tools refuse to run where the auditor switched AI off, and never read another auditee's internal requirements.
+Set-up: select_requirements, upsert_scopes, set_scope_handling, upsert_people (roles, proposed), upsert_risks. Documents: list_artifacts, get_artifact_text (paged, cite the locator), register_artifact. Internal requirements from the auditee's documents: list_internal_requirements, upsert_internal_requirements (proposed). Planning: list_events, upsert_events and upsert_evidence_items (drafts until the auditor accepts them), get_coverage, render_audit_plan. Engagement tools refuse to run where the auditor switched AI off, and never read another auditee's internal requirements.
 Library: search_requirements and get_requirement read; upsert_sources, upsert_requirements, link_requirements, set_guidance and set_criteria write. A requirement can be named by its id or as "<source code>:<reference>", for example "nis2:Art. 21(2)(b)". Pass engagement_id to get_requirement, add_comment, get_history and revert to work on an engagement's own items.`;
 
 type Json = Record<string, unknown> | unknown[];
@@ -54,18 +55,30 @@ function ok(data: Json): CallToolResult {
 }
 
 /** Domain errors become tool errors the model can read and act on; anything else is a server fault. */
+function toolError(e: unknown): CallToolResult {
+	if (e instanceof DomainError) {
+		const fields =
+			'fields' in e && e.fields && Object.keys(e.fields as object).length
+				? ` ${JSON.stringify(e.fields)}`
+				: '';
+		return { isError: true, content: [{ type: 'text', text: `${e.code}: ${e.message}${fields}` }] };
+	}
+	throw e;
+}
+
 function run(fn: () => unknown): CallToolResult {
 	try {
 		return ok(fn() as Json);
 	} catch (e) {
-		if (e instanceof DomainError) {
-			const fields =
-				'fields' in e && e.fields && Object.keys(e.fields as object).length
-					? ` ${JSON.stringify(e.fields)}`
-					: '';
-			return { isError: true, content: [{ type: 'text', text: `${e.code}: ${e.message}${fields}` }] };
-		}
-		throw e;
+		return toolError(e);
+	}
+}
+
+async function runAsync(fn: () => Promise<unknown>): Promise<CallToolResult> {
+	try {
+		return ok((await fn()) as Json);
+	} catch (e) {
+		return toolError(e);
 	}
 }
 
@@ -95,6 +108,7 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 		.describe("Engagement id, to work on that engagement's own items.");
 
 	registerSetupTools(server, app, actor, run);
+	registerPlanTools(server, app, actor, run, runAsync);
 
 	// ---- Library: read
 

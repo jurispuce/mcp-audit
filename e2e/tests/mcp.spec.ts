@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { AUDITOR, loginAs, seed, unique } from '../helpers';
+import { AUDITOR, expect, loginAs, seed, test, unique } from '../helpers';
 import { call, createToken, mcpClient } from '../mcp-helpers';
 
 test('the MCP endpoint refuses requests without a valid token', async ({ request }) => {

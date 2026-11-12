@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN, PASSWORD, postForm, seed, signIn } from '../helpers';
+import { ADMIN, expect, PASSWORD, postForm, seed, signIn, test } from '../helpers';
 
 test.beforeEach(async ({ request }) => {
 	await seed(request);

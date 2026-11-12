@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../helpers';
 
 test('on first start, /setup creates the first admin with the code from the log', async ({
 	page,

@@ -40,7 +40,8 @@ describe('skills in MCP mode (#34, #44)', () => {
 			'audit-library-curator',
 			'audit-engagement-setup',
 			'audit-document-analysis',
-			'audit-role-discovery'
+			'audit-role-discovery',
+			'audit-plan-builder'
 		];
 		for (const skill of readdirSync(SKILLS)) {
 			const section = appModeSection(readFileSync(path.join(SKILLS, skill, 'SKILL.md'), 'utf8'));

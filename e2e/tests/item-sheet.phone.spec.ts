@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN, loginAs, seed } from '../helpers';
+import { ADMIN, expect, loginAs, seed, test } from '../helpers';
 
 test('on a phone the item sheet is full screen with a way back', async ({ page }) => {
 	const { users } = await seed(page.request);

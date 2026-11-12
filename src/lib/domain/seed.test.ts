@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { listArtifacts } from './artifacts';
 import { listEngagements, listScopes } from './engagements';
 import { listPeople } from './people';
+import { listEvents, listEvidence } from './planning';
 import { listRisks } from './risks';
 import { listAssessmentUnits, listSelected } from './selection';
 import { createTestDatabase } from '#lib/db/test-db.ts';
@@ -55,6 +56,11 @@ describe('seed', () => {
 			'Access control policy',
 			'Backup procedure'
 		]);
+		expect(listEvents(app, engagement.id).map((x) => x.title)).toEqual([
+			'Access and identity interview',
+			'Backup walkthrough'
+		]);
+		expect(listEvidence(app, engagement.id)).toHaveLength(3);
 		app.close();
 		rmSync(dataDir, { recursive: true, force: true });
 	});

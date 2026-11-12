@@ -2,7 +2,7 @@
 
 ## Tools
 
-About 34 tools, grouped by phase. Write tools accept several items per call.
+About 35 tools, grouped by phase. Write tools accept several items per call.
 
 | Group | Tools | Purpose |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ About 34 tools, grouped by phase. Write tools accept several items per call.
 | Set-up | select_requirements, upsert_scopes, set_scope_handling, upsert_people, upsert_risks | set_scope_handling regenerates assessment units. upsert_people takes roles; name and email are optional. |
 | Artifacts | list_artifacts, get_artifact_text, register_artifact | Text is returned in pages with locators. register_artifact stores text or a transcript, including one fetched from a third-party MCP server, or records a mentioned document. |
 | Internal requirements | list_internal_requirements, upsert_internal_requirements | Per auditee document, with quote, section and implements links. Always proposed. Never readable from another auditee's engagement. |
-| Planning | upsert_events, upsert_evidence_items, get_coverage, render_audit_plan | get_coverage returns, per requirement, the events that include it. |
+| Planning | list_events, upsert_events, upsert_evidence_items, get_coverage, render_audit_plan | Events and evidence written by AI are drafts until accepted. get_coverage returns, per requirement, the events that include it. render_audit_plan returns Markdown, or saves DOCX or PDF as a generated report. |
 | Execution | upsert_notes, link_evidence, get_event_status, render_post_event_report | upsert_notes writes typed notes with mentions. |
 | Conclusion | get_assessment_unit, list_assessment_units, propose_finding, render_findings_report | get_assessment_unit returns requirement, criteria, risks, evidence links with excerpts, and suspected issues. |
 | Cross-cutting | add_comment, get_history, revert | Work on any entity type. |
@@ -34,7 +34,7 @@ The seven skills in `skills/` currently run in files mode: they read and write Y
 | audit-engagement-setup | 1 to 4 | upsert and select tools |
 | audit-role-discovery | 3 | get_artifact_text, upsert_people |
 | audit-document-analysis | 5 | get_artifact_text, upsert_internal_requirements, set_criteria |
-| audit-plan-builder | 6 | upsert_events, upsert_evidence_items, get_coverage, render_audit_plan |
+| audit-plan-builder | 6 | list_events, upsert_events, upsert_evidence_items, get_coverage, render_audit_plan |
 | audit-event-debrief | 7 | upsert_notes, link_evidence, get_event_status, render_post_event_report |
 | audit-assurance-review | 8 | get_assessment_unit, propose_finding, render_findings_report |
 | audit-library-curator | after | set_guidance, set_criteria, link_requirements |
