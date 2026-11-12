@@ -9,6 +9,29 @@ Create the engagement folder and fill it far enough that planning can start. The
 
 Read `references/engagement-files.md` first. It defines the folder layout, file shapes and the rules every audit skill follows.
 
+## Where the engagement lives
+
+Check which tools you have before you start.
+
+- **App mode.** When the mcp-audit tools are available (`list_engagements`, `get_engagement_overview`, `select_requirements`, `upsert_scopes`, `set_scope_handling`, `upsert_people`, `upsert_risks`), the engagement is in the audit app. Use the tools; do not write YAML files.
+- **Files mode.** Without those tools, work in the engagement folder as described below.
+
+### In app mode
+
+| Step | Use |
+| --- | --- |
+| 1. Basics | The auditor creates the engagement in the app (Engagements, Create engagement: name, auditee, dates, languages). Then `list_engagements` to find its id and `get_engagement_overview` to see what is done and what is next. |
+| 2. Sources | `search_requirements`; a missing source is imported with `upsert_sources` and `upsert_requirements` (same licence rules as below) |
+| 3. Select | `select_requirements` with `select` and `deselect` lists of `"<source>:<reference>"`; each is pinned at the library's current version |
+| 4. Scopes | `upsert_scopes` with `mode` and the scopes; then `set_scope_handling` per requirement (`common` or `per_scope`). The result reports the number of assessment units: tell the auditor. Dropping a scope that has units needs the auditor's yes, then `confirm_units_lost: true` |
+| 5. Roles | `upsert_people`: role required, name, unit and email optional. They arrive as proposed for the auditor to accept on Set-up, Auditee |
+| 6. Risks | `upsert_risks` with level, origin (`auditee_register` or `auditor`) and the selected requirements each affects; the highest linked level becomes the requirement's default criticality |
+| 7. Hand over | `get_engagement_overview` again, and summarise its phases and the open points |
+
+If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor; only they can switch it on (Home, engagement details). If it answers `stale_write`, read again and redo the change on top. Everything you write shows in the app as "Claude on behalf of <auditor>"; judgement writes land as proposed for the auditor to accept.
+
+The engagement's AI switch, plan status, model profile and carry-over of internal requirements are the auditor's settings in the app; no tool changes them.
+
 ## Steps
 
 ### 1. Collect the basics
@@ -19,7 +42,7 @@ Take what the auditor already said. Ask only for what is missing, in one message
 - working language and report language
 - which external sources apply (for example NIS 2, ISO/IEC 27001:2022)
 
-Create `engagements/<id>/engagement.yaml` with the default finding scale unless the auditor gives another.
+Create `engagements/<id>/engagement.yaml` with the default finding scale unless the auditor gives another. In app mode the auditor creates the engagement in the app; it gets the default scale, one scope named after the auditee and the creator as lead auditor.
 
 ### 2. Make sure the sources are in the library
 

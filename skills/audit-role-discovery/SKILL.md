@@ -9,6 +9,24 @@ Find out, from the auditee's own documents, which roles exist and what each is r
 
 Read `references/engagement-files.md` first.
 
+## Where the documents and roles live
+
+- **App mode.** When the mcp-audit tools are available (`list_artifacts`, `get_artifact_text`, `upsert_people`), the documents and roles are in the audit app. Use the tools; do not write YAML files.
+- **Files mode.** Without those tools, read `documents/` and write `roles.yaml` as described below.
+
+### In app mode
+
+| Step | Use |
+| --- | --- |
+| Find the engagement | `list_engagements`, then `get_engagement_overview`: it lists the roles already recorded (`people`, with status) and the selected requirements |
+| 1. Read | `list_artifacts`, then `get_artifact_text` page by page for each readable document |
+| 2. Write | `upsert_people` with `role`, `unit`, `responsibilities` (a list), `source_document` and `source_section`; `name` and `email` only when the document names the holder. A role that already exists is matched by its name and updated rather than duplicated |
+| 3. Check | report the gaps in your answer; they are observations, not records |
+
+Every role you write lands as proposed. The auditor sees the source and responsibilities on Set-up, Auditee and accepts, rejects or accepts all. There is no `aliases` or `requirements` field in the app: put title variants and the requirements a role answers for in `responsibilities` or in your summary.
+
+If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor; only they can switch it on (Home, engagement details). If it answers `stale_write`, read again and redo the change on top. Everything you write shows in the app as "Claude on behalf of <auditor>"; judgement writes land as proposed for the auditor to accept.
+
 ## Steps
 
 ### 1. Read for roles
@@ -44,7 +62,7 @@ Present these as observations for the auditor to follow up, never as findings.
 
 ### 4. Hand over
 
-Log the run and finish with the summary: roles proposed, how many have named holders, the gaps from step 3, and a suggested interview counterpart per requirement group for `audit-plan-builder`.
+Log the run (files mode only; the app keeps every version) and finish with the summary: roles proposed, how many have named holders, the gaps from step 3, and a suggested interview counterpart per requirement group for `audit-plan-builder`.
 
 ## Judgement notes
 

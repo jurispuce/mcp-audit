@@ -202,11 +202,11 @@ Use the tools instead of the files; the steps stay the same. Rough mapping:
 | File | MCP tools |
 | --- | --- |
 | library/sources/*.yaml | search_requirements, get_requirement, upsert_sources, upsert_requirements, link_requirements, set_guidance, set_criteria |
-| engagement.yaml, scopes, roles, risks | get_engagement_overview, upsert_scopes, upsert_people, upsert_risks |
+| engagement.yaml, scopes, roles, risks | list_engagements, get_engagement_overview, upsert_scopes, upsert_people, upsert_risks |
 | requirements.yaml | search_requirements, select_requirements, set_scope_handling |
-| internal-requirements.yaml | upsert_requirements, link_requirements |
+| internal-requirements.yaml | list_internal_requirements, upsert_internal_requirements (with `implements`) |
 | criteria.yaml | set_criteria |
-| documents/ | list_artifacts, get_artifact_text, register_artifact |
+| documents/, documents.yaml | list_artifacts, get_artifact_text, register_artifact (`mentioned: true` for a document not received) |
 | plan/ | upsert_events, upsert_evidence_items, render_audit_plan |
 | events/ | link_evidence, get_event_status, render_post_event_report |
 | findings.yaml | get_assessment_unit, propose_finding |

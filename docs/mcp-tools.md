@@ -2,14 +2,15 @@
 
 ## Tools
 
-About 32 tools, grouped by phase. Write tools accept several items per call.
+About 34 tools, grouped by phase. Write tools accept several items per call.
 
 | Group | Tools | Purpose |
 | --- | --- | --- |
 | Orientation | list_engagements, get_engagement_overview | Overview returns phase progress, counts and what is missing next. |
 | Library | search_requirements, get_requirement, upsert_sources, upsert_requirements, link_requirements, set_guidance, set_criteria | get_requirement returns text with links, guidance and criteria. |
 | Set-up | select_requirements, upsert_scopes, set_scope_handling, upsert_people, upsert_risks | set_scope_handling regenerates assessment units. upsert_people takes roles; name and email are optional. |
-| Artifacts | list_artifacts, get_artifact_text, register_artifact | Text is returned in pages with locators. register_artifact stores text or a transcript, including one fetched from a third-party MCP server. |
+| Artifacts | list_artifacts, get_artifact_text, register_artifact | Text is returned in pages with locators. register_artifact stores text or a transcript, including one fetched from a third-party MCP server, or records a mentioned document. |
+| Internal requirements | list_internal_requirements, upsert_internal_requirements | Per auditee document, with quote, section and implements links. Always proposed. Never readable from another auditee's engagement. |
 | Planning | upsert_events, upsert_evidence_items, get_coverage, render_audit_plan | get_coverage returns, per requirement, the events that include it. |
 | Execution | upsert_notes, link_evidence, get_event_status, render_post_event_report | upsert_notes writes typed notes with mentions. |
 | Conclusion | get_assessment_unit, list_assessment_units, propose_finding, render_findings_report | get_assessment_unit returns requirement, criteria, risks, evidence links with excerpts, and suspected issues. |
@@ -21,7 +22,7 @@ About 32 tools, grouped by phase. Write tools accept several items per call.
 - `link_evidence`, `propose_finding`, AI-created events, roles and internal requirements always land as proposed.
 - No tool approves a finding, sets plan status, or deletes an artifact file.
 - Tools refuse to run on an engagement where `ai_allowed` is off.
-- Tools refuse cross-auditee reads of internal requirements.
+- Tools refuse cross-auditee reads of internal requirements. Engagement tools take `engagement_id`; `get_requirement`, `add_comment`, `get_history` and `revert` take it too, to reach an engagement's own items.
 - Results are compact by default and include ids.
 
 ## Skills
@@ -32,7 +33,7 @@ The seven skills in `skills/` currently run in files mode: they read and write Y
 | --- | --- | --- |
 | audit-engagement-setup | 1 to 4 | upsert and select tools |
 | audit-role-discovery | 3 | get_artifact_text, upsert_people |
-| audit-document-analysis | 5 | get_artifact_text, upsert_requirements, link_requirements, set_criteria |
+| audit-document-analysis | 5 | get_artifact_text, upsert_internal_requirements, set_criteria |
 | audit-plan-builder | 6 | upsert_events, upsert_evidence_items, get_coverage, render_audit_plan |
 | audit-event-debrief | 7 | upsert_notes, link_evidence, get_event_status, render_post_event_report |
 | audit-assurance-review | 8 | get_assessment_unit, propose_finding, render_findings_report |

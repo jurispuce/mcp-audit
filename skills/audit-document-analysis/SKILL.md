@@ -9,6 +9,27 @@ Turn the auditee's documents into internal requirements: the specific commitment
 
 Read `references/engagement-files.md` first.
 
+## Where the documents live
+
+- **App mode.** When the mcp-audit tools are available (`list_artifacts`, `get_artifact_text`, `upsert_internal_requirements`, `list_internal_requirements`), the documents were uploaded to the engagement in the app (Set-up, Documents) and their text was extracted there. Use the tools; do not write YAML files.
+- **Files mode.** Without those tools, the documents are in the engagement's `documents/` folder.
+
+### In app mode
+
+| Step | Use |
+| --- | --- |
+| Find the engagement | `list_engagements`, then `get_engagement_overview` for the selected requirements (use their `ref`, for example `nis2:Art. 21(2)(i)`) |
+| 1. Index | `list_artifacts`. A document whose `text` is `failed` or `unsupported` cannot be read here: say so and skip it. Titles, kinds, versions and approval dates are edited by the auditor in the documents list; tell them what you read from each document rather than writing it |
+| 2. Extract | `get_artifact_text` page by page (continue with `offset = next_offset` until it is null). Each page has a `locator`; put it in `section` when the document has no numbering. Write with `upsert_internal_requirements`: one call per document with its `artifact_id`, each item with `title` (the plain restatement), `quote` and `section` |
+| 3. Map | the same call's `implements`: `[{requirement: "nis2:Art. 21(2)(i)", coverage: "partial"}]`. Only selected external requirements of this engagement |
+| Re-runs | `list_internal_requirements` first; update an existing one by giving its `ref` (INT-n) instead of adding a duplicate |
+| Mentioned documents | `register_artifact` with `mentioned: true` and the document's name |
+| 5. Criteria | `set_criteria` on the external requirement, with `mode: add` |
+
+Everything you add lands as proposed: the auditor accepts, rejects or accepts all on Set-up, Documents. Internal requirements belong to this auditee only and never appear in another client's engagement; do not try to read or reuse another client's documents or requirements.
+
+If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor; only they can switch it on (Home, engagement details). If it answers `stale_write`, read again and redo the change on top. Everything you write shows in the app as "Claude on behalf of <auditor>"; judgement writes land as proposed for the auditor to accept.
+
 ## Steps
 
 ### 1. Index the documents
@@ -48,7 +69,7 @@ Also report: documents that contradict each other, documents referring to other 
 
 Where an internal requirement gives a concrete, testable rule, propose it as an engagement-specific criterion in `criteria.yaml` with the evidence that would show it operating (for example "review records for the last two cycles").
 
-Mark each document `analysed: true`, log the run and finish with the summary.
+Mark each document `analysed: true`, log the run and finish with the summary. In app mode there is nothing to mark or log: the app keeps every version. End by telling the auditor how many internal requirements wait for review on Set-up, Documents.
 
 ## Judgement notes
 
