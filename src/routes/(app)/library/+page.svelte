@@ -5,7 +5,6 @@
 	import type { TreeNode } from '#lib/domain/library.ts';
 
 	let { data, form } = $props();
-	let importing = $state(false);
 
 	/** Keep the current query string (source, q) and open an item over it. */
 	function itemHref(id: string) {
@@ -35,7 +34,9 @@
 			data-sveltekit-reset="false"
 			aria-current={openItem === `requirement:${n.id}` ? 'true' : undefined}
 		>
-			<span class="au-ref">{n.refCode}</span><span>{n.title}</span>
+			<span class="au-ref">{n.refCode}</span><span>{n.title}</span>{#if n.status === 'proposed'}<span
+					class="au-badge au-badge--ai">Proposed</span
+				>{/if}
 		</a>
 		{#if n.children.length}
 			<ul>
@@ -45,71 +46,17 @@
 	</li>
 {/snippet}
 
-<section class="au-screen">
-	<header class="au-screen__head">
-		<h1 class="au-screen__title">Library</h1>
-		{#if !importing}<button class="au-btn" type="button" onclick={() => (importing = true)}
-				>Import source</button
-			>{/if}
-	</header>
-
+<div class="au-stack">
 	{#if form?.report}
 		{@const r = form.report}
 		<div class="au-alert au-alert--ok" role="status" data-testid="import-report">
 			<p class="au-alert__title">{r.source.created ? 'Imported' : 'Updated'} {r.source.title}</p>
-			<p>
-				{r.requirements.created} new, {r.requirements.updated} changed, {r.requirements.restored} restored,
-				{r.requirements.unchanged} unchanged requirements. {r.links.created} links, {r.guidance.created +
-					r.guidance.updated}
-				guidance and {r.criteria.created} criteria added or changed.
-			</p>
-			{#if r.notInFile.length}
-				<p>Not in the file, left as they were: {r.notInFile.join(', ')}.</p>
-			{/if}
-			{#if r.warnings.length}
-				<ul>
-					{#each r.warnings as w, i (i)}<li>{w}</li>{/each}
-				</ul>
-			{/if}
 			<div>
 				<a class="au-btn" href="?source={encodeURIComponent(r.source.code)}">Open {r.source.title}</a>
 			</div>
 		</div>
 	{:else}
 		<FormMessage {form} />
-	{/if}
-
-	{#if importing}
-		<form
-			method="POST"
-			action="?/import"
-			enctype="multipart/form-data"
-			class="au-item au-stack"
-			use:enhance={() =>
-				async ({ update, result }) => {
-					await update();
-					if (result.type === 'success') importing = false;
-				}}
-		>
-			<h2 class="au-section__title">Import a source</h2>
-			<p class="au-muted">
-				A YAML file in the shape the audit skills use: <span class="au-ref"
-					>id, title, type, language, licence_note, requirements</span
-				>. Importing the same file again changes nothing; changed requirements become new versions.
-			</p>
-			<div class="au-field">
-				<label for="import-file">YAML file</label>
-				<input id="import-file" type="file" name="file" accept=".yaml,.yml,text/yaml" />
-			</div>
-			<div class="au-field">
-				<label for="import-yaml">Or paste the YAML</label>
-				<textarea id="import-yaml" name="yaml" rows="6"></textarea>
-			</div>
-			<div class="au-row">
-				<button class="au-btn au-btn--primary" type="submit">Import source</button>
-				<button class="au-btn au-btn--ghost" type="button" onclick={() => (importing = false)}>Cancel</button>
-			</div>
-		</form>
 	{/if}
 
 	<form method="GET" class="au-row" role="search">
@@ -197,4 +144,4 @@
 			{/each}
 		</section>
 	{/if}
-</section>
+</div>

@@ -91,6 +91,13 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 - "Propose findings" (all) or "Propose" (one). Rule: incomplete evidence gives no reasonable assurance; a contradicting link gives a non-conformity (major when the evidence is high criticality); all evidence received with supporting links gives conformity; a suspected issue blocks proposing conformity.
 - Accept as draft, save draft, approve (locks), reopen, approve all drafts. Comments and history per finding.
 
+### Library (outside engagements)
+- Tabs: Sources, Review, Mapping, Import.
+- Import: upload the text of a law or standard (PDF, Word, text) as a library document; copy the import and mapping prompts for Claude; or import a YAML file.
+- Review: what AI proposed for the library. An imported source is previewed as a tree, edited in place, and published as a whole; changes to published requirements show what they were; accept, reject or accept all. Nothing proposed is selectable or searchable.
+- Mapping: choose the source to map and the existing source to map it to; each requirement shows its links to the target with type, coverage and the reason; accept, edit or reject each, accept all, or map by hand. A summary counts mapped requirements.
+- *Milestone 7:* "Extract requirements" and "Propose mapping" buttons run the same flow inside the app.
+
 ### Item sheet
 - Details, Comments, History for any record. History lists versions with author, time, channel and changed fields, and offers revert on every version except the current one.
 

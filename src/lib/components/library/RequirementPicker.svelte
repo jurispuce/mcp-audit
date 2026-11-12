@@ -6,9 +6,11 @@
 	interface Props {
 		label: string;
 		excludeId?: string;
+		/** Search only this source (by code). */
+		source?: string;
 		onpick: (r: Requirement) => void;
 	}
-	let { label, excludeId, onpick }: Props = $props();
+	let { label, excludeId, source, onpick }: Props = $props();
 
 	let query = $state('');
 	let results = $state<(Requirement & { snippet: string })[]>([]);
@@ -24,7 +26,7 @@
 				searched = false;
 				return;
 			}
-			const qs = `q=${encodeURIComponent(query)}${excludeId ? `&exclude=${encodeURIComponent(excludeId)}` : ''}`;
+			const qs = `q=${encodeURIComponent(query)}${excludeId ? `&exclude=${encodeURIComponent(excludeId)}` : ''}${source ? `&source=${encodeURIComponent(source)}` : ''}`;
 			const res = await api<{ results: (Requirement & { snippet: string })[] }>(
 				'GET',
 				`/api/library/search?${qs}`

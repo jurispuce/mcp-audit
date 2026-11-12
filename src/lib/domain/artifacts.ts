@@ -358,14 +358,27 @@ export function getArtifactText(app: AppDatabase, id: string, offset = 0, maxCha
 			a.state === 'mentioned' ? 'it was mentioned but not received yet' : `its text is ${a.textStatus}`;
 		throw new ValidationError(`No text for "${a.displayName}": ${why}.`);
 	}
-	const total = row.text.length;
+	return {
+		artifactId: id,
+		title: a.displayName,
+		...pageOf(row.text, JSON.parse(row.page_starts) as number[], offset, maxChars)
+	};
+}
+
+/** A slice of extracted text, cut at a line break where possible, with a page or character locator. */
+export function pageOf(
+	text: string,
+	starts: number[],
+	offset = 0,
+	maxChars = 8000
+): { offset: number; nextOffset: number | null; totalLength: number; locator: string; text: string } {
+	const total = text.length;
 	const start = Math.max(0, Math.min(offset, total));
 	let end = Math.min(total, start + Math.max(500, Math.min(maxChars, 20000)));
 	if (end < total) {
-		const nl = row.text.lastIndexOf('\n', end);
+		const nl = text.lastIndexOf('\n', end);
 		if (nl > start + 200) end = nl;
 	}
-	const starts = JSON.parse(row.page_starts) as number[];
 	const pageAt = (pos: number) => {
 		let p = 1;
 		for (let i = 0; i < starts.length; i++) if (starts[i]! <= pos) p = i + 1;
@@ -380,13 +393,11 @@ export function getArtifactText(app: AppDatabase, id: string, offset = 0, maxCha
 				: `p. ${first}-${last}`
 			: `characters ${start}-${end}`;
 	return {
-		artifactId: id,
-		title: a.displayName,
 		offset: start,
 		nextOffset: end < total ? end : null,
 		totalLength: total,
 		locator,
-		text: row.text.slice(start, end)
+		text: text.slice(start, end)
 	};
 }
 

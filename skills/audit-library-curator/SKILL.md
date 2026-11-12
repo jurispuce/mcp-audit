@@ -13,7 +13,7 @@ Read `references/engagement-files.md` first.
 
 Check which tools you have before you start.
 
-- **App mode.** When the mcp-audit tools are available (`search_requirements`, `get_requirement`, `set_guidance`, `set_criteria`, `link_requirements`, `upsert_sources`, `upsert_requirements`), the library is in the audit app. Use the tools; do not write YAML files. Every change you make is versioned and shown to the team as "Claude on behalf of <auditor>", so the app keeps the log for you.
+- **App mode.** When the mcp-audit tools are available (`search_requirements`, `get_requirement`, `set_guidance`, `set_criteria`, `link_requirements`, `upsert_sources`, `upsert_requirements`, `list_library_documents`, `get_library_document_text`, `list_library_proposals`), the library is in the audit app. Use the tools; do not write YAML files. Every change you make is versioned and shown to the team as "Claude on behalf of <auditor>", so the app keeps the log for you.
 - **Files mode.** Without those tools, the library is in `library/sources/*.yaml`, in the shape shown in `audit-engagement-setup`, with changes logged in `library/log.md`.
 
 The steps below are the same in both modes; where they differ, the app-mode way is given first.
@@ -26,9 +26,13 @@ The steps below are the same in both modes; where they differ, the app-mode way 
 | Name a requirement | its id, or `"<source code>:<reference>"`, for example `"nis2:Art. 21(2)(d)"` |
 | Improve guidance | `set_guidance` with the full new text; pass `base_version` from `get_requirement` so you never overwrite someone's newer edit |
 | Refine general criteria | `set_criteria` with `mode: add` to add, or `mode: replace` with the complete list when the auditor agreed to the whole set |
-| Map sources | `link_requirements` in batches; put the one-line justification in `note`, and start the note with "Low confidence:" where it applies |
-| Import or update a standard | `upsert_sources`, then `upsert_requirements` (only the fields you give change) |
+| Map sources | first ask the auditor which existing source to map to; then `link_requirements` in batches, each with a one-line reason in `note` (start it with "Low confidence:" where it applies) |
+| Import a law or standard | the document: `list_library_documents`, then `get_library_document_text` page by page (or the file the auditor gave you); then `upsert_sources` with `document_id`, then `upsert_requirements` with the reference as written, a short title, the text (licence permitting) and `parent` |
+| Update a standard | `upsert_requirements` (only the fields you give change) |
+| See what waits for review | `list_library_proposals` |
 | Undo | `get_history` and `revert` on the item |
+
+Everything you write to the library is a proposal: a new source stays unpublished, and new or changed requirements and links are proposed until the auditor accepts them on Library, Review and Library, Mapping. Proposed requirements are not used in audits. End every import or mapping by telling the auditor how many proposals wait and where (`list_library_proposals`).
 
 If a tool answers `stale_write`, someone changed the item since you read it: fetch it again, show the auditor the difference, and redo the change on top. If it answers `forbidden`, do not look for a way around it; tell the auditor what was refused and why.
 

@@ -34,6 +34,9 @@ Copy these as the route table. `:e` is the engagement id.
 ```
 /                              Engagements list
 /library                       Sources and requirements library
+/library/review                Imports and changes proposed by AI: preview, edit, accept, publish
+/library/mapping               Map one source to another; review proposed links, map by hand
+/library/import                Library documents, import with Claude, YAML import
 /settings                      Users, models, templates
 /e/:e                          Home (phase checklist)
 /e/:e/setup/requirements       Selection, scope handling per requirement

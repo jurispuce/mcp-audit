@@ -3,6 +3,9 @@ import { ADMIN, expect, loginAs, sampleCopy, seed, test } from '../helpers';
 const routes = (e: string, ev: string) => [
 	'/',
 	'/library',
+	'/library/review',
+	'/library/mapping',
+	'/library/import',
 	'/settings',
 	`/e/${e}`,
 	`/e/${e}/setup/requirements`,

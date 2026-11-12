@@ -68,6 +68,7 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 		'auditee_id',
 		'artifact_id',
 		'engagement_id',
+		'document_id',
 		'status'
 	],
 	detailColumns: ['code', 'type', 'title', 'edition', 'language', 'licence_note'],
@@ -99,7 +100,14 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 			out.title = title;
 		}
 		if (pick(input, existing, 'language')) out.language = normalizeLanguage(input.language ?? 'en');
-		for (const col of ['edition', 'licence_note', 'auditee_id', 'artifact_id', 'engagement_id'])
+		for (const col of [
+			'edition',
+			'licence_note',
+			'auditee_id',
+			'artifact_id',
+			'engagement_id',
+			'document_id'
+		])
 			if (col in input) out[col] = optional(input[col]);
 		if ('status' in input) {
 			const st = str(input.status);
@@ -812,8 +820,10 @@ export function upsertSources(
 		edition?: string;
 		language?: string;
 		licence_note?: string;
+		/** The library document it is imported from. */
+		document_id?: string;
 	}[]
-): { id: string; code: string; result: 'created' | 'updated' | 'unchanged' }[] {
+): { id: string; code: string; status: string; result: 'created' | 'updated' | 'unchanged' }[] {
 	return app.sqlite.transaction(() =>
 		sources.map((s) => {
 			const code = String(s.code ?? '')
@@ -823,7 +833,7 @@ export function upsertSources(
 			if (row?.auditee_id)
 				throw new ValidationError(`${code} is an internal source; it is changed through its engagement.`);
 			const data: Record<string, unknown> = { code, title: s.title };
-			for (const key of ['type', 'edition', 'language', 'licence_note'] as const)
+			for (const key of ['type', 'edition', 'language', 'licence_note', 'document_id'] as const)
 				if (s[key] !== undefined) data[key] = s[key];
 			if (!row) {
 				const created = createEntity(app, actor, sourceDefinition, {
@@ -831,7 +841,12 @@ export function upsertSources(
 					language: 'en',
 					...data
 				});
-				return { id: String(created.row.id), code, result: 'created' as const };
+				return {
+					id: String(created.row.id),
+					code,
+					status: String(created.row.status),
+					result: 'created' as const
+				};
 			}
 			const res = write(app, actor, sourceDefinition, {
 				op: 'update',
@@ -842,6 +857,7 @@ export function upsertSources(
 			return {
 				id: String(row.id),
 				code,
+				status: String(res.row.status),
 				result: res.changed ? ('updated' as const) : ('unchanged' as const)
 			};
 		})

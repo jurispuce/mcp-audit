@@ -2,12 +2,13 @@
 
 ## Tools
 
-About 35 tools, grouped by phase. Write tools accept several items per call.
+About 47 tools, grouped by phase. Write tools accept several items per call.
 
 | Group | Tools | Purpose |
 | --- | --- | --- |
 | Orientation | list_engagements, get_engagement_overview | Overview returns phase progress, counts and what is missing next. |
-| Library | search_requirements, get_requirement, upsert_sources, upsert_requirements, link_requirements, set_guidance, set_criteria | get_requirement returns text with links, guidance and criteria. |
+| Library | search_requirements, get_requirement, upsert_sources, upsert_requirements, link_requirements, set_guidance, set_criteria | get_requirement returns text with links, guidance and criteria. Sources, requirements and links written by AI are proposed until reviewed. |
+| Library import | list_library_documents, get_library_document_text, list_library_proposals | Read the laws and standards uploaded on Library, Import, and see what waits on Library, Review and Mapping. |
 | Set-up | select_requirements, upsert_scopes, set_scope_handling, upsert_people, upsert_risks | set_scope_handling regenerates assessment units. upsert_people takes roles; name and email are optional. |
 | Artifacts | list_artifacts, get_artifact_text, register_artifact | Text is returned in pages with locators. register_artifact stores text or a transcript, including one fetched from a third-party MCP server, or records a mentioned document. |
 | Internal requirements | list_internal_requirements, upsert_internal_requirements | Per auditee document, with quote, section and implements links. Always proposed. Never readable from another auditee's engagement. |
@@ -19,7 +20,7 @@ About 35 tools, grouped by phase. Write tools accept several items per call.
 ## Rules built into the tools
 
 - Every write is versioned with the token owner as user and the AI as agent.
-- `link_evidence`, `propose_finding`, AI-created events, roles and internal requirements always land as proposed.
+- `link_evidence`, `propose_finding`, AI-created events, roles, internal requirements, library sources, requirements and requirement links always land as proposed.
 - No tool approves a finding, sets plan status, or deletes an artifact file.
 - Tools refuse to run on an engagement where `ai_allowed` is off.
 - Tools refuse cross-auditee reads of internal requirements. Engagement tools take `engagement_id`; `get_requirement`, `add_comment`, `get_history` and `revert` take it too, to reach an engagement's own items.

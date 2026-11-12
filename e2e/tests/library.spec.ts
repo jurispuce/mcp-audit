@@ -6,14 +6,9 @@ test.beforeEach(async ({ page }) => {
 	await loginAs(page, AUDITOR);
 });
 
-/** Import a YAML source by pasting it on the Library screen. */
+/** Import a YAML source by pasting it on Library, Import. */
 async function importYaml(page: Page, yaml: string) {
-	await page.goto('/library');
-	// The toggle works once the page has hydrated; under load the first click can come earlier.
-	await expect(async () => {
-		await page.getByRole('button', { name: 'Import source' }).click();
-		await expect(page.getByLabel('Or paste the YAML')).toBeVisible({ timeout: 1000 });
-	}).toPass();
+	await page.goto('/library/import');
 	await page.getByLabel('Or paste the YAML').fill(yaml);
 	await page.getByRole('button', { name: 'Import source' }).click();
 	await expect(page.getByTestId('import-report')).toBeVisible();
@@ -73,8 +68,7 @@ test('full-text search over code, title and text (#25)', async ({ page }) => {
 test('import a source from a YAML file; importing it again changes nothing (#26)', async ({ page }) => {
 	const code = unique('policy');
 	const yaml = `id: ${code}\ntitle: Test policy ${code}\ntype: standard\nlanguage: en\nlicence_note: Internal test\nrequirements:\n  - {id: "1", title: Scope}\n  - {id: "1.1", parent: "1", title: Applies to all staff}\n`;
-	await page.goto('/library');
-	await page.getByRole('button', { name: 'Import source' }).click();
+	await page.goto('/library/import');
 	await page
 		.getByLabel('YAML file')
 		.setInputFiles({ name: `${code}.yaml`, mimeType: 'text/yaml', buffer: Buffer.from(yaml) });
@@ -83,7 +77,6 @@ test('import a source from a YAML file; importing it again changes nothing (#26)
 	await expect(report).toContainText(`Imported Test policy ${code}`);
 	await expect(report).toContainText('2 new, 0 changed, 0 restored, 0 unchanged');
 
-	await page.getByRole('button', { name: 'Import source' }).click();
 	await page
 		.getByLabel('YAML file')
 		.setInputFiles({ name: `${code}.yaml`, mimeType: 'text/yaml', buffer: Buffer.from(yaml) });
@@ -96,8 +89,7 @@ test('import a source from a YAML file; importing it again changes nothing (#26)
 });
 
 test('a broken file is refused with a reason and nothing is imported (#26)', async ({ page }) => {
-	await page.goto('/library');
-	await page.getByRole('button', { name: 'Import source' }).click();
+	await page.goto('/library/import');
 	await page.getByLabel('Or paste the YAML').fill('id: broken\ntitle: Broken\nrequirements:\n  - {id: A}\n');
 	await page.getByRole('button', { name: 'Import source' }).click();
 	await expect(page.getByRole('alert')).toContainText('Requirement A has no title');

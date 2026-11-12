@@ -355,3 +355,58 @@ export function acceptAllLinks(
 		return ids.length;
 	})();
 }
+
+/**
+ * A person edits a proposed requirement before accepting it: reference, title, text and parent (by
+ * reference in the same source). It stays proposed until accepted.
+ */
+export function editRequirement(
+	app: AppDatabase,
+	actor: Actor,
+	id: string,
+	baseVersion: number,
+	input: { ref_code?: string; title?: string; text?: string | null; parent?: string | null }
+): Requirement {
+	const row = sharedRequirement(app, id);
+	const data: Record<string, unknown> = {};
+	if (input.ref_code !== undefined) data.ref_code = input.ref_code;
+	if (input.title !== undefined) data.title = input.title;
+	if (input.text !== undefined) data.text = input.text || null;
+	if (input.parent !== undefined) {
+		if (!input.parent) data.parent_id = null;
+		else {
+			const parent = app.sqlite
+				.prepare('SELECT id FROM requirement WHERE source_id = ? AND ref_code = ? AND deleted = 0')
+				.get(row.source_id, input.parent.trim()) as { id: string } | undefined;
+			if (!parent)
+				throw new ValidationError(`No requirement ${input.parent} in this source to be the parent.`, {
+					parent: 'Not found'
+				});
+			data.parent_id = parent.id;
+		}
+	}
+	updateEntity(app, actor, requirementDefinition, id, baseVersion, data);
+	return getRequirement(app, id);
+}
+
+/** What the last confirmed version said, for showing an AI edit as a change. */
+export function lastConfirmed(
+	app: AppDatabase,
+	id: string
+): { title: string; text: string | null; refCode: string } | null {
+	const revisions = app.sqlite
+		.prepare(
+			"SELECT snapshot FROM revision WHERE entity_type = 'requirement' AND entity_id = ? ORDER BY version DESC"
+		)
+		.all(id) as { snapshot: string }[];
+	for (const r of revisions) {
+		const snap = JSON.parse(r.snapshot) as Row;
+		if (snap.status === 'confirmed')
+			return {
+				title: String(snap.title),
+				text: (snap.text as string | null) ?? null,
+				refCode: String(snap.ref_code)
+			};
+	}
+	return null;
+}

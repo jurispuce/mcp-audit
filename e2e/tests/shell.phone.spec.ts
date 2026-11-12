@@ -41,7 +41,10 @@ test('on a phone: every tappable element is at least 44px high', async ({ page }
 		'/',
 		'/library',
 		'/library?source=nis2',
-		'/library?q=incident'
+		'/library?q=incident',
+		'/library/review',
+		'/library/mapping',
+		'/library/import'
 	]) {
 		await page.goto(route);
 		const small = await page.evaluate(() =>

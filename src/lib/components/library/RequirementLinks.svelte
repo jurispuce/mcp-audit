@@ -89,6 +89,7 @@
 						>
 							<span class="au-ref">{l.other.refCode} · {l.other.sourceCode}</span>
 							<span>{l.other.title}</span>
+							{#if l.status === 'proposed'}<span class="au-badge au-badge--ai">Proposed</span>{/if}
 							{#if l.coverage}<span class="au-badge"
 									>{l.coverage === 'full' ? 'Full coverage' : 'Partial coverage'}</span
 								>{/if}

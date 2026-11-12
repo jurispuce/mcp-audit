@@ -140,6 +140,8 @@ export const source = sqliteTable(
 		artifactId: text('artifact_id'),
 		/** Internal sources: the engagement they were extracted in (carry-over decides reuse). */
 		engagementId: text('engagement_id'),
+		/** The library document a shared source was imported from (#72). */
+		documentId: text('document_id'),
 		/** A source AI created waits as proposed until a person publishes it (#69). */
 		status: text('status', { enum: ['proposed', 'active'] })
 			.notNull()
@@ -565,3 +567,24 @@ export const finding = sqliteTable(
 	},
 	(t) => [index('finding_engagement').on(t.engagementId), index('finding_unit').on(t.assessmentUnitId)]
 );
+
+/** The file of a law or standard kept with the library, to import requirements from (#72). Shared: no client data. */
+export const libraryDocument = sqliteTable('library_document', {
+	...entityColumns(),
+	title: text('title'),
+	filename: text('filename').notNull(),
+	fileHash: text('file_hash').notNull(),
+	mimeType: text('mime_type'),
+	size: integer('size').notNull(),
+	textStatus: text('text_status', { enum: ['extracted', 'failed', 'unsupported'] }).notNull()
+});
+
+/** Extracted text of a library document, apart from the versioned row. */
+export const libraryDocumentText = sqliteTable('library_document_text', {
+	documentId: text('document_id')
+		.primaryKey()
+		.references(() => libraryDocument.id),
+	text: text('text').notNull(),
+	pageStarts: text('page_starts', { mode: 'json' }).$type<number[]>().notNull(),
+	extractedAt: integer('extracted_at', { mode: 'timestamp_ms' }).notNull()
+});

@@ -32,6 +32,8 @@ import '#lib/domain/entities.ts';
 import { APP_VERSION } from '#lib/version.ts';
 import { getEngagement } from '#lib/domain/engagements.ts';
 import { registerSetupTools } from './setup-tools';
+import { registerLibraryImportTools } from './library-tools';
+import { assertLibraryDocument } from '#lib/domain/library-documents.ts';
 import { registerPlanTools } from './plan-tools';
 import { registerRunTools } from './run-tools';
 
@@ -47,7 +49,7 @@ const INSTRUCTIONS = `mcp-audit is an audit planning and running database. You a
 Rules: every change you make is versioned and shown as "${AGENT_NAME} on behalf of <auditor>". Judgement writes (internal requirements, evidence links, findings, drafted events, roles) are stored as proposed for a person to accept. You cannot approve findings, change plan status or delete files. Results are compact JSON and include ids; pass ids back to other tools.
 Start with list_engagements, then get_engagement_overview to see the phases and what is missing next.
 Set-up: select_requirements, upsert_scopes, set_scope_handling, upsert_people (roles, proposed), upsert_risks. Documents: list_artifacts, get_artifact_text (paged, cite the locator), register_artifact. Internal requirements from the auditee's documents: list_internal_requirements, upsert_internal_requirements (proposed). Planning: list_events, upsert_events and upsert_evidence_items (drafts until the auditor accepts them), get_coverage, render_audit_plan. Running: get_event_status, upsert_notes, link_evidence (proposed), render_post_event_report. Concluding: list_assessment_units, get_assessment_unit, propose_finding (proposed; missing evidence means no reasonable assurance), render_findings_report. Approval is done by the auditor in the app. Engagement tools refuse to run where the auditor switched AI off, and never read another auditee's internal requirements.
-Library: search_requirements and get_requirement read; upsert_sources, upsert_requirements, link_requirements, set_guidance and set_criteria write. A requirement can be named by its id or as "<source code>:<reference>", for example "nis2:Art. 21(2)(b)". Pass engagement_id to get_requirement, add_comment, get_history and revert to work on an engagement's own items.`;
+Library: search_requirements and get_requirement read; upsert_sources, upsert_requirements, link_requirements, set_guidance and set_criteria write. Library documents (laws and standards to import from): list_library_documents, get_library_document_text. Sources, requirements and links you write are proposed until the auditor reviews them (list_library_proposals); before mapping, ask the auditor which existing source to map to. A requirement can be named by its id or as "<source code>:<reference>", for example "nis2:Art. 21(2)(b)". Pass engagement_id to get_requirement, add_comment, get_history and revert to work on an engagement's own items.`;
 
 type Json = Record<string, unknown> | unknown[];
 
@@ -108,6 +110,7 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 		.optional()
 		.describe("Engagement id, to work on that engagement's own items.");
 
+	registerLibraryImportTools(server, app, run);
 	registerSetupTools(server, app, actor, run);
 	registerPlanTools(server, app, actor, run, runAsync);
 	registerRunTools(server, app, actor, run, runAsync);
@@ -132,12 +135,17 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 				const src = source ? getSourceByCode(app, source) : null;
 				if (source && !src) throw new NotFoundError(`No source ${source}.`);
 				return {
-					results: searchRequirements(app, query, { sourceId: src?.id, limit: limit ?? 20 }).map((r) => ({
+					results: searchRequirements(app, query, {
+						sourceId: src?.id,
+						limit: limit ?? 20,
+						includeProposed: true
+					}).map((r) => ({
 						id: r.id,
 						ref: r.refCode,
 						title: r.title,
 						source: r.sourceCode,
 						language: r.language,
+						status: r.status,
 						snippet: r.snippet
 					}))
 				};
@@ -218,14 +226,25 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 								.string()
 								.optional()
 								.describe('Language code, for example "en" or "lv". Default en.'),
-							licence_note: z.string().optional()
+							licence_note: z.string().optional(),
+							document_id: z
+								.string()
+								.optional()
+								.describe('The library document it is imported from (list_library_documents).')
 						})
 					)
 					.min(1)
 					.max(50)
 			}
 		},
-		({ sources }) => run(() => ({ sources: upsertSources(app, actor, sources) }))
+		({ sources }) =>
+			run(() => {
+				for (const s of sources) assertLibraryDocument(app, s.document_id);
+				return {
+					sources: upsertSources(app, actor, sources),
+					note: 'A source you create is proposed: the auditor reviews and publishes it on Library, Review.'
+				};
+			})
 	);
 
 	server.registerTool(
@@ -263,7 +282,12 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 		({ source, requirements }) =>
 			run(() => {
 				const report = upsertRequirements(app, actor, source, requirements, `Upserted by ${AGENT_NAME}`);
-				return { source: report.source.code, requirements: report.requirements, warnings: report.warnings };
+				return {
+					source: report.source.code,
+					requirements: report.requirements,
+					warnings: report.warnings,
+					note: 'Requirements you add or change are proposed until the auditor accepts them on Library, Review.'
+				};
 			})
 	);
 
@@ -272,7 +296,7 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 		{
 			title: 'Link requirements',
 			description:
-				'Add typed, directional links between requirements, within or across sources: details, explains, implements (needs coverage full or partial), equivalent, conflicts. An existing identical link is reported, not duplicated.',
+				'Propose typed, directional links between requirements, within or across sources: details, explains, implements (needs coverage full or partial), equivalent, conflicts, each with a reason in note. Links you make are proposed; the auditor reviews them on Library, Mapping. An existing identical link is reported, not duplicated.',
 			inputSchema: {
 				links: z
 					.array(
@@ -281,7 +305,10 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 							to: reqRef,
 							type: z.enum(LINK_TYPES),
 							coverage: z.enum(['full', 'partial']).optional(),
-							note: z.string().optional()
+							note: z
+								.string()
+								.optional()
+								.describe('One-line reason the link holds; start with "Low confidence:" where it applies.')
 						})
 					)
 					.min(1)
@@ -307,7 +334,14 @@ export function createMcpServer(app: AppDatabase, user: SessionUser): McpServer 
 							coverage: l.coverage ?? null,
 							note: l.note ?? null
 						}).row;
-						return { id: String(row.id), from, to, type: l.type, status: 'created' };
+						return {
+							id: String(row.id),
+							from,
+							to,
+							type: l.type,
+							status: 'created',
+							review: String(row.status)
+						};
 					})
 				)();
 				return { links: results };

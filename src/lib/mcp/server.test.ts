@@ -72,6 +72,7 @@ describe('MCP endpoint (#30)', () => {
 				'get_engagement_overview',
 				'get_event_status',
 				'get_history',
+				'get_library_document_text',
 				'get_requirement',
 				'link_evidence',
 				'link_requirements',
@@ -80,6 +81,8 @@ describe('MCP endpoint (#30)', () => {
 				'list_engagements',
 				'list_events',
 				'list_internal_requirements',
+				'list_library_documents',
+				'list_library_proposals',
 				'propose_finding',
 				'register_artifact',
 				'render_audit_plan',
@@ -131,6 +134,7 @@ describe('orientation and library tools (#31)', () => {
 			'ref',
 			'snippet',
 			'source',
+			'status',
 			'title'
 		]);
 		expect(data.results[0]).toMatchObject({ ref: 'Art. 21(2)(h)', source: 'nis2' });

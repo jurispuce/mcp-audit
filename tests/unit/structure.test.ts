@@ -39,7 +39,8 @@ const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/test-entities.ts': [],
 	'src/lib/domain/auth.ts': ['user_credential', 'session', 'personal_token'],
 	'src/lib/domain/comments.ts': ['comment'],
-	'src/lib/domain/artifacts.ts': ['artifact_text']
+	'src/lib/domain/artifacts.ts': ['artifact_text'],
+	'src/lib/domain/library-documents.ts': ['library_document_text']
 };
 
 const SQL_WRITE =
