@@ -1,0 +1,30 @@
+{
+ "milestones": [
+  "1 Foundation",
+  "2 Library",
+  "3 MCP and first skill",
+  "4 Engagement set-up",
+  "5 Planning",
+  "6 Execution and conclusion",
+  "7 In-app AI"
+ ],
+ "labels": [
+  "ai",
+  "auth",
+  "backend",
+  "design",
+  "frontend",
+  "infra",
+  "mcp",
+  "phase-1",
+  "phase-2",
+  "phase-3",
+  "phase-4",
+  "phase-5",
+  "phase-6",
+  "phase-7",
+  "skills",
+  "testing",
+  "versioning"
+ ]
+}
