@@ -1,0 +1,23 @@
+# Generated and dependencies
+package-lock.json
+build/
+.svelte-kit/
+node_modules/
+data/
+test-results/
+playwright-report/
+drizzle/meta/
+
+# Handoff material kept as delivered
+prototype/
+design/
+skills/
+issues/
+docs/architecture.md
+docs/data-model.md
+docs/mcp-tools.md
+docs/workflow-and-screens.md
+docs/build-phases.md
+docs/build-plan.md
+HANDOFF.md
+CLAUDE.md
