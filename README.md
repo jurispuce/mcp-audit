@@ -12,6 +12,17 @@ An audit planning and running app for a small auditor team: a versioned audit da
 
 Work is tracked as GitHub issues: one roadmap, seven milestone epics, 59 linked work issues. The MVP is milestones 1 to 6.
 
+## Run with Docker
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+The app listens on http://127.0.0.1:3000 by default. Everything it stores (the SQLite database and uploaded files) lives in the `mcp-audit-data` volume; the rest of the container is read-only. `GET /health` returns the version and migration state.
+
+Settings are environment variables, listed with defaults in `.env.example`. To share the app with the team on a private network, set `BIND_ADDRESS` to the host's LAN or VPN address.
+
 ## Development
 
 Needs Node.js 22.12 or later.

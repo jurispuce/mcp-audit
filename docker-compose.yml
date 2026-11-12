@@ -1,0 +1,52 @@
+# mcp-audit: one container, one data volume.
+#   docker compose up -d
+# Settings come from .env (copy .env.example). All state lives in the mcp-audit-data volume.
+
+services:
+  app:
+    image: ghcr.io/jurispuce/mcp-audit:${MCP_AUDIT_TAG:-latest}
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATA_DIR: /data
+    ports:
+      # Default: reachable from this machine only. Set BIND_ADDRESS to a private-network
+      # address (LAN or VPN) to share it with the team. See docs/deployment.md.
+      - '${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-3000}:3000'
+    volumes:
+      - mcp-audit-data:/data
+    # The container writes nothing outside /data; the rest of the filesystem is read-only.
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Optional: LiteLLM gateway for the in-app AI actions (milestone 7).
+  # Uncomment, put provider keys in .env, and set LITELLM_BASE_URL=http://litellm:4000 for the app.
+  # litellm:
+  #   image: ghcr.io/berriai/litellm:main-stable
+  #   command: ['--config', '/app/config.yaml', '--port', '4000']
+  #   env_file:
+  #     - path: .env
+  #       required: false
+  #   volumes:
+  #     - ./litellm.config.yaml:/app/config.yaml:ro
+  #   restart: unless-stopped
+
+volumes:
+  mcp-audit-data:
