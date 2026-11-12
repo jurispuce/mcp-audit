@@ -38,6 +38,8 @@ test('on a phone: every tappable element is at least 44px high', async ({ page }
 						!el.classList.contains('au-visually-hidden')
 					);
 				})
+				// A card title link stretches over its whole card, so the card is the tap target.
+				.map((el) => (el.matches('.au-item__title a') ? el.closest('.au-item')! : el))
 				.filter((el) => el.getBoundingClientRect().height < 44)
 				.map(
 					(el) =>

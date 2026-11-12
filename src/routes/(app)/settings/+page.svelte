@@ -82,9 +82,14 @@
 			<div><button class="au-btn au-btn--primary" type="submit">Save details</button></div>
 		</form>
 	{/key}
-	<p class="au-muted">
-		Version {data.me.version} · role {data.me.role === 'admin' ? 'Admin' : 'Auditor'}
-	</p>
+	<div class="au-row">
+		<span class="au-muted"
+			>Version {data.me.version} · role {data.me.role === 'admin' ? 'Admin' : 'Auditor'}</span
+		>
+		<a class="au-btn au-btn--ghost" href="?item=user:{data.me.id}&tab=history" data-sveltekit-reset="false"
+			>View history</a
+		>
+	</div>
 </section>
 
 <section class="au-section" aria-labelledby="password-title">
@@ -119,4 +124,8 @@
 		/>
 		<div><button class="au-btn" type="submit">Change password</button></div>
 	</form>
+</section>
+
+<section class="au-section au-phone-only" aria-label="Session">
+	<form method="POST" action="/logout"><button class="au-btn" type="submit">Sign out</button></form>
 </section>

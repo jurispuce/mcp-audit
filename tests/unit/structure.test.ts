@@ -36,7 +36,8 @@ const DB_OPENERS = new Set(['src/lib/server/db.ts']);
 const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/write.ts': ['*', 'revision'],
 	'src/lib/domain/test-entities.ts': [],
-	'src/lib/domain/auth.ts': ['user_credential', 'session', 'personal_token']
+	'src/lib/domain/auth.ts': ['user_credential', 'session', 'personal_token'],
+	'src/lib/domain/comments.ts': ['comment']
 };
 
 const SQL_WRITE =

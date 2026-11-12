@@ -65,6 +65,10 @@ export interface EntityDefinition {
 	refLine?(row: Row): string;
 	/** Column labels for history and the details tab. */
 	fieldLabels?: Record<string, string>;
+	/** Optional: how a stored value reads in the details tab and history (for example 1 -> "Yes"). */
+	formatValue?(column: string, value: SqlValue): string;
+	/** Optional: columns to show in the details tab, in order. Defaults to `columns`. */
+	detailColumns?: readonly string[];
 }
 
 export interface WriteOptions {

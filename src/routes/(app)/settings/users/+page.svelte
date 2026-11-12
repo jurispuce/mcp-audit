@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
+	import ItemCard from '#lib/components/ItemCard.svelte';
 	import StaleNotice from '#lib/components/StaleNotice.svelte';
 
 	let { data, form } = $props();
@@ -81,13 +82,13 @@
 		<form method="POST" action="?/create" class="au-form au-item" use:enhance={after}>
 			<Field label="Name" name="name" required value={v.name ?? ''} error={f.name} />
 			<Field label="Email" name="email" type="email" required value={v.email ?? ''} error={f.email} />
-			<label class="au-field">
-				Role
-				<select name="role">
+			<div class="au-field">
+				<label for="new-role">Role</label>
+				<select id="new-role" name="role">
 					<option value="auditor" selected={v.role !== 'admin'}>Auditor</option>
 					<option value="admin" selected={v.role === 'admin'}>Admin</option>
 				</select>
-			</label>
+			</div>
 			<div class="au-row">
 				<button class="au-btn au-btn--primary" type="submit">Add user</button>
 				<button class="au-btn au-btn--ghost" type="button" onclick={() => (adding = false)}>Cancel</button>
@@ -97,95 +98,108 @@
 
 	<ul class="au-list">
 		{#each data.users as user (user.id)}
-			<li class="au-item" class:au-item--locked={!user.active} data-testid="user-{user.email}">
-				<div class="au-item__head">
-					<div>
-						<span class="au-ref">{user.email}</span>
-						<h3 class="au-item__title">{user.name}</h3>
-					</div>
-					<span class="au-badge" class:au-badge--info={user.role === 'admin'}>
-						{user.active ? (user.role === 'admin' ? 'Admin' : 'Auditor') : 'Deactivated'}
-					</span>
-				</div>
-				<div class="au-item__meta"><span class="au-ref">v{user.version}</span></div>
-
-				{#if editing === user.id}
-					{@const shown = shownFor(user)}
-					{@const f = fieldsFor(user.id)}
-					{#if resultAction === 'update' && resultId === user.id && result?.conflict}
-						<StaleNotice
-							conflict={result.conflict}
-							labels={{ name: 'Name', email: 'Email', role: 'Role' }}
-							{redoing}
-							onredo={() => (redoing = true)}
-							onkeep={() => (redoing = false)}
-						/>
-					{:else if resultAction === 'update' && resultId === user.id}
-						<FormMessage form={result} />
-					{/if}
-					{#key `${versionFor(user)}-${redoing}`}
-						<form method="POST" action="?/update" class="au-form" use:enhance={after}>
-							<input type="hidden" name="id" value={user.id} />
-							<input type="hidden" name="base_version" value={versionFor(user)} />
-							<Field label="Name" name="name" required value={String(shown.name ?? '')} error={f.name} />
-							<Field
-								label="Email"
-								name="email"
-								type="email"
-								required
-								value={String(shown.email ?? '')}
-								error={f.email}
-							/>
-							<label class="au-field">
-								Role
-								<select name="role">
-									<option value="auditor" selected={shown.role !== 'admin'}>Auditor</option>
-									<option value="admin" selected={shown.role === 'admin'}>Admin</option>
-								</select>
-							</label>
-							<div class="au-row">
-								<button class="au-btn au-btn--primary" type="submit">Save user</button>
-								<button class="au-btn au-btn--ghost" type="button" onclick={() => (editing = null)}
-									>Cancel</button
-								>
+			<li>
+				<ItemCard
+					ref={user.email}
+					title={user.name}
+					href="?item=user:{user.id}"
+					badge={user.active
+						? {
+								label: user.role === 'admin' ? 'Admin' : 'Auditor',
+								tone: user.role === 'admin' ? 'info' : 'neutral'
+							}
+						: { label: 'Deactivated', tone: 'neutral' }}
+					version={user.version}
+					testid="user-{user.email}"
+				>
+					{#snippet actions()}
+						{#if editing === user.id}
+							{@const shown = shownFor(user)}
+							{@const f = fieldsFor(user.id)}
+							<div class="au-stack au-grow">
+								{#if resultAction === 'update' && resultId === user.id && result?.conflict}
+									<StaleNotice
+										conflict={result.conflict}
+										labels={{ name: 'Name', email: 'Email', role: 'Role' }}
+										{redoing}
+										onredo={() => (redoing = true)}
+										onkeep={() => (redoing = false)}
+									/>
+								{:else if resultAction === 'update' && resultId === user.id}
+									<FormMessage form={result} />
+								{/if}
+								{#key `${versionFor(user)}-${redoing}`}
+									<form method="POST" action="?/update" class="au-form" use:enhance={after}>
+										<input type="hidden" name="id" value={user.id} />
+										<input type="hidden" name="base_version" value={versionFor(user)} />
+										<Field
+											id="name-{user.id}"
+											label="Name"
+											name="name"
+											required
+											value={String(shown.name ?? '')}
+											error={f.name}
+										/>
+										<Field
+											id="email-{user.id}"
+											label="Email"
+											name="email"
+											type="email"
+											required
+											value={String(shown.email ?? '')}
+											error={f.email}
+										/>
+										<div class="au-field">
+											<label for="role-{user.id}">Role</label>
+											<select id="role-{user.id}" name="role">
+												<option value="auditor" selected={shown.role !== 'admin'}>Auditor</option>
+												<option value="admin" selected={shown.role === 'admin'}>Admin</option>
+											</select>
+										</div>
+										<div class="au-row">
+											<button class="au-btn au-btn--primary" type="submit">Save user</button>
+											<button class="au-btn au-btn--ghost" type="button" onclick={() => (editing = null)}
+												>Cancel</button
+											>
+										</div>
+									</form>
+								{/key}
 							</div>
-						</form>
-					{/key}
-				{:else}
-					<div class="au-item__actions">
-						<button
-							class="au-btn au-btn--ghost"
-							type="button"
-							onclick={() => ((editing = user.id), (redoing = false))}
-						>
-							Edit user
-						</button>
-						<form method="POST" action="?/reset" use:enhance>
-							<input type="hidden" name="id" value={user.id} />
-							<input type="hidden" name="email" value={user.email} />
-							<button class="au-btn au-btn--ghost" type="submit" disabled={!user.active}
-								>Reset password</button
+						{:else}
+							<button
+								class="au-btn au-btn--ghost"
+								type="button"
+								onclick={() => ((editing = user.id), (redoing = false))}
 							>
-						</form>
-						{#if user.id !== data.user.id}
-							<form
-								method="POST"
-								action="?/active"
-								use:enhance={({ cancel }) => {
-									if (user.active && !confirm(`Deactivate ${user.name}? Their sessions and tokens end.`))
-										cancel();
-								}}
-							>
+								Edit user
+							</button>
+							<form method="POST" action="?/reset" use:enhance>
 								<input type="hidden" name="id" value={user.id} />
-								<input type="hidden" name="base_version" value={user.version} />
-								<input type="hidden" name="active" value={user.active ? 'false' : 'true'} />
-								<button class="au-btn {user.active ? 'au-btn--danger' : ''}" type="submit">
-									{user.active ? 'Deactivate user' : 'Reactivate user'}
-								</button>
+								<input type="hidden" name="email" value={user.email} />
+								<button class="au-btn au-btn--ghost" type="submit" disabled={!user.active}
+									>Reset password</button
+								>
 							</form>
+							{#if user.id !== data.user.id}
+								<form
+									method="POST"
+									action="?/active"
+									use:enhance={({ cancel }) => {
+										if (user.active && !confirm(`Deactivate ${user.name}? Their sessions and tokens end.`))
+											cancel();
+									}}
+								>
+									<input type="hidden" name="id" value={user.id} />
+									<input type="hidden" name="base_version" value={user.version} />
+									<input type="hidden" name="active" value={user.active ? 'false' : 'true'} />
+									<button class="au-btn {user.active ? 'au-btn--danger' : ''}" type="submit">
+										{user.active ? 'Deactivate user' : 'Reactivate user'}
+									</button>
+								</form>
+							{/if}
 						{/if}
-					</div>
-				{/if}
+					{/snippet}
+				</ItemCard>
 			</li>
 		{/each}
 	</ul>

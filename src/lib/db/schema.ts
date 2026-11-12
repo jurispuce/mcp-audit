@@ -101,3 +101,21 @@ export const personalToken = sqliteTable(
 	},
 	(t) => [uniqueIndex('personal_token_hash').on(t.tokenHash), index('personal_token_user').on(t.userId)]
 );
+
+/** Append-only discussion on any entity. Comments are never edited or deleted (enforced by triggers). */
+export const comment = sqliteTable(
+	'comment',
+	{
+		id: text('id').primaryKey(),
+		entityType: text('entity_type').notNull(),
+		entityId: text('entity_id').notNull(),
+		body: text('body').notNull(),
+		authorUser: text('author_user')
+			.notNull()
+			.references(() => user.id),
+		authorAgent: text('author_agent'),
+		channel: text('channel', { enum: ['ui', 'mcp', 'ai'] }).notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull()
+	},
+	(t) => [index('comment_entity').on(t.entityType, t.entityId, t.createdAt)]
+);

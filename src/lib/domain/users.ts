@@ -69,6 +69,11 @@ export const userDefinition: EntityDefinition = registerEntity({
 	table: 'user',
 	columns: ['name', 'email', 'role', 'active'],
 	fieldLabels: { name: 'Name', email: 'Email', role: 'Role', active: 'Active', deleted: 'Deleted' },
+	formatValue(column, value) {
+		if (column === 'role') return value === 'admin' ? 'Admin' : 'Auditor';
+		if (column === 'active' || column === 'deleted') return Number(value) === 1 ? 'Yes' : 'No';
+		return value == null ? '' : String(value);
+	},
 	parse(input, existing) {
 		const out: Row = {};
 		const fields: Record<string, string> = {};
