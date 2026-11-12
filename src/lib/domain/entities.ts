@@ -4,3 +4,9 @@
  */
 import './users';
 import './library';
+import './engagements';
+import './selection';
+import './people';
+import './risks';
+import './artifacts';
+import './internal';

@@ -137,7 +137,9 @@ export const source = sqliteTable(
 		/** Set for internal sources: the auditee that owns it (table arrives in #35). */
 		auditeeId: text('auditee_id'),
 		/** Set when the source is an uploaded document (table arrives in #41). */
-		artifactId: text('artifact_id')
+		artifactId: text('artifact_id'),
+		/** Internal sources: the engagement they were extracted in (carry-over decides reuse). */
+		engagementId: text('engagement_id')
 	},
 	(t) => [uniqueIndex('source_code').on(t.code)]
 );
@@ -219,3 +221,201 @@ export const criterion = sqliteTable(
 	},
 	(t) => [index('criterion_requirement').on(t.requirementId)]
 );
+
+// ---- Engagement set-up --------------------------------------------------------------------------
+
+/** The client. Owns its people and internal sources; the boundary no data crosses. */
+export const auditee = sqliteTable('auditee', {
+	...entityColumns(),
+	name: text('name').notNull(),
+	description: text('description')
+});
+
+export const engagement = sqliteTable(
+	'engagement',
+	{
+		...entityColumns(),
+		name: text('name').notNull(),
+		auditeeId: text('auditee_id')
+			.notNull()
+			.references(() => auditee.id),
+		startDate: text('start_date').notNull(),
+		endDate: text('end_date'),
+		description: text('description'),
+		status: text('status', { enum: ['active', 'closed'] }).notNull(),
+		scopeMode: text('scope_mode', { enum: ['single', 'multiple'] }).notNull(),
+		findingScaleId: text('finding_scale_id'),
+		workingLanguage: text('working_language').notNull(),
+		reportLanguage: text('report_language').notNull(),
+		carryOverInternal: integer('carry_over_internal', { mode: 'boolean' }).notNull().default(false),
+		aiAllowed: integer('ai_allowed', { mode: 'boolean' }).notNull().default(true),
+		llmProfile: text('llm_profile'),
+		planStatus: text('plan_status', { enum: ['draft', 'sent', 'agreed'] }).notNull(),
+		planStatusAt: integer('plan_status_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [index('engagement_auditee').on(t.auditeeId)]
+);
+
+export const engagementMember = sqliteTable(
+	'engagement_member',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		role: text('role', { enum: ['lead_auditor', 'auditor', 'reviewer'] }).notNull()
+	},
+	(t) => [index('engagement_member_engagement').on(t.engagementId)]
+);
+
+export const scope = sqliteTable(
+	'scope',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		name: text('name').notNull(),
+		description: text('description'),
+		position: integer('position').notNull().default(0)
+	},
+	(t) => [index('scope_engagement').on(t.engagementId)]
+);
+
+/** Each engagement has its own copy of a finding scale, so editing it never changes another audit. */
+export const findingScale = sqliteTable('finding_scale', {
+	...entityColumns(),
+	engagementId: text('engagement_id').references(() => engagement.id),
+	name: text('name').notNull()
+});
+
+export const findingValue = sqliteTable(
+	'finding_value',
+	{
+		...entityColumns(),
+		findingScaleId: text('finding_scale_id')
+			.notNull()
+			.references(() => findingScale.id),
+		code: text('code').notNull(),
+		label: text('label').notNull(),
+		position: integer('position').notNull(),
+		tone: text('tone', { enum: ['neutral', 'ok', 'info', 'warn', 'danger'] }).notNull(),
+		isNonconformity: integer('is_nonconformity', { mode: 'boolean' }).notNull().default(false)
+	},
+	(t) => [index('finding_value_scale').on(t.findingScaleId)]
+);
+
+/** A role at the auditee. The role is what matters; name, email and unit are optional. */
+export const person = sqliteTable(
+	'person',
+	{
+		...entityColumns(),
+		auditeeId: text('auditee_id')
+			.notNull()
+			.references(() => auditee.id),
+		role: text('role').notNull(),
+		name: text('name'),
+		email: text('email'),
+		unit: text('unit'),
+		/** JSON array of strings. */
+		responsibilities: text('responsibilities', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		sourceDocument: text('source_document'),
+		sourceSection: text('source_section'),
+		status: text('status', { enum: ['proposed', 'confirmed'] }).notNull()
+	},
+	(t) => [index('person_auditee').on(t.auditeeId)]
+);
+
+/** The requirement selection: which library requirement, pinned at which version, handled how. */
+export const engagementRequirement = sqliteTable(
+	'engagement_requirement',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		requirementId: text('requirement_id')
+			.notNull()
+			.references(() => requirement.id),
+		pinnedVersion: integer('pinned_version').notNull(),
+		scopeHandling: text('scope_handling', { enum: ['common', 'per_scope'] }).notNull(),
+		criticality: text('criticality', { enum: ['high', 'medium', 'low'] })
+	},
+	(t) => [index('engagement_requirement_engagement').on(t.engagementId)]
+);
+
+/** One requirement in one scope (scope empty when common): what a finding attaches to. Generated. */
+export const assessmentUnit = sqliteTable(
+	'assessment_unit',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		engagementRequirementId: text('engagement_requirement_id')
+			.notNull()
+			.references(() => engagementRequirement.id),
+		scopeId: text('scope_id')
+	},
+	(t) => [index('assessment_unit_engagement').on(t.engagementId)]
+);
+
+export const risk = sqliteTable(
+	'risk',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		title: text('title').notNull(),
+		description: text('description'),
+		origin: text('origin', { enum: ['auditee_register', 'auditor'] }).notNull(),
+		level: text('level', { enum: ['high', 'medium', 'low'] }).notNull(),
+		/** JSON array of library requirement ids. */
+		requirementIds: text('requirement_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		/** JSON array of scope ids; empty means all scopes. */
+		scopeIds: text('scope_ids', { mode: 'json' }).$type<string[]>().notNull().default([])
+	},
+	(t) => [index('risk_engagement').on(t.engagementId)]
+);
+
+/** Raw material: a document, photo or transcript. Files are immutable; only this metadata is versioned. */
+export const artifact = sqliteTable(
+	'artifact',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		kind: text('kind'),
+		fileHash: text('file_hash'),
+		filename: text('filename'),
+		mimeType: text('mime_type'),
+		size: integer('size'),
+		title: text('title'),
+		versionLabel: text('version_label'),
+		approvalDate: text('approval_date'),
+		language: text('language'),
+		origin: text('origin', { enum: ['upload', 'mcp', 'mention', 'generated'] }).notNull(),
+		state: text('state', { enum: ['received', 'mentioned'] }).notNull(),
+		receivedFrom: text('received_from'),
+		receivedAt: integer('received_at', { mode: 'timestamp_ms' }),
+		eventId: text('event_id'),
+		textStatus: text('text_status', { enum: ['none', 'extracted', 'failed', 'unsupported'] }).notNull()
+	},
+	(t) => [index('artifact_engagement').on(t.engagementId), index('artifact_hash').on(t.fileHash)]
+);
+
+/** Text extracted from an artifact's file, with page breaks. Derived from an immutable file, so not versioned. */
+export const artifactText = sqliteTable('artifact_text', {
+	artifactId: text('artifact_id')
+		.primaryKey()
+		.references(() => artifact.id),
+	text: text('text').notNull(),
+	/** JSON array of page start offsets into text (one entry for unpaged files). */
+	pageStarts: text('page_starts', { mode: 'json' }).$type<number[]>().notNull(),
+	extractedAt: integer('extracted_at', { mode: 'timestamp_ms' }).notNull()
+});

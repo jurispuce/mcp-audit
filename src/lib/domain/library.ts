@@ -58,7 +58,17 @@ function pick(input: Record<string, unknown>, existing: Row | null, col: string,
 export const sourceDefinition: EntityDefinition = registerEntity({
 	type: 'source',
 	table: 'source',
-	columns: ['code', 'type', 'title', 'edition', 'language', 'licence_note', 'auditee_id', 'artifact_id'],
+	columns: [
+		'code',
+		'type',
+		'title',
+		'edition',
+		'language',
+		'licence_note',
+		'auditee_id',
+		'artifact_id',
+		'engagement_id'
+	],
 	detailColumns: ['code', 'type', 'title', 'edition', 'language', 'licence_note'],
 	fieldLabels: {
 		code: 'Code',
@@ -88,7 +98,7 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 			out.title = title;
 		}
 		if (pick(input, existing, 'language')) out.language = normalizeLanguage(input.language ?? 'en');
-		for (const col of ['edition', 'licence_note', 'auditee_id', 'artifact_id'])
+		for (const col of ['edition', 'licence_note', 'auditee_id', 'artifact_id', 'engagement_id'])
 			if (col in input) out[col] = optional(input[col]);
 		return out;
 	},
@@ -197,6 +207,15 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 				});
 		}
 	},
+	/** An internal requirement follows its engagement's AI switch. */
+	engagementOf(app, row) {
+		const e = app.sqlite
+			.prepare(
+				`SELECT e.id, e.ai_allowed FROM source s JOIN engagement e ON e.id = s.engagement_id WHERE s.id = ?`
+			)
+			.get(String(row.source_id)) as { id: string; ai_allowed: number } | undefined;
+		return e ? { id: e.id, aiAllowed: e.ai_allowed === 1 } : null;
+	},
 	/** Internal requirements are a judgement: AI may only propose them. */
 	judgement: (row) => (row.origin === 'internal' ? { column: 'status', proposed: 'proposed' } : null),
 	search: (row) => ({
@@ -250,6 +269,15 @@ export const linkDefinition: EntityDefinition = registerEntity({
 			if (!r || Number(r.deleted) === 1)
 				throw new ValidationError('Both ends must be existing requirements.');
 		}
+		// Internal requirements never cross from one auditee to another, not even through a link.
+		const owners = app.sqlite
+			.prepare(
+				`SELECT DISTINCT s.auditee_id AS a FROM requirement r JOIN source s ON s.id = r.source_id
+				  WHERE r.id IN (?, ?) AND s.auditee_id IS NOT NULL`
+			)
+			.all(row.from_id, row.to_id) as { a: string }[];
+		if (owners.length > 1)
+			throw new ValidationError('These requirements belong to different auditees and cannot be linked.');
 		const dup = app.sqlite
 			.prepare(
 				'SELECT id FROM requirement_link WHERE from_id = ? AND to_id = ? AND type = ? AND deleted = 0 AND id <> ?'
