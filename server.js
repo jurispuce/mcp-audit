@@ -5,10 +5,11 @@
 // - if ORIGIN is set, it is used as is;
 // - otherwise the protocol comes from X-Forwarded-Proto (a TLS proxy sets it), and a request without
 //   the header is treated as http, which is what the container itself speaks.
+// Empty settings in .env (for example `ORIGIN=`) count as unset.
 import http from 'node:http';
+import { prepareEnv } from './server-env.js';
 
-const useForwardedProto = !process.env.ORIGIN && !process.env.PROTOCOL_HEADER;
-if (useForwardedProto) process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
+const { useForwardedProto } = prepareEnv(process.env);
 
 // A variable path keeps the type checker out of the generated build folder.
 const entry = './build/handler.js';

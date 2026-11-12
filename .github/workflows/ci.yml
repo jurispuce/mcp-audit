@@ -64,7 +64,8 @@ jobs:
         run: |
           docker run -d --name app   -p 3000:3000 -e TEST_SEED_ENABLED=true --read-only --tmpfs /tmp mcp-audit:ci
           docker run -d --name first -p 3001:3000 -e TEST_SEED_ENABLED=true --read-only --tmpfs /tmp mcp-audit:ci
-          docker run -d --name prod  -p 3002:3000 --read-only --tmpfs /tmp mcp-audit:ci
+          # 'prod' uses .env.example as shipped, including its empty settings such as ORIGIN=
+          docker run -d --name prod  -p 3002:3000 --env-file .env.example -e BACKUP_PASSPHRASE= --read-only --tmpfs /tmp mcp-audit:ci
           for port in 3000 3001 3002; do
             for i in $(seq 1 60); do curl -sf "http://127.0.0.1:$port/health" > /dev/null && break; sleep 1; done
           done

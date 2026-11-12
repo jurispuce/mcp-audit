@@ -27,7 +27,7 @@ WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/build ./build
-COPY --from=build --chown=node:node /app/server.js ./server.js
+COPY --from=build --chown=node:node /app/server.js /app/server-env.js ./
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --from=build --chown=node:node /app/scripts ./scripts
 RUN mkdir -p /data && chown node:node /data
