@@ -62,7 +62,7 @@ export interface EntityDefinition {
 	 * that column at `proposed`. An AI write that tries to set another value is refused; an AI edit of a
 	 * confirmed row puts it back to proposed for a person to confirm.
 	 */
-	judgement?(row: Row): { column: string; proposed: string } | null;
+	judgement?(row: Row): { column: string; proposed: string | number } | null;
 	/** Optional guard rail: columns only a person in the app may change (approval, plan status). */
 	humanOnly?: readonly string[];
 	/** Optional guard rail: the engagement a row belongs to, so AI writes respect its ai_allowed switch. */
@@ -319,8 +319,10 @@ function applyAiGuardRails(
 	if (op.op === 'delete') return;
 	const j = def.judgement?.(merged);
 	if (!j) return;
-	const requested = op.op === 'revert' ? undefined : (op.data as Record<string, unknown>)[j.column];
-	if (requested !== undefined && requested !== null && requested !== j.proposed) {
+	const raw = op.op === 'revert' ? undefined : (op.data as Record<string, unknown>)[j.column];
+	// A flag column (proposed = 1) may arrive as a boolean.
+	const requested = raw === true ? 1 : raw === false ? 0 : raw;
+	if (requested !== undefined && requested !== null && String(requested) !== String(j.proposed)) {
 		throw new ForbiddenError(
 			`AI can only propose: ${def.type} ${j.column} stays "${j.proposed}" until a person confirms it.`
 		);

@@ -4,7 +4,8 @@ import { getEngagement, listScopes, type Engagement } from './engagements';
 /**
  * The eight-phase checklist on Home (docs/workflow-and-screens.md). Phases are guidance, not gates:
  * each gets a state and one fact, computed from counts. Phases 6 to 8 grow real facts as planning,
- * running and findings arrive in later milestones.
+ * running and findings arrive in later milestones. Drafted (proposed) events and evidence do not count
+ * until a person accepts them.
  */
 
 export type PhaseState = 'done' | 'current' | 'todo';
@@ -40,10 +41,6 @@ export interface Overview {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-function tableExists(app: AppDatabase, name: string): boolean {
-	return !!app.sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
-}
 
 export function engagementOverview(app: AppDatabase, engagementId: string): Overview {
 	const e = getEngagement(app, engagementId);
@@ -85,9 +82,26 @@ export function engagementOverview(app: AppDatabase, engagementId: string): Over
 		else counts.internalProposed = row.n;
 	}
 
-	const events = tableExists(app, 'event')
-		? n('SELECT count(*) AS n FROM event WHERE engagement_id = ? AND deleted = 0', e.id)
-		: 0;
+	const events = n(
+		'SELECT count(*) AS n FROM event WHERE engagement_id = ? AND deleted = 0 AND proposed = 0',
+		e.id
+	);
+	const drafts = n(
+		'SELECT count(*) AS n FROM event WHERE engagement_id = ? AND deleted = 0 AND proposed = 1',
+		e.id
+	);
+	const evidence = n(
+		'SELECT count(*) AS n FROM evidence_item WHERE engagement_id = ? AND deleted = 0 AND proposed = 0',
+		e.id
+	);
+	const stillPlanned = n(
+		`SELECT count(*) AS n FROM evidence_item WHERE engagement_id = ? AND deleted = 0 AND proposed = 0 AND status = 'planned'`,
+		e.id
+	);
+	const held = n(
+		`SELECT count(*) AS n FROM event WHERE engagement_id = ? AND deleted = 0 AND proposed = 0 AND status = 'held'`,
+		e.id
+	);
 
 	const raw: Omit<Phase, 'state'>[] = [
 		{
@@ -137,16 +151,18 @@ export function engagementOverview(app: AppDatabase, engagementId: string): Over
 			number: 6,
 			title: 'Plan events',
 			next: 'plan events',
-			fact: `${plural(events, 'event')} · plan ${e.planStatus === 'sent' ? 'sent to auditee' : e.planStatus}`,
-			done: e.planStatus === 'agreed' && events > 0,
+			fact: `${plural(events, 'event')}${drafts ? ` (+${drafts} drafted)` : ''}, ${plural(evidence, 'evidence item')} · plan ${e.planStatus === 'sent' ? 'sent to auditee' : e.planStatus}`,
+			done: e.planStatus === 'agreed' && evidence > 0,
 			href: '/plan/events'
 		},
 		{
 			number: 7,
 			title: 'Run events',
 			next: 'run events',
-			fact: events ? `${plural(events, 'event')} to run` : 'Nothing planned yet',
-			done: false,
+			fact: events
+				? `${held} of ${plural(events, 'event')} held · ${stillPlanned} evidence still planned`
+				: 'Nothing planned yet',
+			done: evidence > 0 && stillPlanned === 0,
 			href: '/run/today'
 		},
 		{

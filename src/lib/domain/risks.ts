@@ -19,7 +19,8 @@ const str = (v: unknown) => (v == null ? '' : String(v)).trim();
 export const RISK_LEVELS = ['high', 'medium', 'low'] as const;
 export const RISK_ORIGINS = ['auditee_register', 'auditor'] as const;
 
-function idList(v: unknown): string[] {
+/** A JSON array of ids as stored, or a list given by a caller, without duplicates. */
+export function idList(v: unknown): string[] {
 	if (typeof v === 'string') {
 		try {
 			const p = JSON.parse(v);

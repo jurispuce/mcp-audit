@@ -419,3 +419,65 @@ export const artifactText = sqliteTable('artifact_text', {
 	pageStarts: text('page_starts', { mode: 'json' }).$type<number[]>().notNull(),
 	extractedAt: integer('extracted_at', { mode: 'timestamp_ms' }).notNull()
 });
+
+/** A planned audit event: interview, walkthrough, document review, technical test or site visit. */
+export const event = sqliteTable(
+	'event',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		title: text('title').notNull(),
+		format: text('format', {
+			enum: ['interview', 'walkthrough', 'document_review', 'technical_test', 'site_visit', 'other']
+		}).notNull(),
+		/** ISO date; empty while not scheduled. */
+		date: text('date'),
+		/** HH:MM, local to the engagement. */
+		startTime: text('start_time'),
+		durationMin: integer('duration_min').notNull().default(60),
+		/** JSON array of person ids (auditee roles). */
+		participantIds: text('participant_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		/** Free text for participants that are not recorded roles, for example "To be agreed". */
+		participantsNote: text('participants_note'),
+		/** JSON array of selected requirement ids the event validates. */
+		requirementIds: text('requirement_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		status: text('status', { enum: ['planned', 'held'] })
+			.notNull()
+			.default('planned'),
+		/** 1 while an AI draft waits for a person to accept it. It stays editable. */
+		proposed: integer('proposed').notNull().default(0),
+		location: text('location')
+	},
+	(t) => [index('event_engagement').on(t.engagementId)]
+);
+
+/** Planned evidence: what the auditor expects to see at an event. */
+export const evidenceItem = sqliteTable(
+	'evidence_item',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id),
+		text: text('text').notNull(),
+		kind: text('kind', { enum: ['rule', 'record', 'observation', 'testimony', 'technical'] }).notNull(),
+		criticality: text('criticality', { enum: ['high', 'medium', 'low'] }).notNull(),
+		/** JSON array of selected requirement ids. */
+		requirementIds: text('requirement_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		/** Empty means all scopes. */
+		scopeId: text('scope_id'),
+		status: text('status', { enum: ['planned', 'received', 'partial', 'promised', 'missing'] })
+			.notNull()
+			.default('planned'),
+		promisedBy: text('promised_by'),
+		promisedDue: text('promised_due'),
+		proposed: integer('proposed').notNull().default(0),
+		position: integer('position').notNull().default(0)
+	},
+	(t) => [index('evidence_item_engagement').on(t.engagementId), index('evidence_item_event').on(t.eventId)]
+);

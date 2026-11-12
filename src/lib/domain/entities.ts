@@ -10,3 +10,4 @@ import './people';
 import './risks';
 import './artifacts';
 import './internal';
+import './planning';
