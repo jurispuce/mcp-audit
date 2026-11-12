@@ -139,7 +139,11 @@ export const source = sqliteTable(
 		/** Set when the source is an uploaded document (table arrives in #41). */
 		artifactId: text('artifact_id'),
 		/** Internal sources: the engagement they were extracted in (carry-over decides reuse). */
-		engagementId: text('engagement_id')
+		engagementId: text('engagement_id'),
+		/** A source AI created waits as proposed until a person publishes it (#69). */
+		status: text('status', { enum: ['proposed', 'active'] })
+			.notNull()
+			.default('active')
 	},
 	(t) => [uniqueIndex('source_code').on(t.code)]
 );
@@ -187,7 +191,12 @@ export const requirementLink = sqliteTable(
 		type: text('type', { enum: ['details', 'explains', 'implements', 'equivalent', 'conflicts'] }).notNull(),
 		/** Only for implements: full or partial. */
 		coverage: text('coverage', { enum: ['full', 'partial'] }),
-		note: text('note')
+		/** Why the link holds; AI gives one for every link it proposes. */
+		note: text('note'),
+		/** A link AI made waits as proposed until a person confirms it (#69). */
+		status: text('status', { enum: ['proposed', 'confirmed'] })
+			.notNull()
+			.default('confirmed')
 	},
 	(t) => [index('requirement_link_from').on(t.fromId), index('requirement_link_to').on(t.toId)]
 );

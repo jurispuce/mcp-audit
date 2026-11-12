@@ -303,6 +303,10 @@ function assertSelectable(app: AppDatabase, auditeeId: string, req: Requirement)
 		auditee_id: string | null;
 	};
 	if (src.auditee_id && src.auditee_id !== auditeeId) throw new NotFoundError('Requirement not found');
+	if (req.status === 'proposed')
+		throw new ValidationError(
+			`${req.refCode} is a proposed library change; accept it on Library, Review before selecting it.`
+		);
 	if (req.origin === 'internal')
 		throw new ValidationError(
 			'Internal requirements are criteria for external ones; they are not selected on their own.'
@@ -399,6 +403,10 @@ export function setCriticality(
 export function upgradePin(app: AppDatabase, actor: Actor, engagementId: string, requirementId: string) {
 	const row = selectedRow(app, engagementId, requirementId);
 	const req = getRequirement(app, requirementId);
+	if (req.status === 'proposed' && req.origin === 'external')
+		throw new ValidationError(
+			'The newer library version is a proposed change; accept it on Library, Review first.'
+		);
 	return updateEntity(
 		app,
 		actor,

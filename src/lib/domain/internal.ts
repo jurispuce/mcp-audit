@@ -265,8 +265,22 @@ export function acceptInternal(
 ): InternalRequirement {
 	requireHuman(actor, 'Accepting a proposed internal requirement');
 	const r = getInternal(app, engagementId, id);
-	if (r.status === 'confirmed') return r;
-	updateEntity(app, actor, requirementDefinition, id, r.version, { status: 'confirmed' }, 'Accepted');
+	if (r.status === 'confirmed' && r.implements.every((l) => l.status === 'confirmed')) return r;
+	app.sqlite.transaction(() => {
+		if (r.status !== 'confirmed')
+			updateEntity(app, actor, requirementDefinition, id, r.version, { status: 'confirmed' }, 'Accepted');
+		// What it implements was proposed with it; accepting the rule accepts those links.
+		for (const l of r.implements.filter((x) => x.status === 'proposed'))
+			updateEntity(
+				app,
+				actor,
+				linkDefinition,
+				l.id,
+				l.version,
+				{ status: 'confirmed' },
+				'Accepted with its internal requirement'
+			);
+	})();
 	return getInternal(app, engagementId, id);
 }
 
@@ -290,8 +304,7 @@ export function acceptAllInternal(app: AppDatabase, actor: Actor, engagementId: 
 	requireHuman(actor, 'Accepting proposed internal requirements');
 	return app.sqlite.transaction(() => {
 		const proposed = listInternal(app, engagementId).filter((r) => r.status === 'proposed' && !r.carriedOver);
-		for (const r of proposed)
-			updateEntity(app, actor, requirementDefinition, r.id, r.version, { status: 'confirmed' }, 'Accepted');
+		for (const r of proposed) acceptInternal(app, actor, engagementId, r.id);
 		return proposed.length;
 	})();
 }

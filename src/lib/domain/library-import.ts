@@ -197,8 +197,8 @@ function applyRequirements(
 			text: r.text == null ? null : String(r.text).trim(),
 			language: s(r.language) || language,
 			locator: r.locator ?? null,
-			origin: 'external',
-			status: 'confirmed'
+			// No status: a person's import is confirmed by default, an AI's is proposed (#69).
+			origin: 'external'
 		};
 		// A partial upsert changes only the fields it names.
 		if (partial && existing) {

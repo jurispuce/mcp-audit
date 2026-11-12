@@ -1,6 +1,6 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { searchText } from '#lib/db/fts.ts';
-import { NotFoundError, ValidationError } from './errors';
+import { ForbiddenError, NotFoundError, ValidationError } from './errors';
 import { latestAuthorship } from './history';
 import { registerEntity } from './registry';
 import {
@@ -67,7 +67,8 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 		'licence_note',
 		'auditee_id',
 		'artifact_id',
-		'engagement_id'
+		'engagement_id',
+		'status'
 	],
 	detailColumns: ['code', 'type', 'title', 'edition', 'language', 'licence_note'],
 	fieldLabels: {
@@ -100,7 +101,21 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 		if (pick(input, existing, 'language')) out.language = normalizeLanguage(input.language ?? 'en');
 		for (const col of ['edition', 'licence_note', 'auditee_id', 'artifact_id', 'engagement_id'])
 			if (col in input) out[col] = optional(input[col]);
+		if ('status' in input) {
+			const st = str(input.status);
+			if (st !== 'proposed' && st !== 'active') throw new ValidationError('A source is proposed or active.');
+			out.status = st;
+		}
 		return out;
+	},
+	/** A source AI creates is proposed (#69); publishing it is a person's decision. */
+	judgement: (_row, op) => (op === 'create' ? { column: 'status', proposed: 'proposed' } : null),
+	authorize(_app, actor, op) {
+		if (actor.channel !== 'ui' || actor.agent) {
+			const data = 'data' in op ? (op.data as Record<string, unknown>) : {};
+			if (data.status === 'active')
+				throw new ForbiddenError('Publishing a source is done by a person in the app.');
+		}
 	},
 	search: (row) => ({ title: row.title as string, code: row.code as string }),
 	label: (row) => String(row.title),
@@ -216,8 +231,8 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 			.get(String(row.source_id)) as { id: string; ai_allowed: number } | undefined;
 		return e ? { id: e.id, aiAllowed: e.ai_allowed === 1 } : null;
 	},
-	/** Internal requirements are a judgement: AI may only propose them. */
-	judgement: (row) => (row.origin === 'internal' ? { column: 'status', proposed: 'proposed' } : null),
+	/** Every AI write to a requirement is a proposal until a person accepts it (#69). */
+	judgement: () => ({ column: 'status', proposed: 'proposed' }),
 	search: (row) => ({
 		ref_code: row.ref_code as string,
 		title: row.title as string,
@@ -230,8 +245,15 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 export const linkDefinition: EntityDefinition = registerEntity({
 	type: 'requirement_link',
 	table: 'requirement_link',
-	columns: ['from_id', 'to_id', 'type', 'coverage', 'note'],
-	fieldLabels: { from_id: 'From', to_id: 'To', type: 'Type', coverage: 'Coverage', note: 'Note' },
+	columns: ['from_id', 'to_id', 'type', 'coverage', 'note', 'status'],
+	fieldLabels: {
+		from_id: 'From',
+		to_id: 'To',
+		type: 'Type',
+		coverage: 'Coverage',
+		note: 'Reason',
+		status: 'Status'
+	},
 	parse(input, existing) {
 		const out: Row = {};
 		for (const col of ['from_id', 'to_id'] as const) {
@@ -259,8 +281,16 @@ export const linkDefinition: EntityDefinition = registerEntity({
 			} else out.coverage = null;
 		}
 		if ('note' in input) out.note = optional(input.note);
+		if ('status' in input || !existing) {
+			const st = str(input.status || 'confirmed');
+			if (st !== 'proposed' && st !== 'confirmed')
+				throw new ValidationError('A link is proposed or confirmed.');
+			out.status = st;
+		}
 		return out;
 	},
+	/** A link AI makes is a proposal until a person confirms it (#69). */
+	judgement: () => ({ column: 'status', proposed: 'proposed' }),
 	afterWrite(app, _actor, row) {
 		if (Number(row.deleted) === 1) return;
 		if (row.from_id === row.to_id) throw new ValidationError('A requirement cannot link to itself.');
@@ -370,8 +400,11 @@ export interface Source {
 	edition: string | null;
 	language: string;
 	licenceNote: string | null;
+	status: 'proposed' | 'active';
 	version: number;
 	requirementCount: number;
+	/** Requirements in the source that wait for review. */
+	proposedCount: number;
 }
 
 export interface Requirement {
@@ -419,12 +452,17 @@ function toRequirement(r: Row): Requirement {
 const REQ_SELECT = `SELECT r.*, s.code AS source_code, s.title AS source_title
 	FROM requirement r JOIN source s ON s.id = r.source_id`;
 
-/** External sources only: internal sources belong to one auditee and are listed with its engagements. */
-export function listSources(app: AppDatabase): Source[] {
+/**
+ * External sources only: internal sources belong to one auditee and are listed with its engagements.
+ * Proposed sources (imported by AI, not yet published) are left out unless asked for.
+ */
+export function listSources(app: AppDatabase, options: { includeProposed?: boolean } = {}): Source[] {
 	const rows = app.sqlite
 		.prepare(
-			`SELECT s.*, (SELECT count(*) FROM requirement r WHERE r.source_id = s.id AND r.deleted = 0) AS n
-			   FROM source s WHERE s.deleted = 0 AND s.auditee_id IS NULL ORDER BY s.title COLLATE NOCASE`
+			`SELECT s.*, (SELECT count(*) FROM requirement r WHERE r.source_id = s.id AND r.deleted = 0) AS n,
+			        (SELECT count(*) FROM requirement r WHERE r.source_id = s.id AND r.deleted = 0 AND r.status = 'proposed') AS p
+			   FROM source s WHERE s.deleted = 0 AND s.auditee_id IS NULL ${options.includeProposed ? '' : "AND s.status = 'active'"}
+			  ORDER BY s.title COLLATE NOCASE`
 		)
 		.all() as Row[];
 	return rows.map((r) => ({
@@ -435,13 +473,16 @@ export function listSources(app: AppDatabase): Source[] {
 		edition: (r.edition as string | null) ?? null,
 		language: String(r.language),
 		licenceNote: (r.licence_note as string | null) ?? null,
+		status: r.status === 'proposed' ? 'proposed' : 'active',
 		version: Number(r.current_version),
-		requirementCount: Number(r.n)
+		requirementCount: Number(r.n),
+		proposedCount: Number(r.p)
 	}));
 }
 
+/** A shared source by code, published or proposed. */
 export function getSourceByCode(app: AppDatabase, code: string): Source | null {
-	return listSources(app).find((s) => s.code === code.toLowerCase()) ?? null;
+	return listSources(app, { includeProposed: true }).find((s) => s.code === code.toLowerCase()) ?? null;
 }
 
 export function getRequirement(app: AppDatabase, id: string): Requirement {
@@ -487,7 +528,7 @@ export interface RequirementHit extends Requirement {
 export function searchRequirements(
 	app: AppDatabase,
 	query: string,
-	options: { sourceId?: string; limit?: number; excludeId?: string } = {}
+	options: { sourceId?: string; limit?: number; excludeId?: string; includeProposed?: boolean } = {}
 ): RequirementHit[] {
 	const hits = searchText(app.sqlite, query, { entityTypes: ['requirement'], limit: 200 });
 	const best = new Map<string, string>();
@@ -496,7 +537,8 @@ export function searchRequirements(
 	const ids = [...best.keys()];
 	const rows = app.sqlite
 		.prepare(
-			`${REQ_SELECT} WHERE r.id IN (${ids.map(() => '?').join(',')}) AND r.deleted = 0 AND s.deleted = 0 AND s.auditee_id IS NULL`
+			`${REQ_SELECT} WHERE r.id IN (${ids.map(() => '?').join(',')}) AND r.deleted = 0 AND s.deleted = 0 AND s.auditee_id IS NULL
+			   ${options.includeProposed ? '' : "AND r.status = 'confirmed' AND s.status = 'active'"}`
 		)
 		.all(...ids) as Row[];
 	const byId = new Map(rows.map((r) => [String(r.id), toRequirement(r)]));
@@ -521,6 +563,7 @@ export interface LinkView {
 	direction: 'out' | 'in';
 	coverage: string | null;
 	note: string | null;
+	status: 'proposed' | 'confirmed';
 	other: Requirement;
 	/** "Name" or "Claude on behalf of Name": who made the link as it is now. */
 	by: string | null;
@@ -543,6 +586,7 @@ export function linksOf(app: AppDatabase, requirementId: string): LinkView[] {
 			direction,
 			coverage: (l.coverage as string | null) ?? null,
 			note: (l.note as string | null) ?? null,
+			status: l.status === 'proposed' ? 'proposed' : 'confirmed',
 			other: getRequirement(app, String(direction === 'out' ? l.to_id : l.from_id)),
 			by: latestAuthorship(app, 'requirement_link', String(l.id))?.by ?? null
 		};

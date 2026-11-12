@@ -276,7 +276,7 @@ export function unitCards(app: AppDatabase, engagementId: string): UnitCard[] {
 				).length
 			},
 			internalRules: internal
-				.filter((r) => r.implements.some((l) => l.other.id === u.requirementId))
+				.filter((r) => r.implements.some((l) => l.other.id === u.requirementId && l.status === 'confirmed'))
 				.map((r) => ({
 					id: r.id,
 					refCode: r.refCode,
