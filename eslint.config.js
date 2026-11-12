@@ -16,7 +16,8 @@ export default ts.config(
 			'prototype/',
 			'design/',
 			'skills/',
-			'issues/'
+			'issues/',
+			'.e2e/'
 		]
 	},
 	js.configs.recommended,

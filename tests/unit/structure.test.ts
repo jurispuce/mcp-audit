@@ -35,12 +35,14 @@ const DB_OPENERS = new Set(['src/lib/server/db.ts']);
  */
 const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/write.ts': ['*', 'revision'],
-	'src/lib/domain/test-entities.ts': []
+	'src/lib/domain/test-entities.ts': [],
+	'src/lib/domain/auth.ts': ['user_credential', 'session', 'personal_token']
 };
 
 const SQL_WRITE =
 	/\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM)\s+["`]?([a-z_]+|\$\{[^}]+\})["`]?/g;
-const DRIZZLE_WRITE = /\.(insert|update|delete)\(\s*[a-zA-Z_]+\s*\)/g;
+/** Drizzle writes go through a `db` handle: `db.insert(table)`, `app.db.update(table)`. */
+const DRIZZLE_WRITE = /\bdb\s*\.\s*(insert|update|delete)\s*\(/g;
 const RAW_ACCESS = /\.(prepare|exec)\(/;
 const LOW_LEVEL_IMPORT = /from\s+['"](drizzle-orm[^'"]*|better-sqlite3|#lib\/db\/[^'"]+)['"]/;
 
@@ -93,5 +95,7 @@ describe('no direct table writes outside the domain layer', () => {
 		expect(RAW_ACCESS.test(route)).toBe(true);
 		const domain = "app.sqlite.prepare('DELETE FROM finding WHERE id = ?')";
 		expect([...domain.matchAll(SQL_WRITE)].map((m) => m[1])).toEqual(['finding']);
+		expect('app.db.insert(finding).values(x)'.match(DRIZZLE_WRITE)).toHaveLength(1);
+		expect("createHash('sha256').update(value)".match(DRIZZLE_WRITE)).toBeNull();
 	});
 });

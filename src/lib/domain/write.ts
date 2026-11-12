@@ -52,6 +52,11 @@ export interface EntityDefinition {
 	parse(input: Record<string, unknown>, existing: Row | null): Row;
 	/** Optional: decide whether the actor may perform this write. Throw ForbiddenError to refuse. */
 	authorize?(app: AppDatabase, actor: Actor, op: WriteOp, existing: Row | null): void;
+	/**
+	 * Optional: runs inside the same transaction after the row and revision are written.
+	 * Throw to roll the whole write back (for example to keep at least one admin).
+	 */
+	afterWrite?(app: AppDatabase, actor: Actor, row: Row, existing: Row | null, op: WriteOp): void;
 	/** Optional: text fields to keep in the full-text index. */
 	search?(row: Row): Record<string, string | null>;
 	/** Short human label for lists, history and the item sheet. */
@@ -119,6 +124,14 @@ export function write(
 	const allowed = new Set<string>([...def.columns, 'deleted']);
 
 	const run = app.sqlite.transaction((): WriteResult => {
+		try {
+			return inner();
+		} catch (e) {
+			throw uniqueToValidation(def, e);
+		}
+	});
+
+	const inner = (): WriteResult => {
 		const now = (options.now ?? new Date()).getTime();
 		const existing = op.op === 'create' ? null : readRow(app, def, op.id);
 
@@ -230,6 +243,8 @@ export function write(
 				now
 			);
 
+		def.afterWrite?.(app, actor, row, existing, op);
+
 		if (def.search) {
 			if (Number(row.deleted) === 1) removeFromIndex(app.sqlite, def.type, id);
 			else
@@ -238,9 +253,20 @@ export function write(
 		}
 
 		return { row, version, changed: true };
-	});
+	};
 
 	return run();
+}
+
+/** Turn "UNIQUE constraint failed: user.email" into a validation error on that field. */
+function uniqueToValidation(def: EntityDefinition, e: unknown): unknown {
+	const err = e as { code?: string; message?: string };
+	if (err?.code !== 'SQLITE_CONSTRAINT_UNIQUE') return e;
+	const match = /UNIQUE constraint failed: ([\w.]+(?:, [\w.]+)*)/.exec(err.message ?? '');
+	const columns = (match?.[1] ?? '').split(', ').map((c) => c.split('.').pop()!);
+	const fields = Object.fromEntries(columns.filter(Boolean).map((c) => [c, 'Already in use']));
+	const label = columns.map((c) => def.fieldLabels?.[c] ?? c).join(', ');
+	return new ValidationError(`${label || 'Value'} is already in use.`, fields);
 }
 
 /** Convenience wrappers; each is one call to `write()`. */

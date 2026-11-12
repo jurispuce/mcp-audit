@@ -45,3 +45,59 @@ export const revision = sqliteTable(
 		index('revision_author').on(t.authorUser)
 	]
 );
+
+/** Auditors who use the app. A versioned entity; credentials are kept apart so snapshots never hold them. */
+export const user = sqliteTable(
+	'user',
+	{
+		...entityColumns(),
+		name: text('name').notNull(),
+		email: text('email').notNull(),
+		role: text('role', { enum: ['admin', 'auditor'] }).notNull(),
+		active: integer('active', { mode: 'boolean' }).notNull().default(true)
+	},
+	(t) => [uniqueIndex('user_email').on(t.email)]
+);
+
+/** Password hash per user. Not versioned and never copied into revisions. */
+export const userCredential = sqliteTable('user_credential', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => user.id),
+	passwordHash: text('password_hash').notNull(),
+	mustChangePassword: integer('must_change_password', { mode: 'boolean' }).notNull().default(false),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull()
+});
+
+/** Browser sessions. The id is the SHA-256 of the cookie value; the cookie value is never stored. */
+export const session = sqliteTable(
+	'session',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+		lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull()
+	},
+	(t) => [index('session_user').on(t.userId)]
+);
+
+/** Personal access tokens that identify a user to the MCP endpoint. Stored as SHA-256 only. */
+export const personalToken = sqliteTable(
+	'personal_token',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		name: text('name').notNull(),
+		tokenHash: text('token_hash').notNull(),
+		prefix: text('prefix').notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+		revokedAt: integer('revoked_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [uniqueIndex('personal_token_hash').on(t.tokenHash), index('personal_token_user').on(t.userId)]
+);
