@@ -43,4 +43,14 @@ The dev server runs on http://localhost:5173.
 | `src/lib/mcp`    | The MCP endpoint and its tools (milestone 3)                                               |
 | `src/routes`     | UI pages and JSON API routes; thin callers of the domain layer                             |
 
-Imports from `src/lib` use the `#lib/...` subpath (SvelteKit 3 replaced `$lib`).
+Imports from `src/lib` use the `#lib/...` subpath with the file extension, for example `#lib/server/db.ts` (SvelteKit 3 replaced `$lib`).
+
+## Database
+
+SQLite in WAL mode through Drizzle. The schema is in `src/lib/db/schema.ts`; migrations in `drizzle/` run automatically when the server starts.
+
+```bash
+npx drizzle-kit generate --name=<what-changed>
+```
+
+Full-text search uses one FTS5 table; `src/lib/db/fts.ts` indexes and searches any text field. Unit tests use `createTestDatabase()`, an in-memory database with every migration applied.

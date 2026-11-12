@@ -26,7 +26,9 @@
 		"@sveltejs/adapter-node": "^6.0.2",
 		"@sveltejs/kit": "^3.2.0",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
+		"@types/better-sqlite3": "^9.6.0",
 		"@types/node": "^22.19.0",
+		"drizzle-kit": "^0.31.11",
 		"eslint": "^10.14.0",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.24.1",
@@ -43,5 +45,9 @@
 	"imports": {
 		"#lib": "./src/lib",
 		"#lib/*": "./src/lib/*"
+	},
+	"dependencies": {
+		"better-sqlite3": "^13.1.1",
+		"drizzle-orm": "^0.45.4"
 	}
 }
