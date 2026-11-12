@@ -4,6 +4,9 @@
 	import { page } from '$app/state';
 	import { authorship, CHANNEL_LABELS, formatWhen } from '#lib/format.ts';
 	import Icon from './Icon.svelte';
+	import RequirementDetails from './library/RequirementDetails.svelte';
+	import RequirementLinks from './library/RequirementLinks.svelte';
+	import type { RequirementExtra } from './library/types';
 
 	/**
 	 * The detail view of any record, opened over any screen with `?item=<type>:<id>` (and `&tab=`).
@@ -31,6 +34,7 @@
 			lastAuthor: string;
 			updatedAt: string;
 			counts: { links: number; comments: number; history: number };
+			extra: unknown;
 		};
 		history: {
 			version: number;
@@ -92,6 +96,12 @@
 			heading?.focus();
 		});
 	});
+
+	/** Reload the sheet after a change made inside it, and the screen underneath. */
+	async function reload() {
+		if (key) await load(key);
+		await invalidateAll();
+	}
 
 	function urlWith(changes: Record<string, string | null>) {
 		const url = new URL(page.url.href);
@@ -250,8 +260,23 @@
 							<dd>{d.value || '—'}</dd>
 						{/each}
 					</dl>
+					{#if data.item.type === 'requirement' && data.item.extra}
+						<RequirementDetails
+							extra={data.item.extra as RequirementExtra}
+							onchange={reload}
+							onopen={openLinked}
+						/>
+					{/if}
 				{:else if tab === 'links'}
-					<div class="au-empty">Nothing is linked to this item yet.</div>
+					{#if data.item.type === 'requirement' && data.item.extra}
+						<RequirementLinks
+							extra={data.item.extra as RequirementExtra}
+							onchange={reload}
+							onopen={openLinked}
+						/>
+					{:else}
+						<div class="au-empty">Nothing is linked to this item yet.</div>
+					{/if}
 				{:else if tab === 'comments'}
 					{#if data.comments.length === 0}
 						<p class="au-muted">No comments yet.</p>
