@@ -188,7 +188,8 @@ describe('audit plan export (#50)', () => {
 		expect(text.text).toContain('Audita plāns');
 		expect(text.text).toContain('Kalniņa');
 		const stored = getArtifactText(app, pdf.id).text;
-		expect(stored).toContain('Salīdzinājumā ar 2026-11-12 versiju:');
+		// "Since" names the day the previous export was actually made (its creation time, not the plan date).
+		expect(stored).toContain(`Salīdzinājumā ar ${docx.createdAt.toISOString().slice(0, 10)} versiju:`);
 		expect(stored).toContain('- Mainīts: Access and identity interview');
 		expect(stored).not.toContain('Incident walkthrough');
 		expect(listArtifacts(app, e.id).map((a) => a.filename)).toEqual([

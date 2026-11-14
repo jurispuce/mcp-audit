@@ -78,6 +78,11 @@ test('upload a law, import it through Claude, review, edit and publish it, then 
 		await card.getByText('Preview and edit the requirements').click();
 	const r51 = card.getByTestId('proposed-5.1');
 	await r51.getByRole('button', { name: 'Edit 5.1' }).click();
+	// Title and text use the card's full width, so a long text can be read while editing.
+	const titleBox = (await r51.getByLabel('Title').boundingBox())!;
+	const textBox = (await r51.getByLabel('Text').boundingBox())!;
+	expect(Math.abs(textBox.width - titleBox.width)).toBeLessThan(2);
+	expect(textBox.y).toBeGreaterThan(titleBox.y);
 	await r51.getByLabel('Title').fill('Risk assessment once a year');
 	await r51.getByRole('button', { name: 'Save changes' }).click();
 	await expect(page.getByRole('status')).toHaveText('5.1 saved. It is still proposed until you accept it.');
@@ -124,6 +129,18 @@ test('upload a law, import it through Claude, review, edit and publish it, then 
 	);
 	const six = page.getByTestId('map-6');
 	await expect(six).toContainText('Reason: Both require access control rules');
+	// Both requirements in full, side by side, when needed.
+	await six.getByRole('button', { name: 'Compare full texts of 6 and Art. 21(2)(i)' }).click();
+	const compare = six.getByTestId('compare');
+	await expect(compare.getByRole('region', { name: 'Requirement being mapped' })).toContainText(
+		'Access control'
+	);
+	await expect(compare.getByRole('region', { name: 'Requirement in the target source' })).toContainText(
+		'Art. 21(2)(i)'
+	);
+	await expect(compare).toContainText('Implements, full coverage');
+	await six.getByRole('button', { name: 'Hide full texts of 6 and Art. 21(2)(i)' }).click();
+	await expect(six.getByTestId('compare')).toHaveCount(0);
 	await six.getByRole('button', { name: 'Edit link 6 to Art. 21(2)(i)' }).click();
 	await six.getByLabel('Coverage').selectOption('partial');
 	await six.getByRole('button', { name: 'Save link' }).click();
@@ -137,6 +154,10 @@ test('upload a law, import it through Claude, review, edit and publish it, then 
 	await five.getByRole('button', { name: 'Map 5 by hand' }).click();
 	await five.getByLabel('Find in NIS 2 Directive (EU) 2022/2555').fill('risk analysis');
 	await five.getByRole('button', { name: /Art\. 21\(2\)\(a\)/ }).click();
+	// The candidate opens next to the requirement being mapped, in full.
+	await expect(
+		five.getByTestId('compare').getByRole('region', { name: 'Requirement in the target source' })
+	).toContainText('Art. 21(2)(a)');
 	await five.getByLabel('Type').selectOption('details');
 	await five.getByLabel('Reason').fill('Risk management covers risk analysis');
 	await five.getByRole('button', { name: 'Add link' }).click();

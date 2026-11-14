@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
+	import RequirementCompare from './RequirementCompare.svelte';
 	import RequirementPicker from './RequirementPicker.svelte';
 	import type { Requirement } from './types';
 
@@ -23,6 +24,9 @@
 	}
 	let { row, target }: Props = $props();
 	let editing = $state<string | null>(null);
+	/** Links whose two requirements are open side by side. */
+	let comparing = $state<Record<string, boolean>>({});
+	let comparePicked = $state(true);
 	let adding = $state(false);
 	let picked = $state<Requirement | null>(null);
 	let type = $state('implements');
@@ -54,6 +58,7 @@
 	/** Keep the chosen sources in the URL when a form action reloads the page. */
 	const act = (name: string) => `${page.url.search ? `${page.url.search}&` : '?'}/${name}`;
 	const mapped = $derived(row.links.some((l) => l.status === 'confirmed'));
+	const relationOf = (l: Link) => `${l.label}${l.coverage ? `, ${l.coverage} coverage` : ''}`;
 </script>
 
 <li class="au-item" class:au-item--gap={!row.links.length} data-testid="map-{row.refCode}">
@@ -112,6 +117,14 @@
 					</form>
 				{:else}
 					<span class="au-row au-wrap">
+						<button
+							class="au-btn au-btn--small"
+							type="button"
+							aria-expanded={!!comparing[l.id]}
+							onclick={() => (comparing[l.id] = !comparing[l.id])}
+							aria-label="{comparing[l.id] ? 'Hide' : 'Compare'} full texts of {row.refCode} and {l.target
+								.refCode}">{comparing[l.id] ? 'Hide texts' : 'Compare texts'}</button
+						>
 						{#if l.status === 'proposed'}
 							<form method="POST" action={act('accept')} use:enhance={after}>
 								<input type="hidden" name="id" value={l.id} /><button
@@ -142,6 +155,14 @@
 						</form>
 					</span>
 				{/if}
+				{#if comparing[l.id]}
+					<RequirementCompare
+						leftId={row.id}
+						rightId={l.target.id}
+						relation={relationOf(l)}
+						reason={l.note}
+					/>
+				{/if}
 			</li>
 		{/each}
 	</ul>
@@ -150,6 +171,21 @@
 			{#if !picked}
 				<RequirementPicker label="Find in {target.title}" source={target.code} onpick={(r) => (picked = r)} />
 			{:else}
+				<div class="au-row au-wrap">
+					<button
+						class="au-btn au-btn--small"
+						type="button"
+						aria-expanded={comparePicked}
+						onclick={() => (comparePicked = !comparePicked)}
+						>{comparePicked ? 'Hide texts' : 'Compare texts'}</button
+					>
+					<button class="au-btn au-btn--small au-btn--ghost" type="button" onclick={() => (picked = null)}
+						>Choose another</button
+					>
+				</div>
+				{#if comparePicked}
+					<RequirementCompare leftId={row.id} rightId={picked.id} />
+				{/if}
 				<form method="POST" action={act('add')} class="au-row au-wrap" use:enhance={after}>
 					<input type="hidden" name="from" value={row.id} />
 					<input type="hidden" name="to" value={picked.id} />

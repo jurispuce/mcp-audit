@@ -45,7 +45,9 @@
 >
 	<div class="au-item__head">
 		<div>
-			<span class="au-ref">{r.refCode}{by ? ` · ${by}` : ''}</span>
+			<span class="au-ref"
+				>{r.refCode}{r.parentRef ? ` · under ${r.parentRef}` : ''}{by ? ` · ${by}` : ''}</span
+			>
 			<h3 class="au-item__title">
 				<a class="au-titlelink" href="?item=requirement:{r.id}" data-sveltekit-reset="false">{r.title}</a>
 			</h3>
@@ -62,7 +64,7 @@
 				<span class="au-diff-ins">{r.text ?? '(no text)'}</span>{/if}
 		</p>
 	{:else if r.text}
-		<p class="au-item__body">{r.text}</p>
+		<p class="au-item__body au-item__body--full">{r.text}</p>
 	{/if}
 	{#if error?.message}<div class="au-alert au-alert--danger" role="alert">{error.message}</div>{/if}
 	<div class="au-item__actions">
@@ -70,7 +72,7 @@
 			<form method="POST" action="?/edit" class="au-form au-grow" use:enhance={keep}>
 				<input type="hidden" name="id" value={r.id} />
 				<input type="hidden" name="base_version" value={r.version} />
-				<div class="au-row au-wrap">
+				<div class="au-row au-wrap au-wide">
 					<div class="au-field">
 						<label for="{p}-ref">Reference</label><input
 							id="{p}-ref"
@@ -87,7 +89,7 @@
 						/>
 					</div>
 				</div>
-				<div class="au-field">
+				<div class="au-field au-wide">
 					<label for="{p}-title">Title</label><input
 						id="{p}-title"
 						name="title"
@@ -95,14 +97,15 @@
 						required
 					/>
 				</div>
-				<div class="au-field">
+				<div class="au-field au-wide">
 					<label for="{p}-text">Text</label><textarea
 						id="{p}-text"
 						name="text"
-						rows="3"
+						class="au-textarea--grow"
+						rows="8"
 						defaultValue={v.text ?? r.text ?? ''}></textarea>
 				</div>
-				<div class="au-row">
+				<div class="au-row au-wide">
 					<button class="au-btn au-btn--primary au-btn--small" type="submit">Save changes</button>
 					<button class="au-btn au-btn--ghost au-btn--small" type="button" onclick={() => (editing = false)}
 						>Cancel</button

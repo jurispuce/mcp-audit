@@ -1,6 +1,7 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { searchText } from '#lib/db/fts.ts';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors';
+import { assertCanReadRequirement } from './guards';
 import { latestAuthorship } from './history';
 import { registerEntity } from './registry';
 import {
@@ -906,4 +907,35 @@ export function setCriteria(
 		}
 		return result;
 	})();
+}
+
+// ---- Side-by-side reading (mapping screen)
+
+export interface RequirementForReading extends Requirement {
+	/** Ancestors from the top of the source down to the parent: where the requirement sits. */
+	path: { refCode: string; title: string }[];
+	guidance: string | null;
+}
+
+/**
+ * A library requirement with its full text and where it sits in its source, for reading two
+ * requirements side by side while mapping. Only shared library sources: an auditee's internal
+ * requirements are not readable from the library.
+ */
+export function requirementForReading(app: AppDatabase, id: string): RequirementForReading {
+	assertCanReadRequirement(app, id, { auditeeId: null });
+	const r = getRequirement(app, id);
+	const path: { refCode: string; title: string }[] = [];
+	const seen = new Set([r.id]);
+	let parentId = r.parentId;
+	while (parentId && !seen.has(parentId)) {
+		seen.add(parentId);
+		const p = app.sqlite
+			.prepare('SELECT ref_code, title, parent_id FROM requirement WHERE id = ?')
+			.get(parentId) as { ref_code: string; title: string; parent_id: string | null } | undefined;
+		if (!p) break;
+		path.unshift({ refCode: p.ref_code, title: p.title });
+		parentId = p.parent_id;
+	}
+	return { ...r, path, guidance: getGuidance(app, id)?.body ?? null };
 }
