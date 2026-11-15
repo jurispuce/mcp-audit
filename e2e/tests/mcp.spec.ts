@@ -66,6 +66,12 @@ test('a library-curator run through MCP shows in the UI as written by Claude on 
 	const row = sheet.getByTestId('link-row').filter({ hasText: code });
 	await expect(row).toContainText('Partial coverage');
 	await expect(row.getByTestId('link-by')).toHaveText('by Claude on behalf of Ari Auditor');
+	// The auditor accepts the proposed link right in the requirement's Links tab.
+	await expect(row).toContainText('Proposed');
+	await row.getByRole('button', { name: 'Accept link to A.5.19' }).click();
+	await expect(row).not.toContainText('Proposed');
+	await expect(row.getByRole('button', { name: 'Remove link' })).toBeVisible();
+	await expect(row.getByTestId('link-by')).toHaveText('by Ari Auditor');
 });
 
 test('a revoked token stops working at once', async ({ page, baseURL }) => {

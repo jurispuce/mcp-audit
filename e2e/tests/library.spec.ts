@@ -164,9 +164,18 @@ test('guidance and criteria are edited on the requirement and versioned apart fr
 	await expect(sheet).toContainText('Guidance version 2');
 
 	const criteria = sheet.getByTestId('criteria');
+	// Text typed but not saved survives a reload, marked as not saved yet.
+	await criteria.getByLabel('New criterion').fill('Draft criterion');
+	await expect(criteria).toContainText('Not saved yet');
+	await page.reload();
+	await expect(sheet.getByTestId('draft-restored')).toBeVisible();
+	await expect(criteria.getByLabel('New criterion')).toHaveValue('Draft criterion');
+	await criteria.getByRole('button', { name: 'Clear' }).click();
+	await expect(criteria.getByLabel('New criterion')).toHaveValue('');
 	await criteria.getByLabel('New criterion').fill('Backups are restorable');
 	await criteria.getByLabel('Expected evidence, one per line').fill('Restore test record\nBackup schedule');
-	await criteria.getByRole('button', { name: 'Add criterion' }).click();
+	await criteria.getByRole('button', { name: 'Save new criterion' }).click();
+	await expect(criteria.getByTestId('criteria-message')).toHaveText('Criterion saved. It is listed above.');
 	await expect(criteria.locator('.au-criteria > li')).toHaveCount(1);
 	await expect(criteria.locator('.au-evidence-list li')).toHaveText([
 		'Restore test record',

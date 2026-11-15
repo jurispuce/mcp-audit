@@ -324,3 +324,7 @@ details.au-item > summary { cursor: pointer; min-height: var(--touch-target); di
 /* Long requirement texts: shown whole, line breaks kept; the edit box grows with its text */
 .au-item__body--full { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
 .au-textarea--grow { field-sizing: content; min-height: 10rem; max-height: 70vh; resize: vertical; line-height: 1.55; }
+
+/* Text typed but not saved yet */
+.au-unsaved { color: var(--warn); font-weight: 600; font-size: 14px; }
+.au-linkrow__actions { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-1); flex: none; }

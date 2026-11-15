@@ -62,6 +62,12 @@
 		await onchange();
 	}
 
+	async function review(linkId: string, verdict: 'accept' | 'reject') {
+		const res = await api('POST', `/api/library/links/${linkId}/${verdict}`);
+		error = res.ok ? null : res.message;
+		await onchange();
+	}
+
 	async function remove(linkId: string, version: number) {
 		if (!confirm('Remove this link? It stays in the history and can be restored by revert.')) return;
 		const res = await api('POST', `/api/library/links/${linkId}/remove`, { baseVersion: version });
@@ -96,13 +102,30 @@
 							{#if l.note}<span class="au-muted">{l.note}</span>{/if}
 							{#if l.by}<span class="au-muted" data-testid="link-by">by {l.by}</span>{/if}
 						</button>
-						<button
-							type="button"
-							class="au-btn au-btn--small au-btn--danger"
-							onclick={() => remove(l.id, l.version)}
-						>
-							Remove link
-						</button>
+						<span class="au-linkrow__actions">
+							{#if l.status === 'proposed'}
+								<button
+									type="button"
+									class="au-btn au-btn--small au-btn--primary"
+									aria-label="Accept link to {l.other.refCode}"
+									onclick={() => review(l.id, 'accept')}>Accept link</button
+								>
+								<button
+									type="button"
+									class="au-btn au-btn--small au-btn--ghost"
+									aria-label="Reject link to {l.other.refCode}"
+									onclick={() => review(l.id, 'reject')}>Reject</button
+								>
+							{:else}
+								<button
+									type="button"
+									class="au-btn au-btn--small au-btn--danger"
+									onclick={() => remove(l.id, l.version)}
+								>
+									Remove link
+								</button>
+							{/if}
+						</span>
 					</li>
 				{/each}
 			</ul>
