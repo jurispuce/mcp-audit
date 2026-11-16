@@ -91,22 +91,7 @@
 	validate={() => (e.planInputs ? null : 'Save the planning inputs first.')}
 />
 
-{#if data.receivedCandidates}
-	<form
-		method="POST"
-		action="?/linkReceived"
-		class="au-proposal"
-		use:enhance={after}
-		data-testid="link-received"
-	>
-		<span class="au-proposal__text"
-			>{data.receivedCandidates} planned evidence {data.receivedCandidates === 1
-				? 'item matches a document'
-				: 'items match documents'} already received. Link them so the meetings focus on what is missing.</span
-		>
-		<button class="au-btn au-btn--small au-btn--primary" type="submit">Link received documents</button>
-	</form>
-{/if}
+<ProposalBar types={['link']} testid="received-links-bar" />
 
 <ProposalBar types={['event', 'evidence']} testid="drafts-bar">
 	<form method="POST" action="?/acceptAll" use:enhance={after}>

@@ -109,22 +109,6 @@
 					>{toObtain.length} to obtain at this event, {received.length} already received</span
 				>{/if}
 		</div>
-		{#if data.receivedCandidates}
-			<form
-				method="POST"
-				action="?/linkReceived"
-				class="au-proposal"
-				use:enhance={keep}
-				data-testid="link-received"
-			>
-				<span class="au-proposal__text"
-					>{data.receivedCandidates} planned evidence {data.receivedCandidates === 1
-						? 'item matches a document'
-						: 'items match documents'} already received.</span
-				>
-				<button class="au-btn au-btn--small au-btn--primary" type="submit">Link received documents</button>
-			</form>
-		{/if}
 		{#if data.evidence.length === 0}
 			<div class="au-empty">
 				<p>
@@ -177,12 +161,15 @@
 							{/if}
 							<span class="au-badge au-badge--ai">Proposed</span>
 							<span
-								>{l.artifactTitle}, {where(l.locator)} · {l.sufficiency === 'supports'
+								><a href="?item=artifact:{l.artifactId}" data-sveltekit-reset="false">{l.artifactTitle}</a>, {where(
+									l.locator
+								)} · {l.sufficiency === 'supports'
 									? 'supports'
 									: l.sufficiency === 'partial'
 										? 'partly supports'
 										: 'contradicts'}</span
 							>
+							{#if l.excerpt}<span class="au-muted au-proposed-link__excerpt">{l.excerpt}</span>{/if}
 							<form method="POST" action="?/confirmLink" use:enhance={keep}>
 								<input type="hidden" name="id" value={l.id} /><button
 									class="au-btn au-btn--small au-btn--primary"

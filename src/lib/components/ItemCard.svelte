@@ -11,6 +11,8 @@
 		title: string;
 		href?: string;
 		state?: 'default' | 'proposed' | 'locked';
+		/** The badge of a proposed item; "Proposed" alone for what the app proposes itself, without AI. */
+		proposedLabel?: string;
 		badge?: { label: string; tone?: 'ok' | 'info' | 'warn' | 'danger' | 'ai' | 'neutral' } | null;
 		body?: string | null;
 		version?: number;
@@ -28,6 +30,7 @@
 		title,
 		href,
 		state = 'default',
+		proposedLabel = 'Proposed by AI',
 		badge,
 		body,
 		version,
@@ -61,7 +64,7 @@
 			{#if state === 'proposed'}
 				<span class="au-badge au-badge--ai">
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v6M12 15v6M3 12h6M15 12h6" /></svg
-					>Proposed by AI
+					>{proposedLabel}
 				</span>
 			{/if}
 			{#if state === 'locked'}

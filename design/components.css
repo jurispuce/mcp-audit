@@ -309,7 +309,7 @@ details.au-item > summary { cursor: pointer; min-height: var(--touch-target); di
 /* Library import: the two ways to extract, side by side when there is room */
 .au-import-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3); }
 .au-item[data-selected] { border-color: var(--accent); }
-.au-aiaction__setup { margin-left: var(--space-1); }
+.au-aiaction__setup { display: inline-flex; align-items: center; min-height: var(--touch-target); margin-left: var(--space-1); }
 
 /* Mapping: two requirements side by side (RequirementCompare); stacked on a phone */
 .au-compare { display: grid; grid-template-columns: 1fr; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-sunken); }
@@ -338,6 +338,7 @@ details.au-item > summary { cursor: pointer; min-height: var(--touch-target); di
 @media (max-width: 767px) { .au-selectbar--active { bottom: calc(var(--bottom-bar) + var(--space-2)); } }
 .au-select { margin-right: auto; }
 .au-proposed-link { gap: var(--space-2); padding: var(--space-1) 0; }
+.au-proposed-link__excerpt { flex-basis: 100%; font-size: 13px; }
 
 /* Settings, Skills (#80): the editor, with the default beside it when comparing. */
 .au-skill-edit { align-items: flex-start; }

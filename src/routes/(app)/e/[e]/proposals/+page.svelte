@@ -3,6 +3,7 @@
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ItemCard from '#lib/components/ItemCard.svelte';
+	import { RECEIVED_SOURCE } from '#lib/proposal-types.ts';
 
 	let { data, form } = $props();
 	const e = $derived(data.engagement);
@@ -98,6 +99,7 @@
 				<li>
 					<ItemCard
 						state="proposed"
+						proposedLabel={p.source === RECEIVED_SOURCE ? 'Proposed' : undefined}
 						ref="{TYPE_LABEL[p.type]} · from {p.source}"
 						title={p.title}
 						href="?item={p.entityType}:{p.id}"

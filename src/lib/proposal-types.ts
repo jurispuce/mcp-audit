@@ -22,3 +22,6 @@ export const PROPOSAL_LABELS: Record<ProposalType, [string, string]> = {
 	link: ['evidence link', 'evidence links'],
 	finding: ['finding', 'findings']
 };
+
+/** The source of evidence links the app proposes itself from documents already received (#83). */
+export const RECEIVED_SOURCE = 'documents already received';

@@ -27,7 +27,7 @@ import {
 import { listSelected } from '#lib/domain/selection.ts';
 import { loadConfig } from '#lib/server/config.ts';
 import { bulkMessage, reviewProposalItems } from '#lib/domain/proposals.ts';
-import { receivedDocumentCandidates } from '#lib/domain/received-documents.ts';
+import { linkReceivedDocuments } from '#lib/domain/received-documents.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -82,9 +82,10 @@ export const actions: Actions = {
 						? [`${r.filename}: ${r.error}`]
 						: []
 			);
-			const linkable = receivedDocumentCandidates(appDatabase(), params.e).length;
+			// Planned evidence the new documents answer is proposed as links right away (#83).
+			const linkable = linkReceivedDocuments(appDatabase(), uiActor(locals), params.e).length;
 			return {
-				success: `${added} ${added === 1 ? 'document' : 'documents'} added.${notes.length ? ` ${notes.join(' ')}` : ''}${linkable ? ` ${linkable} planned evidence ${linkable === 1 ? 'item matches' : 'items match'} documents already received: link them on Plan, Events.` : ''}`
+				success: `${added} ${added === 1 ? 'document' : 'documents'} added.${notes.length ? ` ${notes.join(' ')}` : ''}${linkable ? ` ${linkable} planned evidence ${linkable === 1 ? 'item matches' : 'items match'} these documents: the links are proposed on each event's Run screen and on Proposals.` : ''}`
 			};
 		} catch (e) {
 			return formFailure(e);

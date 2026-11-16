@@ -13,7 +13,7 @@ import { registerTextArtifact } from './artifacts';
 import { buildAuditPlan } from './audit-plan';
 import { uploadNewVersion } from './document-versions';
 import { createEngagement, type Engagement } from './engagements';
-import { confirmLink, listLinks } from './execution';
+import { confirmLink, listLinks, removeLink } from './execution';
 import { getItemHistory } from './items';
 import { acceptInternal, addInternal } from './internal';
 import { findRequirement, getSourceByCode } from './library';
@@ -72,6 +72,7 @@ function setup() {
 	] as const) {
 		const ir = addInternal(app, human, e.id, {
 			title: `Rule ${section}`,
+			quote: `Rule ${section} quote`,
 			section,
 			artifactId: policy.id,
 			implements: [{ requirementId: req(r), coverage: 'partial' }]
@@ -130,6 +131,20 @@ describe('documents already received (#83)', () => {
 		expect(listEvidence(app, e.id).find((x) => x.id === items.scope.id)!.status).toBe('planned');
 		confirmLink(app, human, e.id, links[0]!.id);
 		expect(listEvidence(app, e.id).find((x) => x.id === items.scope.id)!.status).toBe('received');
+		// The sections' rules come with the link, in the document's words, and the note names them.
+		expect(links[1]!.excerpt).toBe('INT-1: “Rule 5.2 quote” INT-2: “Rule 5.4 quote”');
+		expect(getItemHistory(app, 'evidence_link', links[1]!.id)[0]!.note).toBe(
+			'Received document: the sections of INT-1, INT-2'
+		);
+	});
+
+	it('does not propose a match again once the auditor rejected it', () => {
+		setup();
+		linkReceivedDocuments(app, human, e.id);
+		const [first] = listLinks(app, e.id);
+		removeLink(app, human, e.id, first!.id);
+		expect(receivedDocumentCandidates(app, e.id).map((c) => c.artifactId)).not.toContain(first!.artifactId);
+		expect(linkReceivedDocuments(app, human, e.id)).toEqual([]);
 	});
 
 	it('uses the newest version of a document and only this event when asked', async () => {

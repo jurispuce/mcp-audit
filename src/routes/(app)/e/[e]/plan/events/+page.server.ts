@@ -21,7 +21,6 @@ import {
 } from '#lib/domain/planning.ts';
 import { criticalityOf } from '#lib/domain/risks.ts';
 import { listSelected } from '#lib/domain/selection.ts';
-import { linkReceivedDocuments, receivedDocumentCandidates } from '#lib/domain/received-documents.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { reviewSelected } from '#lib/server/proposals.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
@@ -39,8 +38,7 @@ export const load: PageServerLoad = ({ params }) => {
 		criticality: Object.fromEntries([...crit].map(([id, c]) => [id, c.level])),
 		kinds: EVIDENCE_KINDS.map((k) => [k, KIND_LABELS[k]] as [string, string]),
 		statuses: EVIDENCE_STATUSES.map((k) => [k, STATUS_LABELS[k]] as [string, string]),
-		selectedCount: listSelected(app, params.e).length,
-		receivedCandidates: receivedDocumentCandidates(app, params.e).length
+		selectedCount: listSelected(app, params.e).length
 	};
 };
 
@@ -105,16 +103,6 @@ function evidenceInput(data: FormData): { values: Record<string, string>; input:
 }
 
 export const actions: Actions = {
-	linkReceived: async ({ locals, params }) => {
-		try {
-			const n = linkReceivedDocuments(appDatabase(), uiActor(locals), params.e).length;
-			return {
-				success: `${n} ${n === 1 ? 'link' : 'links'} to documents already received proposed. Review them on each event's Run screen, or on Proposals.`
-			};
-		} catch (e) {
-			return formFailure(e);
-		}
-	},
 	planInputs: async ({ request, locals, params }) => {
 		const values = formValues(await request.formData(), [
 			'from',

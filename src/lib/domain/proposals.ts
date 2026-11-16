@@ -25,7 +25,7 @@ import type { Actor } from './write';
  */
 
 export { PROPOSAL_LABELS, PROPOSAL_TYPES, type ProposalType } from '../proposal-types';
-import { PROPOSAL_TYPES, type ProposalType } from '../proposal-types';
+import { PROPOSAL_TYPES, RECEIVED_SOURCE, type ProposalType } from '../proposal-types';
 
 const ENTITY: Record<ProposalType, string> = {
 	role: 'person',
@@ -69,7 +69,8 @@ function sourcesOf(app: AppDatabase, entityType: string, ids: string[]): Map<str
 		const rows = app.sqlite
 			.prepare(
 				`SELECT entity_id, channel, author_agent, note FROM revision
-				  WHERE entity_type = ? AND entity_id IN (${chunk.map(() => '?').join(',')}) AND channel != 'ui'
+				  WHERE entity_type = ? AND entity_id IN (${chunk.map(() => '?').join(',')})
+				    AND (channel != 'ui' OR note LIKE 'Received document:%')
 				  ORDER BY version DESC`
 			)
 			.all(entityType, ...chunk) as {
@@ -82,9 +83,12 @@ function sourcesOf(app: AppDatabase, entityType: string, ids: string[]): Map<str
 			if (out.has(row.entity_id)) continue;
 			out.set(
 				row.entity_id,
-				row.channel === 'ai'
-					? (row.note ?? `${row.author_agent ?? 'AI'} in the app`)
-					: `${row.author_agent ?? 'AI'} through MCP`
+				// Links the app proposes itself when a planned item matches a received document (#83).
+				row.channel === 'ui'
+					? RECEIVED_SOURCE
+					: row.channel === 'ai'
+						? (row.note ?? `${row.author_agent ?? 'AI'} in the app`)
+						: `${row.author_agent ?? 'AI'} through MCP`
 			);
 		}
 	}

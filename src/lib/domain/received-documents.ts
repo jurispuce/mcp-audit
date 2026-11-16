@@ -1,7 +1,7 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { listArtifacts, type Artifact } from './artifacts';
 import { getEngagement } from './engagements';
-import { evidenceLinkDefinition, listLinks } from './execution';
+import { evidenceLinkDefinition } from './execution';
 import { listInternal } from './internal';
 import { listEvidence, type EvidenceItem } from './planning';
 import { createEntity, type Actor } from './write';
@@ -24,7 +24,13 @@ export interface ReceivedLinkCandidate {
 	/** "§ 4.1, 4.2" from internal requirements, or null for the whole document. */
 	locator: string | null;
 	why: 'internal_requirements' | 'document_name';
+	/** For internal_requirements: the INT codes whose sections hold the rule. */
+	internalRefs: string[];
 }
+
+/** "<artifact id>|<evidence item id>": names one candidate, for linking a chosen few. */
+export const candidateKey = (c: { artifactId: string; evidenceItemId: string }) =>
+	`${c.artifactId}|${c.evidenceItemId}`;
 
 const NUM = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
 
@@ -64,24 +70,39 @@ export function receivedDocumentCandidates(
 		(x) => x.kind === 'rule' && x.status !== 'received' && (!options.eventId || x.eventId === options.eventId)
 	);
 	if (!items.length) return [];
-	const linked = new Set(listLinks(app, e.id).map((l) => `${l.artifactId}|${l.evidenceItemId}`));
+	// Every pair ever linked, removed ones included: a match the auditor rejected is not proposed again.
+	const linked = new Set(
+		(
+			app.sqlite
+				.prepare('SELECT artifact_id, evidence_item_id FROM evidence_link WHERE engagement_id = ?')
+				.all(e.id) as { artifact_id: string; evidence_item_id: string }[]
+		).map((l) => candidateKey({ artifactId: l.artifact_id, evidenceItemId: l.evidence_item_id }))
+	);
 	const byId = new Map(docs.map((d) => [d.id, d]));
-	// requirement id -> document id -> sections, from confirmed internal requirements.
-	const sources = new Map<string, Map<string, Set<string>>>();
+	// requirement id -> document id -> sections and INT codes, from confirmed internal requirements.
+	type Held = { sections: Set<string>; refs: Set<string> };
+	const sources = new Map<string, Map<string, Held>>();
 	for (const r of listInternal(app, e.id)) {
 		if (r.status !== 'confirmed' || !r.artifactId || !byId.has(r.artifactId)) continue;
 		for (const l of r.implements) {
 			if (l.status !== 'confirmed') continue;
-			const perDoc = sources.get(l.other.id) ?? new Map<string, Set<string>>();
-			const sections = perDoc.get(r.artifactId) ?? new Set<string>();
-			if (r.section) sections.add(r.section);
-			perDoc.set(r.artifactId, sections);
+			const perDoc = sources.get(l.other.id) ?? new Map<string, Held>();
+			const held = perDoc.get(r.artifactId) ?? { sections: new Set<string>(), refs: new Set<string>() };
+			if (r.section) held.sections.add(r.section);
+			held.refs.add(r.refCode);
+			perDoc.set(r.artifactId, held);
 			sources.set(l.other.id, perDoc);
 		}
 	}
 	const out: ReceivedLinkCandidate[] = [];
-	const add = (x: EvidenceItem, d: Artifact, locator: string | null, why: ReceivedLinkCandidate['why']) => {
-		const key = `${d.id}|${x.id}`;
+	const add = (
+		x: EvidenceItem,
+		d: Artifact,
+		locator: string | null,
+		why: ReceivedLinkCandidate['why'],
+		internalRefs: string[] = []
+	) => {
+		const key = candidateKey({ artifactId: d.id, evidenceItemId: x.id });
 		if (linked.has(key)) return;
 		linked.add(key);
 		out.push({
@@ -91,7 +112,8 @@ export function receivedDocumentCandidates(
 			artifactId: d.id,
 			artifactName: d.displayName,
 			locator,
-			why
+			why,
+			internalRefs
 		});
 	};
 	for (const x of items) {
@@ -99,22 +121,33 @@ export function receivedDocumentCandidates(
 		// Named documents first: the item asks for the whole document.
 		for (const d of docs)
 			if (documentNames(d).some((n) => text.includes(n))) add(x, d, null, 'document_name');
-		const perDoc = new Map<string, Set<string>>();
+		const perDoc = new Map<string, Held>();
 		for (const rid of x.requirementIds)
-			for (const [docId, secs] of sources.get(rid) ?? []) {
-				const s = perDoc.get(docId) ?? new Set<string>();
-				for (const v of secs) s.add(v);
-				perDoc.set(docId, s);
+			for (const [docId, held] of sources.get(rid) ?? []) {
+				const h = perDoc.get(docId) ?? { sections: new Set<string>(), refs: new Set<string>() };
+				for (const v of held.sections) h.sections.add(v);
+				for (const v of held.refs) h.refs.add(v);
+				perDoc.set(docId, h);
 			}
-		for (const [docId, secs] of perDoc) {
-			const list = [...secs].sort(NUM);
-			add(x, byId.get(docId)!, list.length ? `§ ${list.join(', ')}` : null, 'internal_requirements');
+		for (const [docId, held] of perDoc) {
+			const list = [...held.sections].sort(NUM);
+			add(
+				x,
+				byId.get(docId)!,
+				list.length ? `§ ${list.join(', ')}` : null,
+				'internal_requirements',
+				[...held.refs].sort(NUM)
+			);
 		}
 	}
 	return out;
 }
 
-/** Propose the links. Returns what was proposed; run it again and nothing is duplicated. */
+/**
+ * Propose the links. The screens that show planned evidence call this as they load, so matches show
+ * up as proposals at once (#83). Returns what was proposed; run it again and nothing is duplicated,
+ * and a proposal the auditor rejected is not made again.
+ */
 export function linkReceivedDocuments(
 	app: AppDatabase,
 	actor: Actor,
@@ -122,6 +155,12 @@ export function linkReceivedDocuments(
 	options: { eventId?: string } = {}
 ): ReceivedLinkCandidate[] {
 	const candidates = receivedDocumentCandidates(app, engagementId, options);
+	if (!candidates.length) return candidates;
+	const quotes = new Map(
+		listInternal(app, engagementId)
+			.filter((r) => r.quote)
+			.map((r) => [r.refCode, r.quote!])
+	);
 	app.sqlite.transaction(() => {
 		for (const c of candidates)
 			createEntity(
@@ -133,7 +172,13 @@ export function linkReceivedDocuments(
 					artifact_id: c.artifactId,
 					evidence_item_id: c.evidenceItemId,
 					locator: c.locator,
-					excerpt: null,
+					// The rules those sections hold, in the document's words.
+					excerpt:
+						c.internalRefs
+							.filter((ref) => quotes.has(ref))
+							.map((ref) => `${ref}: “${quotes.get(ref)}”`)
+							.join(' ')
+							.slice(0, 600) || null,
 					sufficiency: 'supports',
 					status: 'proposed'
 				},
@@ -141,7 +186,7 @@ export function linkReceivedDocuments(
 					note:
 						c.why === 'document_name'
 							? 'Received document: the whole document'
-							: 'Received document: sections of its internal requirements'
+							: `Received document: the sections of ${c.internalRefs.join(', ')}`
 				}
 			);
 	})();
