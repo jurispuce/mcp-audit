@@ -5,6 +5,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { AI_ACTIONS, resolveModel, webSearchFor, type AiAction } from '#lib/domain/ai-settings.ts';
 import { getEngagement } from '#lib/domain/engagements.ts';
+import { planningBrief } from '#lib/domain/plan-inputs.ts';
+import { listSelected } from '#lib/domain/selection.ts';
 import {
 	addJobStep,
 	createJob,
@@ -94,7 +96,11 @@ export const ACTION_TOOLS: Record<AiAction, string[]> = {
 };
 
 /** What the button asks for, in words, with the ids the model needs. */
-export function taskText(action: AiAction, ctx: JobContext, opts: { webSearch?: boolean } = {}): string {
+export function taskText(
+	action: AiAction,
+	ctx: JobContext,
+	opts: { webSearch?: boolean; planningBrief?: string } = {}
+): string {
 	switch (action) {
 		case 'derive_roles':
 			return "Derive the auditee's roles from the engagement's documents. Read the documents, then propose each role with upsert_people, naming the source document and section it was found in.";
@@ -112,7 +118,7 @@ export function taskText(action: AiAction, ctx: JobContext, opts: { webSearch?: 
 			return register + research;
 		}
 		case 'draft_plan':
-			return 'Draft the audit plan. Check coverage first, then propose events grouping the selected requirements (upsert_events) and the evidence to collect at each (upsert_evidence_items), so that every requirement is covered.';
+			return `Draft the audit plan. Check coverage first, then propose events grouping the selected requirements (upsert_events) and the evidence to collect at each (upsert_evidence_items), so that every requirement is covered. Fit the events into the fieldwork time below, with dates and start times.${opts.planningBrief ? `\n\n${opts.planningBrief}` : ''}`;
 		case 'process_event':
 			return `Process the materials of event ${ctx.event_id}. Read its status, notes and the documents captured for it, then propose evidence links with locators (link_evidence) and record any promises or issues you find as notes (upsert_notes).`;
 		case 'propose_findings':
@@ -124,6 +130,13 @@ export function taskText(action: AiAction, ctx: JobContext, opts: { webSearch?: 
 		case 'library_mapping':
 			return `Propose links from the requirements of source "${ctx.from_source}" to the source "${ctx.to_source}" with link_requirements. Give each link a one-line note; start it with "Low confidence:" where that applies. Do not invent links where nothing matches.`;
 	}
+}
+
+/** For Draft plan: the auditor's planning inputs and the schedule rules, in words (#79). */
+function planBriefFor(app: AppDatabase, job: { action: AiAction; context: JobContext }): string | undefined {
+	if (job.action !== 'draft_plan' || !job.context.engagement_id) return undefined;
+	const e = getEngagement(app, job.context.engagement_id);
+	return e.planInputs ? planningBrief(e.planInputs, listSelected(app, e.id).length) : undefined;
 }
 
 /** The skill's instructions without the YAML front matter. */
@@ -235,12 +248,13 @@ async function runJob(app: AppDatabase, jobId: string, signal: AbortSignal, deps
 		}));
 
 		const webSearch = webSearchFor(app, job.action);
+		const planningBrief = planBriefFor(app, job);
 		if (webSearch) addJobStep(app, jobId, { kind: 'info', text: 'Web search is on for this action.' });
 		const messages: ChatMessage[] = [
 			{ role: 'system', content: systemPrompt(job) },
 			{
 				role: 'user',
-				content: `Action: ${job.action}\nContext: ${JSON.stringify(job.context)}\n\n${taskText(job.action, job.context, { webSearch })}`
+				content: `Action: ${job.action}\nContext: ${JSON.stringify(job.context)}\n\n${taskText(job.action, job.context, { webSearch, planningBrief })}`
 			}
 		];
 

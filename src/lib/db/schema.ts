@@ -269,7 +269,9 @@ export const engagement = sqliteTable(
 		aiAllowed: integer('ai_allowed', { mode: 'boolean' }).notNull().default(true),
 		llmProfile: text('llm_profile'),
 		planStatus: text('plan_status', { enum: ['draft', 'sent', 'agreed'] }).notNull(),
-		planStatusAt: integer('plan_status_at', { mode: 'timestamp_ms' })
+		planStatusAt: integer('plan_status_at', { mode: 'timestamp_ms' }),
+		/** JSON: fieldwork days, hours, target meetings and exceptions for drafting the plan (#79). */
+		planInputs: text('plan_inputs')
 	},
 	(t) => [index('engagement_auditee').on(t.auditeeId)]
 );

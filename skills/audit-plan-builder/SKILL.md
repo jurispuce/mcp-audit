@@ -18,7 +18,8 @@ Read `references/engagement-files.md` first. The plan document template is `asse
 
 | Step | Use |
 | --- | --- |
-| Find the engagement | `list_engagements`, then `get_engagement_overview` for the selected requirements (with criticality), scopes and roles |
+| Find the engagement | `list_engagements`, then `get_engagement_overview` for the selected requirements (with criticality), scopes, roles and `planning_inputs` |
+| 0. Ask first | Unless `planning_inputs` is set and the auditor confirms it still holds, ask before drafting anything (see "0. Ask before drafting" below), then record the answers with `set_planning_inputs`. It returns how many meetings fit and the schedule rules to follow |
 | 1. Draft events | `list_events` first (do not duplicate), then `upsert_events`: `participants` are role names recorded for the auditee (record missing ones with `upsert_people`, or name them in `participants_note`); `requirements` as `"<source>:<reference>"`. An event with the same title is updated rather than added |
 | 2. Coverage | `get_coverage`: `uncovered` must be empty before the plan is sent; each requirement shows its criticality and events |
 | 3. Evidence | `upsert_evidence_items` with the `event_id` from step 1, `kind`, `requirements` and, for per-scope requirements, `scope`. Leave `criticality` out to take the highest linked risk level |
@@ -29,11 +30,30 @@ Everything you draft is shown on Plan, Events as proposed: the auditor edits, ac
 
 ## Steps
 
+### 0. Ask before drafting
+
+The plan has to fit the time the auditee can give. Ask first, in one message, and draft nothing until the auditor answers:
+
+1. **Duration.** The fieldwork days (first and last day; weekends are not counted), working hours and lunch.
+2. **Meetings.** Estimate how many audit meetings the selected requirements need (one natural counterpart per meeting, 45 to 90 minutes each) and how many fit in the time: subtract the fixed parts below and allow an hour plus 10 minutes per meeting. Tell the auditor both numbers and ask how many they want. If the requirements need more than fit, say which topics you would combine, or ask for more time.
+3. **Exceptions.** Dates or times to avoid, people who are away, sites only reachable on certain days, anything else the plan must respect.
+
+Record the answers with `set_planning_inputs` (in files mode, in `plan/planning-inputs.yaml`). In the app, the auditor may have set them already on Plan, Events; the in-app Draft plan button only runs once they are saved, and passes them to you as a planning brief.
+
+### Schedule rules (always)
+
+- **Opening meeting** of 30 minutes at the start of the first day, and a **closing meeting** of 30 minutes at the end of the last day (formats `opening_meeting` and `closing_meeting`; no requirements, the auditee's management and contact person attend).
+- A **daily summary** of 15 minutes at the end of every other day (format `daily_summary`) to go through what was seen, what is still missing and the next day.
+- **10 minutes after every meeting** for the auditor's notes: the next meeting starts at least 10 minutes after one ends.
+- **Lunch** as given; no meetings during it, outside working hours or on excluded dates.
+- Every event gets a date, start time and duration, so the plan reads as a timetable.
+- Never drop a requirement to make the time fit. Combine related topics, and say what you combined.
+
 ### 1. Draft events
 
 Group the selected requirements so that each event has one natural counterpart: a role, a team or a system. People should not be called back twice for things one conversation could cover. Typical groupings: governance and risk with management, access and identity with IT, incidents and continuity with operations, suppliers with procurement, awareness with HR.
 
-For each event set format, proposed date and time, duration, participants (role ids) and requirements. Rules of thumb:
+For each event set format, date and start time (within the fieldwork days and the schedule rules above), duration, participants (role ids) and requirements. Rules of thumb:
 
 - An interview holds 45 to 90 minutes of attention. Budget roughly five to ten minutes per evidence item and split events that run longer.
 - A requirement may appear in several events when it needs more than one viewpoint (rule owner and the people who follow the rule). This is normal for high-risk requirements.

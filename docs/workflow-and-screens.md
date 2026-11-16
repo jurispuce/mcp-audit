@@ -58,7 +58,8 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 
 ### Plan, Events
 - Plan header: status of the plan as a whole (draft, sent to auditee, agreed), with a "Changed since then" flag when events change after sending.
-- "Draft plan" proposes events grouped by topic with planned evidence.
+- Planning inputs come first: fieldwork days, working hours and lunch, about how many meetings (the form shows how many fit) and exceptions. "Draft plan" runs only once they are saved.
+- "Draft plan" proposes events grouped by topic with planned evidence, fitted into the fieldwork time: an opening meeting (30 min) at the start, a closing meeting (30 min) at the end, a daily summary (15 min) at the end of the other days, lunch, and 10 minutes after every meeting for notes.
 - Every event can be edited (title, format, date, start time, duration, participants, requirements), including AI drafts before acceptance. Events can be removed.
 - "Plan evidence" opens the event to list expected evidence with criticality, requirement and scope.
 

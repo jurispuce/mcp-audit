@@ -11,6 +11,7 @@ import { requireHuman } from './guards';
 import { listPeople, type Person } from './people';
 import { registerEntity } from './registry';
 import { criticalityOf, idList } from './risks';
+import { validatePlanInputs } from './plan-inputs';
 import { CRITICALITY, listSelected, type Criticality } from './selection';
 import {
 	createEntity,
@@ -34,6 +35,9 @@ export const EVENT_FORMATS = [
 	'document_review',
 	'technical_test',
 	'site_visit',
+	'opening_meeting',
+	'closing_meeting',
+	'daily_summary',
 	'other'
 ] as const;
 export type EventFormat = (typeof EVENT_FORMATS)[number];
@@ -43,6 +47,9 @@ export const FORMAT_LABELS: Record<EventFormat, string> = {
 	document_review: 'Document review',
 	technical_test: 'Technical test',
 	site_visit: 'Site visit',
+	opening_meeting: 'Opening meeting',
+	closing_meeting: 'Closing meeting',
+	daily_summary: 'Daily summary',
 	other: 'Other'
 };
 export const EVIDENCE_KINDS = ['rule', 'record', 'observation', 'testimony', 'technical'] as const;
@@ -781,4 +788,29 @@ export function setPlanStatus(
 		notes[to]
 	);
 	return getEngagement(app, engagementId);
+}
+
+// ---- Planning inputs (#79)
+
+/**
+ * Save what the auditor decided before drafting: fieldwork days and hours, a target number of
+ * meetings and exceptions. Draft plan uses them; a person or AI (after asking the auditor) sets them.
+ */
+export function setPlanInputs(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	input: unknown
+): Engagement {
+	const e = getEngagement(app, engagementId);
+	updateEntity(
+		app,
+		actor,
+		engagementDefinition,
+		e.id,
+		e.version,
+		{ plan_inputs: validatePlanInputs(input) },
+		'Planning inputs set'
+	);
+	return getEngagement(app, e.id);
 }

@@ -8,7 +8,7 @@ import { countUsers, createFirstAdmin, createUser, listUsers, type User } from '
 import { createEngagement, listEngagements, listScopes, getEngagement, type Engagement } from './engagements';
 import { findRequirement } from './library';
 import { addPerson } from './people';
-import { addEvent, addEvidence } from './planning';
+import { addEvent, addEvidence, setPlanInputs } from './planning';
 import { addRisk } from './risks';
 import { addScope, selectRequirements, setScopeHandling, setScopeMode, updateScope } from './selection';
 import { registerTextArtifact } from './artifacts';
@@ -114,6 +114,20 @@ export function seedSampleEngagement(
 	const mfa = req('j');
 	const backup = req('c');
 	selectRequirements(app, actor, e.id, [req('a'), access, mfa, req('b'), backup, req('g')]);
+	// Two weeks out, three fieldwork days with a Monday start: the plan can be drafted straight away.
+	const monday = new Date();
+	monday.setUTCDate(monday.getUTCDate() + 14 - ((monday.getUTCDay() + 6) % 7));
+	const fieldDay = (n: number) => new Date(monday.getTime() + n * 86_400_000).toISOString().slice(0, 10);
+	setPlanInputs(app, actor, e.id, {
+		from: fieldDay(0),
+		to: fieldDay(2),
+		dayStart: '09:00',
+		dayEnd: '17:00',
+		lunchStart: '12:00',
+		lunchMinutes: 60,
+		meetings: 8,
+		exceptions: 'Warehouse visits only in the morning.'
+	});
 	setScopeHandling(app, actor, e.id, [
 		{ requirementId: access, scopeHandling: 'per_scope' },
 		{ requirementId: mfa, scopeHandling: 'per_scope' }

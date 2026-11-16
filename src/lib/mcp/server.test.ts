@@ -93,6 +93,7 @@ describe('MCP endpoint (#30)', () => {
 				'select_requirements',
 				'set_criteria',
 				'set_guidance',
+				'set_planning_inputs',
 				'set_scope_handling',
 				'upsert_events',
 				'upsert_evidence_items',

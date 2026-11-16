@@ -70,6 +70,37 @@ afterEach(async () => {
 });
 
 describe('planning tools (#51)', () => {
+	it('records the planning inputs the auditor gave, with what fits and the schedule rules (#79)', async () => {
+		expect(
+			(await call('get_engagement_overview', { engagement_id: e.id })).data.engagement.planning_inputs
+		).toBeNull();
+		const bad = await call('set_planning_inputs', {
+			engagement_id: e.id,
+			from: '2026-12-02',
+			to: '2026-11-30'
+		});
+		expect(bad).toMatchObject({ isError: true, text: expect.stringContaining('Before the first day') });
+		const res = await call('set_planning_inputs', {
+			engagement_id: e.id,
+			from: '2026-11-30',
+			to: '2026-12-02',
+			meetings: 10,
+			exceptions: 'Head of IT away on 1 December'
+		});
+		expect(res.data).toMatchObject({
+			planning_inputs: { from: '2026-11-30', to: '2026-12-02', dayStart: '09:00', meetings: 10 },
+			fieldwork_days: ['2026-11-30', '2026-12-01', '2026-12-02'],
+			meetings_that_fit: 16
+		});
+		expect(res.data.brief).toContain('daily summary');
+		expect(
+			(await call('get_engagement_overview', { engagement_id: e.id })).data.engagement.planning_inputs
+		).toMatchObject({
+			exceptions: 'Head of IT away on 1 December',
+			meetings_that_fit: 16
+		});
+	});
+
 	it('drafts events and evidence as proposed, matched on a second run, with coverage', async () => {
 		const ev = await call('upsert_events', {
 			engagement_id: e.id,

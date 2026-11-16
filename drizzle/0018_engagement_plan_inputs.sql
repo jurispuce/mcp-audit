@@ -1,0 +1,1 @@
+ALTER TABLE `engagement` ADD `plan_inputs` text;

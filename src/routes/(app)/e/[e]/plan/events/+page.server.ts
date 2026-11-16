@@ -12,6 +12,7 @@ import {
 	rejectEvent,
 	removeEvent,
 	removeEvidence,
+	setPlanInputs,
 	STATUS_LABELS,
 	updateEvent,
 	updateEvidence,
@@ -19,6 +20,7 @@ import {
 	type EvidenceInput
 } from '#lib/domain/planning.ts';
 import { criticalityOf } from '#lib/domain/risks.ts';
+import { listSelected } from '#lib/domain/selection.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { reviewSelected } from '#lib/server/proposals.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
@@ -35,7 +37,8 @@ export const load: PageServerLoad = ({ params }) => {
 		...planChoices(params.e),
 		criticality: Object.fromEntries([...crit].map(([id, c]) => [id, c.level])),
 		kinds: EVIDENCE_KINDS.map((k) => [k, KIND_LABELS[k]] as [string, string]),
-		statuses: EVIDENCE_STATUSES.map((k) => [k, STATUS_LABELS[k]] as [string, string])
+		statuses: EVIDENCE_STATUSES.map((k) => [k, STATUS_LABELS[k]] as [string, string]),
+		selectedCount: listSelected(app, params.e).length
 	};
 };
 
@@ -100,6 +103,24 @@ function evidenceInput(data: FormData): { values: Record<string, string>; input:
 }
 
 export const actions: Actions = {
+	planInputs: async ({ request, locals, params }) => {
+		const values = formValues(await request.formData(), [
+			'from',
+			'to',
+			'dayStart',
+			'dayEnd',
+			'lunchStart',
+			'lunchMinutes',
+			'meetings',
+			'exceptions'
+		]);
+		try {
+			setPlanInputs(appDatabase(), uiActor(locals), params.e, values);
+			return { success: 'Planning inputs saved. Draft plan will fit the meetings into this time.' };
+		} catch (e) {
+			return formFailure(e, { ...values, action: 'planInputs' });
+		}
+	},
 	planStatus: planStatusAction,
 	add: async ({ request, locals, params }) => {
 		const { values, input } = eventInput(await request.formData());

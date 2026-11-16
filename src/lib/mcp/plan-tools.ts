@@ -17,13 +17,15 @@ import {
 	EVIDENCE_STATUSES,
 	listEvents,
 	listEvidence,
+	setPlanInputs,
 	updateEvent,
 	updateEvidence,
 	type EventInput,
 	type EvidenceInput
 } from '#lib/domain/planning.ts';
 import { criticalityOf } from '#lib/domain/risks.ts';
-import { CRITICALITY } from '#lib/domain/selection.ts';
+import { capacity, planningBrief } from '#lib/domain/plan-inputs.ts';
+import { CRITICALITY, listSelected } from '#lib/domain/selection.ts';
 import type { Actor } from '#lib/domain/write.ts';
 import { loadConfig } from '#lib/server/config.ts';
 
@@ -109,6 +111,54 @@ export function registerPlanTools(
 								proposed: v.proposed
 							}))
 					}))
+				};
+			})
+	);
+
+	server.registerTool(
+		'set_planning_inputs',
+		{
+			title: 'Set planning inputs',
+			description:
+				'Record what the auditor told you before drafting: the fieldwork days, working hours, lunch, about how many audit meetings (optional) and exceptions (dates, people or places to avoid). Ask the auditor first; never invent these. Returns how many meetings of an hour fit and the schedule rules every plan follows (opening and closing meetings, a daily summary, 10 minutes after each meeting for notes).',
+			inputSchema: {
+				engagement_id: engagementId,
+				from: z.string().describe('First fieldwork day, YYYY-MM-DD.'),
+				to: z.string().describe('Last fieldwork day, YYYY-MM-DD. Weekends in between are not counted.'),
+				day_start: z.string().optional().describe('HH:MM, default 09:00.'),
+				day_end: z.string().optional().describe('HH:MM, default 17:00.'),
+				lunch_start: z.string().optional().describe('HH:MM, default 12:00.'),
+				lunch_minutes: z.number().int().min(0).max(120).optional().describe('Default 60; 0 for none.'),
+				meetings: z
+					.number()
+					.int()
+					.min(1)
+					.max(200)
+					.nullable()
+					.optional()
+					.describe('About how many audit meetings the auditor wants; leave out to estimate.'),
+				exceptions: z.string().max(2000).nullable().optional()
+			}
+		},
+		({ engagement_id, from, to, day_start, day_end, lunch_start, lunch_minutes, meetings, exceptions }) =>
+			run(() => {
+				const e = engagement(engagement_id);
+				const saved = setPlanInputs(app, actor, e.id, {
+					from,
+					to,
+					dayStart: day_start,
+					dayEnd: day_end,
+					lunchStart: lunch_start,
+					lunchMinutes: lunch_minutes,
+					meetings: meetings ?? null,
+					exceptions: exceptions ?? null
+				}).planInputs!;
+				const c = capacity(saved);
+				return {
+					planning_inputs: saved,
+					fieldwork_days: c.days,
+					meetings_that_fit: c.meetingsThatFit,
+					brief: planningBrief(saved, listSelected(app, e.id).length)
 				};
 			})
 	);

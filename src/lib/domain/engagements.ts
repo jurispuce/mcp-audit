@@ -5,6 +5,7 @@ import type { AppDatabase } from '#lib/db/client.ts';
 import { NotFoundError, ValidationError } from './errors';
 import { normalizeLanguage } from './library';
 import { registerEntity } from './registry';
+import { validatePlanInputs, type PlanInputs } from './plan-inputs';
 import { ENGAGEMENT_ROLES, type EngagementRole } from './roles';
 import {
 	createEntity,
@@ -89,7 +90,8 @@ export const engagementDefinition: EntityDefinition = registerEntity({
 		'ai_allowed',
 		'llm_profile',
 		'plan_status',
-		'plan_status_at'
+		'plan_status_at',
+		'plan_inputs'
 	],
 	detailColumns: [
 		'name',
@@ -117,7 +119,8 @@ export const engagementDefinition: EntityDefinition = registerEntity({
 		ai_allowed: 'AI allowed',
 		llm_profile: 'Model',
 		plan_status: 'Plan status',
-		plan_status_at: 'Plan status set'
+		plan_status_at: 'Plan status set',
+		plan_inputs: 'Planning inputs'
 	},
 	formatValue(column, value) {
 		if (['carry_over_internal', 'ai_allowed', 'deleted'].includes(column))
@@ -133,6 +136,11 @@ export const engagementDefinition: EntityDefinition = registerEntity({
 			);
 		if (column === 'plan_status_at')
 			return value ? new Date(Number(value)).toISOString().slice(0, 16).replace('T', ' ') : '';
+		if (column === 'plan_inputs') {
+			if (!value) return '';
+			const p = JSON.parse(String(value)) as PlanInputs;
+			return `${p.from} to ${p.to}, ${p.dayStart}–${p.dayEnd}${p.meetings ? `, about ${p.meetings} meetings` : ''}${p.exceptions ? `; ${p.exceptions}` : ''}`;
+		}
 		return value == null ? '' : String(value);
 	},
 	humanOnly: ['plan_status', 'plan_status_at', 'ai_allowed', 'llm_profile', 'carry_over_internal'],
@@ -182,6 +190,10 @@ export const engagementDefinition: EntityDefinition = registerEntity({
 			if (!['draft', 'sent', 'agreed'].includes(ps)) fields.plan_status = 'Draft, sent or agreed';
 			out.plan_status = ps;
 		}
+		if ('plan_inputs' in input)
+			set('plan_inputs', () =>
+				input.plan_inputs == null ? null : JSON.stringify(validatePlanInputs(input.plan_inputs))
+			);
 		if ('plan_status_at' in input)
 			out.plan_status_at = input.plan_status_at == null ? null : Number(input.plan_status_at);
 		if (Object.keys(fields).length) throw new ValidationError('Check the highlighted fields.', fields);
@@ -348,6 +360,8 @@ export interface Engagement {
 	llmProfile: string | null;
 	planStatus: 'draft' | 'sent' | 'agreed';
 	planStatusAt: Date | null;
+	/** Set on Plan, Events (or by the plan-builder skill) before the plan is drafted. */
+	planInputs: PlanInputs | null;
 	version: number;
 }
 
@@ -370,6 +384,7 @@ function toEngagement(r: Row): Engagement {
 		llmProfile: (r.llm_profile as string | null) ?? null,
 		planStatus: r.plan_status as Engagement['planStatus'],
 		planStatusAt: r.plan_status_at ? new Date(Number(r.plan_status_at)) : null,
+		planInputs: r.plan_inputs ? (JSON.parse(String(r.plan_inputs)) as PlanInputs) : null,
 		version: Number(r.current_version)
 	};
 }

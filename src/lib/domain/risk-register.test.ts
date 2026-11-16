@@ -14,7 +14,9 @@ import type { Engagement } from './engagements';
 import { ForbiddenError } from './errors';
 import { getItemHistory } from './items';
 import { getJob } from './jobs';
+import { getEngagement, updateEngagement } from './engagements';
 import { engagementOverview } from './overview';
+import { setPlanInputs } from './planning';
 import { listProposals, proposalSummary, reviewProposalItems } from './proposals';
 import { acceptAllRisks, acceptRisk, addRisk, criticalityOf, listRisks, rejectRisk } from './risks';
 import { seedTestData } from './seed';
@@ -170,5 +172,39 @@ describe('Extract risks from a register (#78)', () => {
 		const r = addRisk(app, ai(), e.id, { title: 'Exploited VPN appliance flaw', origin: 'research' });
 		expect(r.origin).toBe('research');
 		expect(listProposals(app, e.id, 'risk')[0]!.detail).toContain('found by research, not in the register');
+	});
+
+	it('Draft plan needs the planning inputs, and passes them to the model with the schedule rules (#79)', async () => {
+		const bodies: Record<string, unknown>[] = [];
+		const spy = (async (url: string, init?: RequestInit) => {
+			if (String(url).endsWith('/chat/completions')) bodies.push(JSON.parse(String(init?.body)));
+			return fetch(url, init);
+		}) as FetchLike;
+		updateEngagement(app, human, e.id, getEngagement(app, e.id).version, { plan_inputs: null });
+		expect(() =>
+			startJob(
+				app,
+				human,
+				{ action: 'draft_plan', context: { engagement_id: e.id } },
+				{ fetch: spy, env: {} }
+			)
+		).toThrow('Set the planning inputs first');
+		setPlanInputs(app, human, e.id, {
+			from: '2026-11-30',
+			to: '2026-12-01',
+			meetings: 5,
+			exceptions: 'No calls before 10:00'
+		});
+		await startJob(
+			app,
+			human,
+			{ action: 'draft_plan', context: { engagement_id: e.id } },
+			{ fetch: spy, env: {} }
+		).done;
+		const task = JSON.stringify(bodies[0]!.messages);
+		expect(task).toContain('Fieldwork: 2 days (2026-11-30, 2026-12-01)');
+		expect(task).toContain('The auditor wants about 5 audit meetings');
+		expect(task).toContain('No calls before 10:00');
+		expect(task).toContain('opening_meeting');
 	});
 });

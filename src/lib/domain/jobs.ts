@@ -150,6 +150,13 @@ function validContext(app: AppDatabase, action: AiAction, input: Record<string, 
 		case 'extract_risks':
 			if (str(input.artifact_id)) ctx.artifact_id = str(input.artifact_id);
 			break;
+		case 'draft_plan':
+			// The plan is fitted to the fieldwork days and hours, so those come first (#79).
+			if (!getEngagement(app, ctx.engagement_id!).planInputs)
+				throw new ValidationError(
+					'Set the planning inputs first: fieldwork days, working hours and any exceptions (Plan, Events).'
+				);
+			break;
 		case 'propose_findings':
 			if (str(input.unit_id)) ctx.unit_id = str(input.unit_id);
 			break;

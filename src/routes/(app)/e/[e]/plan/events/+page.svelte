@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PlanInputsForm from '#lib/components/PlanInputsForm.svelte';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
@@ -74,10 +75,20 @@
 <PlanHeader plan={data.plan} engagement={e} />
 <FormMessage form={result} />
 
+<PlanInputsForm
+	saved={e.planInputs}
+	defaults={{ from: e.startDate, to: e.endDate ?? e.startDate }}
+	selectedRequirements={data.selectedCount}
+	failed={result?.values?.action === 'planInputs' && result?.message ? result : null}
+/>
+
 <AiAction
 	action="draft_plan"
 	label="Draft plan"
-	hint="Groups the selected requirements into events and plans the evidence for each, as drafts."
+	hint={e.planInputs
+		? 'Groups the selected requirements into events within the fieldwork time and plans the evidence for each, as drafts.'
+		: 'Save the planning inputs first: the plan is fitted to the fieldwork days and hours.'}
+	validate={() => (e.planInputs ? null : 'Save the planning inputs first.')}
 />
 
 <ProposalBar types={['event', 'evidence']} testid="drafts-bar">

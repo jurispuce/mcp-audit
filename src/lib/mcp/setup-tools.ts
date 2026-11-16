@@ -10,6 +10,7 @@ import {
 	registerTextArtifact
 } from '#lib/domain/artifacts.ts';
 import { registerNewTextVersion } from '#lib/domain/document-versions.ts';
+import { capacity } from '#lib/domain/plan-inputs.ts';
 import { getEngagement, listEngagements, listScopes, type Engagement } from '#lib/domain/engagements.ts';
 import { NotFoundError, ValidationError } from '#lib/domain/errors.ts';
 import { assertAiAllowed, assertCanReadRequirement } from '#lib/domain/guards.ts';
@@ -130,6 +131,10 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 						scope_mode: e.scopeMode,
 						plan_status: e.planStatus,
 						carry_over_internal: e.carryOverInternal,
+						// Null until the auditor answered the planning questions (set_planning_inputs).
+						planning_inputs: e.planInputs
+							? { ...e.planInputs, meetings_that_fit: capacity(e.planInputs).meetingsThatFit }
+							: null,
 						version: e.version
 					},
 					phases: o.phases.map((p) => ({ number: p.number, title: p.title, state: p.state, fact: p.fact })),
