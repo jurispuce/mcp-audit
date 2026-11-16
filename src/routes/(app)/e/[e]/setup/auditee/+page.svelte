@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
 	import { enhance } from '$app/forms';
@@ -44,6 +45,7 @@
 		email: p.email ?? '',
 		responsibilities: p.responsibilities.join('\n')
 	});
+	let selectedRoles = $state<string[]>([]);
 </script>
 
 <svelte:head><title>Auditee · Set-up · mcp-audit</title></svelte:head>
@@ -100,6 +102,14 @@
 {#if proposed.length}
 	<section class="au-section" aria-labelledby="proposed-title">
 		<h2 class="au-section__title" id="proposed-title">Proposed roles ({proposed.length})</h2>
+		<SelectionBar
+			id="select-roles"
+			all={proposed.map((p) => p.id)}
+			bind:selected={selectedRoles}
+			acceptAction="?/acceptSelected"
+			rejectAction="?/rejectSelected"
+			noun={['role', 'roles']}
+		/>
 		<ul class="au-list" aria-label="Proposed roles">
 			{#each proposed as p (p.id)}
 				<li>
@@ -114,6 +124,19 @@
 						testid="person-{p.role}"
 					>
 						{#snippet actions()}
+							{#if proposed.length > 1}
+								<label class="au-check-row au-select">
+									<input
+										type="checkbox"
+										form="select-roles"
+										name="ids"
+										value={p.id}
+										bind:group={selectedRoles}
+										aria-label="Select {p.role}"
+									/>
+									Select
+								</label>
+							{/if}
 							<form method="POST" action="?/accept" use:enhance={after}>
 								<input type="hidden" name="id" value={p.id} />
 								<button

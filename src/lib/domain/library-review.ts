@@ -410,3 +410,31 @@ export function lastConfirmed(
 	}
 	return null;
 }
+
+/**
+ * Accept or reject several proposed library requirements at once, each in its own transaction; one
+ * that cannot be reviewed is skipped with its reason and does not undo the others.
+ */
+export function reviewRequirements(
+	app: AppDatabase,
+	actor: Actor,
+	ids: string[],
+	verdict: 'accept' | 'reject'
+): { done: number; skipped: { id: string; reason: string }[] } {
+	requireHuman(actor, 'Reviewing proposed requirements');
+	const unique = [...new Set(ids.filter(Boolean))];
+	if (unique.length === 0) throw new ValidationError('Select at least one requirement.');
+	const result = { done: 0, skipped: [] as { id: string; reason: string }[] };
+	for (const id of unique) {
+		try {
+			app.sqlite.transaction(() =>
+				verdict === 'accept' ? acceptRequirement(app, actor, id) : rejectRequirement(app, actor, id)
+			)();
+			result.done++;
+		} catch (e) {
+			if (!(e instanceof Error) || !('code' in e)) throw e;
+			result.skipped.push({ id, reason: e.message });
+		}
+	}
+	return result;
+}

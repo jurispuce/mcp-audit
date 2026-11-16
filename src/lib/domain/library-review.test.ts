@@ -29,7 +29,8 @@ import {
 	publishSource,
 	rejectLink,
 	rejectRequirement,
-	rejectSource
+	rejectSource,
+	reviewRequirements
 } from './library-review';
 import { selectRequirements } from './selection';
 import { createFirstAdmin } from './users';
@@ -224,5 +225,15 @@ describe('mapping with review (#71)', () => {
 		expect(r.implements[0]!.status).toBe('proposed');
 		acceptInternal(app, human, e.id, r.id);
 		expect(listInternal(app, e.id)[0]!.implements[0]!.status).toBe('confirmed');
+	});
+
+	it('reviews a selection of proposed requirements together', () => {
+		const src = aiImport();
+		const ids = ['5', '6'].map((ref) => findRequirement(app, src.id, ref)!.id);
+		expect(reviewRequirements(app, human, ids, 'accept')).toEqual({ done: 2, skipped: [] });
+		expect(getRequirement(app, ids[0]!).status).toBe('confirmed');
+		const child = findRequirement(app, src.id, '5.1')!.id;
+		expect(reviewRequirements(app, human, [child], 'reject').done).toBe(1);
+		expect(() => reviewRequirements(app, ai, ids, 'accept')).toThrow();
 	});
 });

@@ -8,8 +8,10 @@ import {
 	listLibraryProposals,
 	publishSource,
 	rejectRequirement,
-	rejectSource
+	rejectSource,
+	reviewRequirements
 } from '#lib/domain/library-review.ts';
+import { bulkMessage } from '#lib/domain/proposals.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -41,6 +43,16 @@ export const load: PageServerLoad = () => {
 
 const ok = (success: string) => ({ success });
 
+async function selectedReview(request: Request, locals: App.Locals, verdict: 'accept' | 'reject') {
+	const ids = (await request.formData()).getAll('ids').map(String);
+	try {
+		const r = reviewRequirements(appDatabase(), uiActor(locals), ids, verdict);
+		return { success: bulkMessage(r, verdict) };
+	} catch (e) {
+		return formFailure(e);
+	}
+}
+
 export const actions: Actions = {
 	accept: async ({ request, locals }) => {
 		const id = String((await request.formData()).get('id'));
@@ -71,6 +83,8 @@ export const actions: Actions = {
 			return formFailure(e, { ...values, id, action: 'edit' });
 		}
 	},
+	acceptSelected: async ({ request, locals }) => selectedReview(request, locals, 'accept'),
+	rejectSelected: async ({ request, locals }) => selectedReview(request, locals, 'reject'),
 	acceptAll: async ({ request, locals }) => {
 		const id = String((await request.formData()).get('source'));
 		try {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
 	import { enhance } from '$app/forms';
@@ -55,6 +56,7 @@
 				: n < 1048576
 					? `${Math.round(n / 1024)} KB`
 					: `${(n / 1048576).toFixed(1)} MB`;
+	let selectedInternal = $state<string[]>([]);
 </script>
 
 <svelte:head><title>Documents · Set-up · mcp-audit</title></svelte:head>
@@ -348,6 +350,14 @@
 			</form>
 		</ProposalBar>
 		<h3 class="au-section__title">Proposed ({proposed.length})</h3>
+		<SelectionBar
+			id="select-internal"
+			all={proposed.map((r) => r.id)}
+			bind:selected={selectedInternal}
+			acceptAction="?/acceptSelected"
+			rejectAction="?/rejectSelected"
+			noun={['internal requirement', 'internal requirements']}
+		/>
 		<ul class="au-list" aria-label="Proposed internal requirements">
 			{#each proposed as r (r.id)}
 				<li>
@@ -367,6 +377,19 @@
 						testid="internal-{r.refCode}"
 					>
 						{#snippet actions()}
+							{#if proposed.length > 1}
+								<label class="au-check-row au-select">
+									<input
+										type="checkbox"
+										form="select-internal"
+										name="ids"
+										value={r.id}
+										bind:group={selectedInternal}
+										aria-label="Select {r.refCode}"
+									/>
+									Select
+								</label>
+							{/if}
 							<form method="POST" action="?/accept" use:enhance={after}>
 								<input type="hidden" name="id" value={r.id} /><button
 									class="au-btn au-btn--small au-btn--primary"

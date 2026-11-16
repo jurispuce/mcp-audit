@@ -16,8 +16,19 @@
 		depth?: number;
 		by?: string | null;
 		error?: { message?: string; values?: Record<string, string> } | null;
+		/** The SelectionBar form to select this requirement into, when several can be reviewed together. */
+		selectForm?: string | null;
+		selected?: string[];
 	}
-	let { r, before = null, depth = 0, by = null, error = null }: Props = $props();
+	let {
+		r,
+		before = null,
+		depth = 0,
+		by = null,
+		error = null,
+		selectForm = null,
+		selected = $bindable([])
+	}: Props = $props();
 	let editing = $state(false);
 	const open = $derived(editing || !!error);
 	const v = $derived(error?.values ?? {});
@@ -113,7 +124,20 @@
 				</div>
 			</form>
 		{:else if r.status === 'proposed'}
-			<div class="au-row au-wrap">
+			<div class="au-row au-wrap au-grow">
+				{#if selectForm}
+					<label class="au-check-row au-select">
+						<input
+							type="checkbox"
+							form={selectForm}
+							name="ids"
+							value={r.id}
+							bind:group={selected}
+							aria-label="Select {r.refCode}"
+						/>
+						Select
+					</label>
+				{/if}
 				<form method="POST" action="?/accept" use:enhance={keep}>
 					<input type="hidden" name="id" value={r.id} /><button
 						class="au-btn au-btn--small au-btn--primary"

@@ -8,6 +8,7 @@ import {
 	rejectPerson,
 	updatePerson
 } from '#lib/domain/people.ts';
+import { bulkMessage, reviewProposalItems } from '#lib/domain/proposals.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -77,6 +78,24 @@ export const actions: Actions = {
 		try {
 			rejectPerson(appDatabase(), uiActor(locals), String(data.get('id')));
 			return { success: data.get('proposed') === 'true' ? 'Proposal rejected.' : 'Role removed.' };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	acceptSelected: async ({ request, locals, params }) => {
+		const ids = (await request.formData()).getAll('ids').map(String);
+		try {
+			const r = reviewProposalItems(appDatabase(), uiActor(locals), params.e, 'role', ids, 'accept');
+			return { success: bulkMessage(r, 'accept') };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	rejectSelected: async ({ request, locals, params }) => {
+		const ids = (await request.formData()).getAll('ids').map(String);
+		try {
+			const r = reviewProposalItems(appDatabase(), uiActor(locals), params.e, 'role', ids, 'reject');
+			return { success: bulkMessage(r, 'reject') };
 		} catch (e) {
 			return formFailure(e);
 		}

@@ -271,3 +271,50 @@ export function acceptAllProposals(
 		return items.length;
 	})();
 }
+
+export interface BulkResult {
+	done: number;
+	/** Items no longer waiting (reviewed meanwhile) or refused by their own rules. */
+	skipped: { id: string; reason: string }[];
+}
+
+/**
+ * Accept or reject several proposals of one type at once: each goes through its own accept or
+ * reject function, in its own transaction, so one that cannot be reviewed does not undo the others.
+ */
+export function reviewProposalItems(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	type: ProposalType,
+	ids: string[],
+	verdict: 'accept' | 'reject'
+): BulkResult {
+	requireHuman(actor, 'Reviewing proposals');
+	if (!isProposalType(type)) throw new ValidationError('Unknown proposal type.');
+	const unique = [...new Set(ids.filter(Boolean))];
+	if (unique.length === 0) throw new ValidationError('Select at least one proposal.');
+	const result: BulkResult = { done: 0, skipped: [] };
+	for (const id of unique) {
+		try {
+			app.sqlite.transaction(() =>
+				verdict === 'accept'
+					? acceptProposalItem(app, actor, engagementId, type, id)
+					: rejectProposalItem(app, actor, engagementId, type, id)
+			)();
+			result.done++;
+		} catch (e) {
+			if (!(e instanceof Error) || !('code' in e)) throw e;
+			result.skipped.push({ id, reason: e.message });
+		}
+	}
+	return result;
+}
+
+/** "3 accepted." / "3 accepted; 1 skipped: already reviewed." */
+export function bulkMessage(r: BulkResult, verdict: 'accept' | 'reject'): string {
+	const verb = verdict === 'accept' ? 'accepted' : 'rejected';
+	const head = `${r.done} ${verb}.`;
+	if (!r.skipped.length) return head;
+	return `${head} ${r.skipped.length} skipped: ${[...new Set(r.skipped.map((s) => s.reason))].join(' ')}`;
+}

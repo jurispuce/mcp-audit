@@ -13,6 +13,8 @@ import { listFindings } from './findings';
 import { addPerson, listPeople } from './people';
 import { listEvents } from './planning';
 import {
+	bulkMessage,
+	reviewProposalItems,
 	acceptAllProposals,
 	acceptProposalItem,
 	listProposals,
@@ -102,5 +104,23 @@ describe('proposals review list (#65)', () => {
 		rejectProposalItem(app, human, e.id, 'event', ev.id);
 		expect(listEvents(app, e.id).some((x) => x.id === ev.id)).toBe(false);
 		expect(proposalSummary(app, e.id).count).toBe(0);
+	});
+
+	it('accepts or rejects a selection together; one already reviewed is skipped, not an error', async () => {
+		for (const role of ['Network administrator', 'Records manager', 'Data protection officer'])
+			addPerson(app, { userId: human.userId, agent: 'Claude', channel: 'mcp' }, e.auditeeId, { role });
+		const [a, b, c] = listProposals(app, e.id, 'role');
+		acceptProposalItem(app, human, e.id, 'role', a!.id);
+		const r = reviewProposalItems(app, human, e.id, 'role', [a!.id, b!.id, b!.id], 'accept');
+		expect(r.done).toBe(1);
+		expect(r.skipped).toHaveLength(1);
+		expect(bulkMessage(r, 'accept')).toMatch(/^1 accepted\. 1 skipped: /);
+		const rejected = reviewProposalItems(app, human, e.id, 'role', [c!.id], 'reject');
+		expect(rejected).toEqual({ done: 1, skipped: [] });
+		expect(listProposals(app, e.id, 'role')).toEqual([]);
+		expect(() => reviewProposalItems(app, human, e.id, 'role', [], 'accept')).toThrow(/Select at least one/);
+		expect(() =>
+			reviewProposalItems(app, { ...human, channel: 'mcp', agent: 'Claude' }, e.id, 'role', [c!.id], 'accept')
+		).toThrow();
 	});
 });

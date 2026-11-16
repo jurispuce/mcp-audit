@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ProposedRequirement from '#lib/components/library/ProposedRequirement.svelte';
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 
 	let { data, form } = $props();
 	type Result = { message?: string; success?: string; values?: Record<string, string> };
@@ -15,6 +16,10 @@
 	const typeLabel: Record<string, string> = { law: 'Law', standard: 'Standard' };
 	// Previews the person opened stay open while they edit (a save reloads the data).
 	let opened = $state<Record<string, boolean>>({});
+	// Selected requirements per list (one list per imported source, one per changed source).
+	let selected = $state<Record<string, string[]>>({});
+	const proposedIds = (rows: { id: string; status: string }[]) =>
+		rows.filter((x) => x.status === 'proposed').map((x) => x.id);
 </script>
 
 <svelte:head><title>Review · Library · mcp-audit</title></svelte:head>
@@ -81,9 +86,23 @@
 					ontoggle={(ev) => (opened[s.id] = (ev.currentTarget as HTMLDetailsElement).open)}
 				>
 					<summary>Preview and edit the requirements</summary>
+					<SelectionBar
+						id="select-{s.id}"
+						all={proposedIds(s.rows)}
+						bind:selected={() => selected[s.id] ?? [], (v) => (selected[s.id] = v)}
+						acceptAction="?/acceptSelected"
+						rejectAction="?/rejectSelected"
+						noun={['requirement', 'requirements']}
+					/>
 					<ul class="au-list" aria-label="Requirements of {s.title}">
 						{#each s.rows as r (r.id)}
-							<ProposedRequirement {r} depth={r.depth} error={errorFor(r.id)} />
+							<ProposedRequirement
+								{r}
+								depth={r.depth}
+								error={errorFor(r.id)}
+								selectForm={proposedIds(s.rows).length > 1 ? `select-${s.id}` : null}
+								bind:selected={() => selected[s.id] ?? [], (v) => (selected[s.id] = v)}
+							/>
 						{/each}
 					</ul>
 				</details>
@@ -106,9 +125,26 @@
 					>
 				</form>
 			</div>
+			<SelectionBar
+				id="select-changes-{c.source.id}"
+				all={proposedIds(c.requirements)}
+				bind:selected={() => selected[`c-${c.source.id}`] ?? [], (v) => (selected[`c-${c.source.id}`] = v)}
+				acceptAction="?/acceptSelected"
+				rejectAction="?/rejectSelected"
+				noun={['change', 'changes']}
+			/>
 			<ul class="au-list" aria-label="Changes in {c.source.title}">
 				{#each c.requirements as r (r.id)}
-					<ProposedRequirement {r} before={r.before} by={r.by} error={errorFor(r.id)} />
+					<ProposedRequirement
+						{r}
+						before={r.before}
+						by={r.by}
+						error={errorFor(r.id)}
+						selectForm={proposedIds(c.requirements).length > 1 ? `select-changes-${c.source.id}` : null}
+						bind:selected={
+							() => selected[`c-${c.source.id}`] ?? [], (v) => (selected[`c-${c.source.id}`] = v)
+						}
+					/>
 				{/each}
 			</ul>
 		{/each}

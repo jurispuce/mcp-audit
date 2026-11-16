@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ItemCard from '#lib/components/ItemCard.svelte';
@@ -37,6 +38,7 @@
 			await update({ reset: false });
 		};
 	};
+	let selected = $state<string[]>([]);
 </script>
 
 <svelte:head><title>Proposals · {e.name} · mcp-audit</title></svelte:head>
@@ -79,6 +81,14 @@
 				<button class="au-btn au-btn--small au-btn--primary" type="submit">Accept all</button>
 			</form>
 		</div>
+		<SelectionBar
+			id="select-proposals"
+			all={data.items.map((p) => `${p.type}:${p.id}`)}
+			bind:selected
+			acceptAction="?/acceptSelected"
+			rejectAction="?/rejectSelected"
+			noun={['proposal', 'proposals']}
+		/>
 		<ul class="au-list" aria-label="Proposals">
 			{#each data.items as p (`${p.type}:${p.id}`)}
 				<li>
@@ -92,6 +102,19 @@
 						testid="proposal-{p.type}-{p.title}"
 					>
 						{#snippet actions()}
+							{#if data.items.length > 1}
+								<label class="au-check-row au-select">
+									<input
+										type="checkbox"
+										form="select-proposals"
+										name="ids"
+										value="{p.type}:{p.id}"
+										bind:group={selected}
+										aria-label="Select {p.title}"
+									/>
+									Select
+								</label>
+							{/if}
 							<form method="POST" action="?/accept" use:enhance={keep}>
 								<input type="hidden" name="type" value={p.type} />
 								<input type="hidden" name="id" value={p.id} />
