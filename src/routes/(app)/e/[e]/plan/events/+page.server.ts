@@ -20,6 +20,7 @@ import {
 } from '#lib/domain/planning.ts';
 import { criticalityOf } from '#lib/domain/risks.ts';
 import { appDatabase } from '#lib/server/db.ts';
+import { reviewSelected } from '#lib/server/proposals.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import { planChoices, planHeader, planStatusAction } from '#lib/server/plan.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -147,6 +148,8 @@ export const actions: Actions = {
 			return formFailure(e);
 		}
 	},
+	acceptSelected: async ({ request, locals, params }) => reviewSelected(request, locals, params.e, 'accept'),
+	rejectSelected: async ({ request, locals, params }) => reviewSelected(request, locals, params.e, 'reject'),
 	acceptAll: async ({ locals, params }) => {
 		try {
 			const n = acceptAllEvents(appDatabase(), uiActor(locals), params.e);

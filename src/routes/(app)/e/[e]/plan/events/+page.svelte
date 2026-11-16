@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
 	import { enhance } from '$app/forms';
@@ -57,6 +58,15 @@
 	const when = (x: { date: string | null; startTime: string | null }) =>
 		[x.date ?? 'No date', x.startTime].filter(Boolean).join(' ');
 	const reqsOf = (ids: string[]) => data.requirements.filter((r) => ids.includes(r.id));
+	// Review several drafts at once: drafted events, and drafted evidence of accepted events shown here.
+	let selected = $state<string[]>([]);
+	const selectable = $derived([
+		...drafts.map((ev) => `event:${ev.id}`),
+		...data.evidence
+			.filter((x) => x.proposed && x.eventId === openId && !drafts.some((d) => d.id === x.eventId))
+			.map((x) => `evidence:${x.id}`)
+	]);
+	const keepOpen = (name: string) => (openId ? `?event=${openId}&/${name}` : `?/${name}`);
 </script>
 
 <svelte:head><title>Events · Plan · mcp-audit</title></svelte:head>
@@ -78,6 +88,14 @@
 {#if drafts.length}
 	<p class="au-muted">Drafted events stay editable before you accept them.</p>
 {/if}
+<SelectionBar
+	id="select-drafts"
+	all={selectable}
+	bind:selected
+	acceptAction={keepOpen('acceptSelected')}
+	rejectAction={keepOpen('rejectSelected')}
+	noun={['draft', 'drafts']}
+/>
 
 <section class="au-section" aria-labelledby="events-title">
 	<div class="au-row au-between">
@@ -175,6 +193,19 @@
 								>{ev.evidence.received} of {ev.evidence.total} evidence received</span
 							>{/snippet}
 						{#snippet actions()}
+							{#if ev.proposed && selectable.length > 1}
+								<label class="au-check-row au-select">
+									<input
+										type="checkbox"
+										form="select-drafts"
+										name="ids"
+										value="event:{ev.id}"
+										bind:group={selected}
+										aria-label="Select {ev.title}"
+									/>
+									Select
+								</label>
+							{/if}
 							{#if ev.proposed}
 								<form method="POST" action="?/accept" use:enhance={after}>
 									<input type="hidden" name="id" value={ev.id} /><button
@@ -269,6 +300,19 @@
 													>{x.criticality.charAt(0).toUpperCase() + x.criticality.slice(1)} criticality</span
 												>{/snippet}
 											{#snippet actions()}
+												{#if selectable.includes(`evidence:${x.id}`) && selectable.length > 1}
+													<label class="au-check-row au-select">
+														<input
+															type="checkbox"
+															form="select-drafts"
+															name="ids"
+															value="evidence:{x.id}"
+															bind:group={selected}
+															aria-label="Select evidence {x.text}"
+														/>
+														Select
+													</label>
+												{/if}
 												<button
 													class="au-btn au-btn--small"
 													type="button"

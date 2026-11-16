@@ -126,3 +126,39 @@ test('select requirements of an import across rows and accept them together (Lib
 	await expect(card).toContainText('3 requirements, 1 still proposed');
 	await expect(card.getByTestId('proposed-2')).toHaveAttribute('data-state', 'proposed');
 });
+
+test('select drafted events and drafted evidence on Plan, Events and review them together', async ({
+	page,
+	baseURL
+}) => {
+	const e = await sampleCopy(page.request);
+	const client = await mcpClient(baseURL!, await createToken(page, 'Select plan'));
+	await call(client, 'upsert_events', {
+		engagement_id: e.id,
+		events: [{ title: 'Draft one' }, { title: 'Draft two' }, { title: 'Draft three' }]
+	});
+	await call(client, 'upsert_evidence_items', {
+		engagement_id: e.id,
+		items: [{ event_id: e.events[0]!.id, text: 'Drafted evidence on an accepted event', kind: 'record' }]
+	});
+	await client.close();
+
+	await page.goto(`/e/${e.id}/plan/events`);
+	await page.getByLabel('Select Draft one').check();
+	await page.getByLabel('Select Draft two').check();
+	const bar = page.getByTestId('selection-bar');
+	await expect(bar).toContainText('2 of 3 selected');
+	await bar.getByRole('button', { name: 'Accept selected' }).click();
+	await expect(page.getByTestId('event-Draft one')).toHaveAttribute('data-state', 'default');
+	await expect(page.getByTestId('event-Draft three')).toHaveAttribute('data-state', 'proposed');
+
+	// With an accepted event's evidence open, its drafted evidence joins the selection.
+	await page.goto(`/e/${e.id}/plan/events?event=${e.events[0]!.id}`);
+	await page.getByLabel('Select evidence Drafted evidence on an accepted event').check();
+	await page.getByLabel('Select Draft three').check();
+	page.once('dialog', (d) => d.accept());
+	await page.getByTestId('selection-bar').getByRole('button', { name: 'Reject selected' }).click();
+	await expect(page.getByTestId('event-Draft three')).toHaveCount(0);
+	await expect(page.getByTestId('evidence-Drafted evidence on an accepted event')).toHaveCount(0);
+	await expect(page).toHaveURL(new RegExp(`event=${e.events[0]!.id}`));
+});

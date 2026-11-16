@@ -4,12 +4,9 @@ import {
 	acceptProposalItem,
 	isProposalType,
 	listProposals,
-	rejectProposalItem,
-	bulkMessage,
-	reviewProposalItems,
-	type BulkResult,
-	type ProposalType
+	rejectProposalItem
 } from '#lib/domain/proposals.ts';
+import { reviewSelected } from '#lib/server/proposals.ts';
 import { ValidationError } from '#lib/domain/errors.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, uiActor } from '#lib/server/http.ts';
@@ -32,34 +29,6 @@ function typeOf(data: FormData) {
 	return t;
 }
 
-/** Selected proposals arrive as "type:id"; each type goes through its own accept or reject rules. */
-async function bulk(
-	request: Request,
-	locals: App.Locals,
-	engagementId: string,
-	verdict: 'accept' | 'reject'
-) {
-	const values = (await request.formData()).getAll('ids').map(String);
-	try {
-		if (values.length === 0) throw new ValidationError('Select at least one proposal.');
-		const byType = new Map<ProposalType, string[]>();
-		for (const v of values) {
-			const [t, id] = [v.slice(0, v.indexOf(':')), v.slice(v.indexOf(':') + 1)];
-			if (!isProposalType(t) || !id) throw new ValidationError('Unknown proposal in the selection.');
-			byType.set(t, [...(byType.get(t) ?? []), id]);
-		}
-		const total: BulkResult = { done: 0, skipped: [] };
-		for (const [t, ids] of byType) {
-			const r = reviewProposalItems(appDatabase(), uiActor(locals), engagementId, t, ids, verdict);
-			total.done += r.done;
-			total.skipped.push(...r.skipped);
-		}
-		return { success: bulkMessage(total, verdict) };
-	} catch (e) {
-		return formFailure(e);
-	}
-}
-
 export const actions: Actions = {
 	accept: async ({ request, locals, params }) => {
 		const data = await request.formData();
@@ -79,8 +48,8 @@ export const actions: Actions = {
 			return formFailure(e);
 		}
 	},
-	acceptSelected: async ({ request, locals, params }) => bulk(request, locals, params.e, 'accept'),
-	rejectSelected: async ({ request, locals, params }) => bulk(request, locals, params.e, 'reject'),
+	acceptSelected: async ({ request, locals, params }) => reviewSelected(request, locals, params.e, 'accept'),
+	rejectSelected: async ({ request, locals, params }) => reviewSelected(request, locals, params.e, 'reject'),
 	acceptAll: async ({ request, locals, params }) => {
 		const data = await request.formData();
 		try {
