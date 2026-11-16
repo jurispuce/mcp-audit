@@ -7,7 +7,7 @@ import { listInternal } from './internal';
 import { listEvidence, type EvidenceItem } from './planning';
 import { registerEntity } from './registry';
 import { criticalityOf, idList } from './risks';
-import { listAssessmentUnits, listSelected, type Criticality } from './selection';
+import { listAssessmentUnits, listSelected, type AssessmentUnit, type Criticality } from './selection';
 import {
 	createEntity,
 	deleteEntity,
@@ -221,8 +221,11 @@ export function listFindings(app: AppDatabase, engagementId: string): Finding[] 
 	).map((r) => toFinding(app, r, scale));
 }
 
-/** Everything the Findings card shows for each assessment unit, in selection order. */
-export function unitCards(app: AppDatabase, engagementId: string): UnitCard[] {
+/**
+ * Builds Findings cards. Everything the cards share (selection, evidence, links, internal rules,
+ * findings, suspected issues) is read once per engagement, so a card costs no further queries.
+ */
+function cardBuilder(app: AppDatabase, engagementId: string): (u: AssessmentUnit) => UnitCard {
 	const e = getEngagement(app, engagementId);
 	const selected = new Map(listSelected(app, e.id).map((s) => [s.requirementId, s]));
 	const crit = criticalityOf(app, e.id);
@@ -231,7 +234,7 @@ export function unitCards(app: AppDatabase, engagementId: string): UnitCard[] {
 	const internal = listInternal(app, e.id).filter((r) => r.status === 'confirmed');
 	const findings = new Map(listFindings(app, e.id).map((f) => [f.unitId, f]));
 	const issuesOf = suspectedIssueIndex(app, e.id);
-	return listAssessmentUnits(app, e.id).map((u) => {
+	return (u) => {
 		const s = selected.get(u.requirementId)!;
 		const items = evidence.filter(
 			(x) =>
@@ -291,13 +294,20 @@ export function unitCards(app: AppDatabase, engagementId: string): UnitCard[] {
 			})),
 			finding: findings.get(u.id) ?? null
 		};
-	});
+	};
+}
+
+/** Everything the Findings card shows for each assessment unit, in selection order. */
+export function unitCards(app: AppDatabase, engagementId: string): UnitCard[] {
+	const units = listAssessmentUnits(app, engagementId);
+	if (units.length === 0) return [];
+	return units.map(cardBuilder(app, engagementId));
 }
 
 export function unitCard(app: AppDatabase, engagementId: string, unitId: string): UnitCard {
-	const c = unitCards(app, engagementId).find((x) => x.unitId === unitId);
-	if (!c) throw new NotFoundError('Assessment unit not found');
-	return c;
+	const u = listAssessmentUnits(app, engagementId).find((x) => x.id === unitId);
+	if (!u) throw new NotFoundError('Assessment unit not found');
+	return cardBuilder(app, engagementId)(u);
 }
 
 // ---- Commands

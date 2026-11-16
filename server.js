@@ -27,6 +27,12 @@ const server = http.createServer((req, res) => {
 	});
 });
 
+// Proxies in front (cloudflared, Caddy) reuse idle connections to the app for longer than Node's
+// default 5 s. If Node closes one just as the proxy sends on it, the proxy answers 502 with
+// "connection reset by peer". Keep idle connections open longer than the proxies do.
+server.keepAliveTimeout = 120_000;
+server.headersTimeout = 125_000;
+
 server.listen(port, host, () => console.log(`Listening on http://${host}:${port}`));
 
 function shutdown() {

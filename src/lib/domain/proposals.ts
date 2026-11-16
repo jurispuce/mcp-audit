@@ -187,10 +187,29 @@ export function proposalSummary(app: AppDatabase, engagementId: string): Proposa
 	return { count: items.length, byType };
 }
 
-function find(app: AppDatabase, engagementId: string, type: ProposalType, id: string): ProposalItem {
-	const item = listProposals(app, engagementId, type).find((p) => p.id === id);
-	if (!item) throw new NotFoundError('This proposal was already reviewed or is not in this engagement.');
-	return item;
+/**
+ * One SQL check that an item still waits for review in this engagement, matching what
+ * `listProposals` shows for that type. Bulk review calls this per id, so it must not build the list.
+ */
+const WAITING: Record<ProposalType, string> = {
+	role: `SELECT 1 FROM person p JOIN engagement e ON e.auditee_id = p.auditee_id
+	        WHERE e.id = ? AND p.id = ? AND p.deleted = 0 AND p.status = 'proposed'`,
+	internal: `SELECT 1 FROM requirement r JOIN source s ON s.id = r.source_id
+	            WHERE s.engagement_id = ? AND r.id = ? AND r.deleted = 0 AND s.deleted = 0
+	              AND r.origin = 'internal' AND r.status = 'proposed'`,
+	event: `SELECT 1 FROM event WHERE engagement_id = ? AND id = ? AND deleted = 0 AND proposed = 1`,
+	// Evidence drafted with a drafted event is reviewed with that event.
+	evidence: `SELECT 1 FROM evidence_item x
+	            WHERE x.engagement_id = ? AND x.id = ? AND x.deleted = 0 AND x.proposed = 1
+	              AND NOT EXISTS (SELECT 1 FROM event ev WHERE ev.id = x.event_id AND ev.deleted = 0 AND ev.proposed = 1)`,
+	link: `SELECT 1 FROM evidence_link WHERE engagement_id = ? AND id = ? AND deleted = 0 AND status = 'proposed'`,
+	finding: `SELECT 1 FROM finding WHERE engagement_id = ? AND id = ? AND deleted = 0 AND status = 'proposed'`
+};
+
+function find(app: AppDatabase, engagementId: string, type: ProposalType, id: string): void {
+	getEngagement(app, engagementId);
+	if (!app.sqlite.prepare(WAITING[type]).get(engagementId, id))
+		throw new NotFoundError('This proposal was already reviewed or is not in this engagement.');
 }
 
 export function acceptProposalItem(
