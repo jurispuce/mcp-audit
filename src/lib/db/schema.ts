@@ -390,7 +390,7 @@ export const risk = sqliteTable(
 			.references(() => engagement.id),
 		title: text('title').notNull(),
 		description: text('description'),
-		origin: text('origin', { enum: ['auditee_register', 'auditor'] }).notNull(),
+		origin: text('origin', { enum: ['auditee_register', 'auditor', 'research'] }).notNull(),
 		level: text('level', { enum: ['high', 'medium', 'low'] }).notNull(),
 		/** JSON array of library requirement ids. */
 		requirementIds: text('requirement_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),

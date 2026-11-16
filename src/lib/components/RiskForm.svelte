@@ -18,6 +18,7 @@
 	];
 	const ORIGINS = [
 		['auditee_register', 'Auditee register'],
+		['research', 'Found by research'],
 		['auditor', 'Auditor view']
 	];
 	const ticked = (v: string | undefined) => (v ? v.split(',').filter(Boolean) : []);

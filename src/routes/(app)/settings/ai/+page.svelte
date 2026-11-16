@@ -183,3 +183,21 @@
 		</form>
 	{/if}
 </section>
+
+<section class="au-section" aria-labelledby="research-title">
+	<h2 class="au-section__title" id="research-title">Research</h2>
+	{#if resultAction === 'research'}<FormMessage form={result} />{/if}
+	<p class="au-muted">
+		With web search on, Extract risks also looks for threats, incidents and regulatory changes of the last 12
+		months that fit the auditee, and proposes those its register lacks, with their sources. The gateway must
+		support web search for the assigned model: in LiteLLM, Claude (with web search allowed for your
+		organisation in the Anthropic Console) or an OpenAI search model. Searches are billed by the provider.
+	</p>
+	<form method="POST" action="?/research" class="au-form" use:enhance={keep}>
+		<label class="au-check-row">
+			<input type="checkbox" name="web_search" checked={s.webSearch} />
+			Let research actions search the web
+		</label>
+		<div class="au-row"><button class="au-btn au-btn--primary" type="submit">Save research</button></div>
+	</form>
+</section>

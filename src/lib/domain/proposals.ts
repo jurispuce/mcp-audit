@@ -99,7 +99,11 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 				title: r.title,
 				detail: [
 					`${r.level.replace(/^./, (c) => c.toUpperCase())} level`,
-					r.origin === 'auditee_register' ? 'from the auditee register' : 'auditor view',
+					r.origin === 'auditee_register'
+						? 'from the auditee register'
+						: r.origin === 'research'
+							? 'found by research, not in the register'
+							: 'auditor view',
 					r.requirementIds.length
 						? `affects ${r.requirementIds.length} ${r.requirementIds.length === 1 ? 'requirement' : 'requirements'}`
 						: ''

@@ -96,7 +96,14 @@ async function request(
 /** One chat completion. Returns the first choice's text and tool calls. */
 export async function chat(
 	gw: Gateway,
-	body: { model: string; messages: ChatMessage[]; tools?: ToolDefinition[]; max_tokens?: number },
+	body: {
+		model: string;
+		messages: ChatMessage[];
+		tools?: ToolDefinition[];
+		max_tokens?: number;
+		/** OpenAI-style web search; LiteLLM passes it on to models that can search. */
+		web_search_options?: { search_context_size?: 'low' | 'medium' | 'high' };
+	},
 	opts: { fetch?: FetchLike; signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<ChatResult> {
 	const payload: Record<string, unknown> = { ...body };

@@ -72,10 +72,20 @@ export interface AiSettings {
 	models: AiModel[];
 	/** Model per action; `default` runs any action without its own model. */
 	assignments: Partial<Record<AiAction | 'default', string>>;
+	/** Research actions may search the web through the gateway (`web_search_options`). */
+	webSearch: boolean;
 	configured: boolean;
 }
 
-const KEYS = { gateway: 'ai.gateway', models: 'ai.models', assignments: 'ai.assignments' } as const;
+/** Actions that can research on the web when web search is on. */
+export const RESEARCH_ACTIONS: readonly AiAction[] = ['extract_risks'];
+
+const KEYS = {
+	gateway: 'ai.gateway',
+	models: 'ai.models',
+	assignments: 'ai.assignments',
+	research: 'ai.research'
+} as const;
 
 type Env = Record<string, string | undefined>;
 
@@ -134,6 +144,7 @@ export function getAiSettings(app: AppDatabase, env: Env = process.env): AiSetti
 		keyFrom: savedKey ? 'settings' : envKey ? 'environment' : 'none',
 		models: modelsOf(app),
 		assignments: assignmentsOf(app),
+		webSearch: readSetting<{ webSearch?: boolean }>(app, KEYS.research, {}).webSearch === true,
 		configured: !!(savedUrl || envUrl)
 	};
 }
@@ -174,6 +185,24 @@ export function saveGateway(
 	if (input.clearKey) next.apiKey = null;
 	else if (input.apiKey?.trim()) next.apiKey = input.apiKey.trim();
 	saveSetting(app, KEYS.gateway, next);
+}
+
+/**
+ * Let research actions search the web. The gateway passes `web_search_options` to models that can
+ * search (in LiteLLM: Claude, with web search enabled for the organisation in the Anthropic Console,
+ * and OpenAI's search models); a model that cannot makes the action fail with the gateway's message.
+ */
+export function saveResearch(app: AppDatabase, actor: Actor, input: { webSearch: boolean }): void {
+	requireAdmin(app, actor);
+	saveSetting(app, KEYS.research, { webSearch: input.webSearch === true });
+}
+
+/** Whether a job of this action searches the web. */
+export function webSearchFor(app: AppDatabase, action: AiAction): boolean {
+	return (
+		RESEARCH_ACTIONS.includes(action) &&
+		readSetting<{ webSearch?: boolean }>(app, KEYS.research, {}).webSearch === true
+	);
 }
 
 /** The gateway's model list, to pick from. */

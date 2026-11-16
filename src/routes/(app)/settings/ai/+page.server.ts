@@ -8,6 +8,7 @@ import {
 	getAiSettings,
 	removeModel,
 	saveGateway,
+	saveResearch,
 	type AiAction
 } from '#lib/domain/ai-settings.ts';
 import { isAdmin } from '#lib/domain/users.ts';
@@ -29,6 +30,19 @@ export const load: PageServerLoad = ({ locals }) => {
 };
 
 export const actions: Actions = {
+	research: async ({ request, locals }) => {
+		const data = await request.formData();
+		try {
+			const on = data.get('web_search') === 'on';
+			saveResearch(appDatabase(), uiActor(locals), { webSearch: on });
+			return {
+				action: 'research',
+				success: on ? 'Web search is on for research actions.' : 'Web search is off.'
+			};
+		} catch (e) {
+			return formFailure(e, { action: 'research' });
+		}
+	},
 	gateway: async ({ request, locals }) => {
 		const data = await request.formData();
 		const values = { base_url: String(data.get('base_url') ?? '') };

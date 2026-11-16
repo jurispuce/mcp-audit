@@ -358,7 +358,7 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 		{
 			title: 'Create or update risks',
 			description:
-				"Add or update risks, matched by id, else by title. Each risk has a level (high, medium, low), an origin (auditee_register for risks from the auditee's register, auditor for your own view) and the selected requirements it affects; optional scopes by name or id. Risks you write are proposed until the auditor accepts them; an accepted risk's level becomes the default criticality of the requirements it affects (the highest one wins).",
+				"Add or update risks, matched by id, else by title. Each risk has a level (high, medium, low), an origin (auditee_register for risks from the auditee's register, research for a current risk you found by research that the register lacks, with its sources in the description; auditor for your own view) and the selected requirements it affects; optional scopes by name or id. Risks you write are proposed until the auditor accepts them; an accepted risk's level becomes the default criticality of the requirements it affects (the highest one wins).",
 			inputSchema: {
 				engagement_id: engagementId,
 				risks: z

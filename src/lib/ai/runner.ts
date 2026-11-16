@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { AppDatabase } from '#lib/db/client.ts';
-import { AI_ACTIONS, resolveModel, type AiAction } from '#lib/domain/ai-settings.ts';
+import { AI_ACTIONS, resolveModel, webSearchFor, type AiAction } from '#lib/domain/ai-settings.ts';
 import { getEngagement } from '#lib/domain/engagements.ts';
 import {
 	addJobStep,
@@ -94,7 +94,7 @@ export const ACTION_TOOLS: Record<AiAction, string[]> = {
 };
 
 /** What the button asks for, in words, with the ids the model needs. */
-export function taskText(action: AiAction, ctx: JobContext): string {
+export function taskText(action: AiAction, ctx: JobContext, opts: { webSearch?: boolean } = {}): string {
 	switch (action) {
 		case 'derive_roles':
 			return "Derive the auditee's roles from the engagement's documents. Read the documents, then propose each role with upsert_people, naming the source document and section it was found in.";
@@ -102,10 +102,15 @@ export function taskText(action: AiAction, ctx: JobContext): string {
 			return ctx.artifact_id
 				? `Extract the internal requirements from the document ${ctx.artifact_id}.${ctx.sections ? ` It is a new version; its internal requirements were already checked against it, and only these sections hold none yet: ${ctx.sections}. Extract from those sections only and leave the existing internal requirements as they are.` : ''} Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.`
 				: "Extract internal requirements from the auditee's documents that have not been analysed yet. Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.";
-		case 'extract_risks':
-			return ctx.artifact_id
+		case 'extract_risks': {
+			const register = ctx.artifact_id
 				? `Extract the risks from the auditee's risk register, document ${ctx.artifact_id}. Read all of it with get_artifact_text, then propose each risk with upsert_risks: origin auditee_register, the register's rating mapped to high, medium or low, its reference, owner and treatment in the description, and the engagement's selected requirements it affects where that is clear.`
 				: "Find the auditee's risk register among the documents (kind risk_register) and extract its risks: read it with get_artifact_text, then propose each risk with upsert_risks (origin auditee_register, the rating mapped to high, medium or low, its reference, owner and treatment in the description, and the selected requirements it affects where that is clear).";
+			const research = opts.webSearch
+				? ' Then research: from the engagement overview and documents, work out who the auditee is (sector, country, size, the services and technology it depends on), search the web for threats, incidents, vulnerabilities and regulatory changes from the last 12 months that are relevant to such an organisation, and compare them with the register. Propose each relevant risk the register does not cover with origin research, a level, the selected requirements it affects, and in the description why it applies and its sources (title, URL and date). Do not repeat risks the register already has.'
+				: ' Web search is not available in this run: skip researching current risks and say so in your summary.';
+			return register + research;
+		}
 		case 'draft_plan':
 			return 'Draft the audit plan. Check coverage first, then propose events grouping the selected requirements (upsert_events) and the evidence to collect at each (upsert_evidence_items), so that every requirement is covered.';
 		case 'process_event':
@@ -229,11 +234,13 @@ async function runJob(app: AppDatabase, jobId: string, signal: AbortSignal, deps
 			}
 		}));
 
+		const webSearch = webSearchFor(app, job.action);
+		if (webSearch) addJobStep(app, jobId, { kind: 'info', text: 'Web search is on for this action.' });
 		const messages: ChatMessage[] = [
 			{ role: 'system', content: systemPrompt(job) },
 			{
 				role: 'user',
-				content: `Action: ${job.action}\nContext: ${JSON.stringify(job.context)}\n\n${taskText(job.action, job.context)}`
+				content: `Action: ${job.action}\nContext: ${JSON.stringify(job.context)}\n\n${taskText(job.action, job.context, { webSearch })}`
 			}
 		];
 
@@ -248,7 +255,13 @@ async function runJob(app: AppDatabase, jobId: string, signal: AbortSignal, deps
 				res = await chat(
 					gateway,
 					// Generous: models that think before acting spend part of this on reasoning.
-					{ model: job.model, messages, tools, max_tokens: 16_000 },
+					{
+						model: job.model,
+						messages,
+						tools,
+						max_tokens: 16_000,
+						...(webSearch ? { web_search_options: { search_context_size: 'medium' as const } } : {})
+					},
 					{ fetch: deps.fetch, signal }
 				);
 			} catch (e) {

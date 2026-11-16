@@ -27,6 +27,7 @@ Check which tools you have before you start.
 | 5. Roles | `upsert_people`: role required, name, unit and email optional. They arrive as proposed for the auditor to accept on Set-up, Auditee |
 | 6. Risks | `upsert_risks` with level, origin (`auditee_register` or `auditor`) and the selected requirements each affects. Risks you write are proposed; once the auditor accepts one, the highest linked level becomes the requirement's default criticality |
 | 6a. Risk register | When the auditee's register is a document (`list_artifacts`, kind `risk_register`, or the one you were given): read all of it with `get_artifact_text`, then propose each risk with `upsert_risks`. See "Extracting a risk register" below |
+| 6b. Current risks | With web search, check the register against threats, incidents and obligations of the last 12 months and propose what it lacks (origin `research`, sources in the description). See "Checking the register against current risks" below |
 | 7. Hand over | `get_engagement_overview` again, and summarise its phases and the open points |
 
 #### Extracting a risk register
@@ -41,6 +42,16 @@ A register can be a spreadsheet (each sheet is a page, each row a line with cell
 - **Requirements.** Link each risk to the engagement's selected requirements it clearly affects (`get_engagement_overview` lists them; `search_requirements` helps). Leave the list empty when it is not clear; the auditor links them on Set-up, Risks.
 - **Scopes.** Only when the register names a site or unit that matches a scope.
 - Send risks in batches of up to 100. Everything you write is proposed until the auditor accepts it.
+
+#### Checking the register against current risks
+
+A register is often a year old or more. When you can search the web, check that it covers what matters now; without web search, skip this and say so.
+
+1. **Profile the auditee** from the engagement overview, the scope documents and the register itself: sector, country, size, the services it provides, and the technology and suppliers it depends on (cloud, OT, payment systems, a named software product). Do not search with personal data or anything marked confidential; search with the profile, not the auditee's name, unless the auditor says otherwise.
+2. **Search for the last 12 months:** threats and campaigns aimed at that sector or country (for example from ENISA, the national CERT, CISA), notable incidents at similar organisations, actively exploited vulnerabilities in technology it uses, and new or changed obligations (NIS 2 transposition, DORA, sector rules, supervisory guidance).
+3. **Compare with the register.** A finding the register already covers, even in other words, is not new. Covered but rated clearly too low is worth one line in your summary, not a new risk.
+4. **Propose what is missing** with `upsert_risks`: origin `research`, a level, the selected requirements it affects, and in the description why it applies to this auditee and its sources (title, URL and publication date, at least one per risk). Prefer primary sources (agencies, vendors, regulators) over news.
+5. In the summary, list the new risks in one line each and what you searched for, so the auditor can judge coverage.
 
 If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor; only they can switch it on (Home, engagement details). If it answers `stale_write`, read again and redo the change on top. Everything you write shows in the app as "Claude on behalf of <auditor>"; judgement writes land as proposed for the auditor to accept.
 

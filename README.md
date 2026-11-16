@@ -57,6 +57,8 @@ Then, signed in as an admin, open **Settings → AI**:
 
 The buttons now work. They stay disabled, saying why, until a checked model is set, and on any engagement where "AI may work on this engagement" is off. On an engagement's Home, **Edit details → Model for in-app AI** limits that engagement to one model, for example a local one for confidential material. What a button reads (documents, notes) goes to the model behind the proxy, and everything it writes waits as proposals for review.
 
+**Web search for research (optional).** **Settings → AI → Research → Let research actions search the web** lets **Extract risks** look for threats, incidents and regulatory changes of the last 12 months that fit the auditee, and propose those the register lacks, with their sources. The app sends `web_search_options` to the gateway; LiteLLM passes it on to models that can search. For Claude, web search must also be allowed for your organisation in the Anthropic Console. Searches are billed by the provider. If the model or route cannot search, the action fails with the gateway's message; switch the setting off or assign a model that can.
+
 | What the app says                                                             | Check                                                                        |
 | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | Could not reach the AI gateway at …                                           | The address as the container sees it (table above), and the check command    |

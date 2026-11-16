@@ -8,7 +8,7 @@ import type { FetchLike } from '#lib/ai/llm.ts';
 import { ACTION_TOOLS, startJob, taskText } from '#lib/ai/runner.ts';
 import { fakeLlmFetch } from '../../../e2e/fake-llm.mjs';
 import { makeXlsx } from '../../../tests/fixtures/make-docs';
-import { assignModels, checkModel, saveGateway } from './ai-settings';
+import { assignModels, checkModel, saveGateway, saveResearch, webSearchFor } from './ai-settings';
 import { uploadArtifacts } from './artifacts';
 import type { Engagement } from './engagements';
 import { ForbiddenError } from './errors';
@@ -124,5 +124,51 @@ describe('Extract risks from a register (#78)', () => {
 			['Supplier outage stops deliveries', 'medium', 'auditee_register', 'R-2, likelihood 2 × impact 3']
 		]);
 		expect(listProposals(app, e.id, 'risk').map((p) => p.source)).toEqual(['Extract risks', 'Extract risks']);
+	});
+
+	it('with web search on, the job asks the gateway to search and the task asks for current risks', async () => {
+		const bodies: Record<string, unknown>[] = [];
+		const spy = (async (url: string, init?: RequestInit) => {
+			if (String(url).endsWith('/chat/completions')) bodies.push(JSON.parse(String(init?.body)));
+			return fetch(url, init);
+		}) as FetchLike;
+		const run = async () => {
+			bodies.length = 0;
+			const { done } = startJob(
+				app,
+				human,
+				{ action: 'extract_risks', context: { engagement_id: e.id } },
+				{
+					fetch: spy,
+					env: {}
+				}
+			);
+			await done;
+			return bodies;
+		};
+
+		expect(webSearchFor(app, 'extract_risks')).toBe(false);
+		let sent = await run();
+		expect(sent[0]).not.toHaveProperty('web_search_options');
+		expect(JSON.stringify(sent[0]!.messages)).toContain('Web search is not available in this run');
+
+		saveResearch(app, human, { webSearch: true });
+		expect(webSearchFor(app, 'extract_risks')).toBe(true);
+		expect(webSearchFor(app, 'draft_plan')).toBe(false);
+		sent = await run();
+		expect(
+			sent.every(
+				(b) => (b.web_search_options as { search_context_size: string }).search_context_size === 'medium'
+			)
+		).toBe(true);
+		expect(JSON.stringify(sent[0]!.messages)).toContain(
+			'Propose each relevant risk the register does not cover with origin research'
+		);
+	});
+
+	it('a risk found by research carries its own origin', () => {
+		const r = addRisk(app, ai(), e.id, { title: 'Exploited VPN appliance flaw', origin: 'research' });
+		expect(r.origin).toBe('research');
+		expect(listProposals(app, e.id, 'risk')[0]!.detail).toContain('found by research, not in the register');
 	});
 });

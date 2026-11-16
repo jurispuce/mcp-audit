@@ -18,7 +18,12 @@ import {
 
 const str = (v: unknown) => (v == null ? '' : String(v)).trim();
 export const RISK_LEVELS = ['high', 'medium', 'low'] as const;
-export const RISK_ORIGINS = ['auditee_register', 'auditor'] as const;
+export const RISK_ORIGINS = ['auditee_register', 'auditor', 'research'] as const;
+export const RISK_ORIGIN_LABELS: Record<(typeof RISK_ORIGINS)[number], string> = {
+	auditee_register: 'Auditee register',
+	auditor: 'Auditor view',
+	research: 'Found by research'
+};
 
 /** A JSON array of ids as stored, or a list given by a caller, without duplicates. */
 export function idList(v: unknown): string[] {
@@ -57,7 +62,7 @@ export const riskDefinition: EntityDefinition = registerEntity({
 		proposed: 'Proposed'
 	},
 	formatValue(column, value) {
-		if (column === 'origin') return value === 'auditee_register' ? 'Auditee register' : 'Auditor view';
+		if (column === 'origin') return RISK_ORIGIN_LABELS[value as Risk['origin']] ?? String(value ?? '');
 		if (column === 'level') return String(value ?? '').replace(/^./, (c) => c.toUpperCase());
 		if (column === 'requirement_ids' || column === 'scope_ids') return `${idList(value).length}`;
 		if (column === 'deleted' || column === 'proposed') return Number(value) === 1 ? 'Yes' : 'No';
@@ -80,7 +85,7 @@ export const riskDefinition: EntityDefinition = registerEntity({
 		if ('origin' in input || !existing) {
 			const o = str(input.origin || 'auditor');
 			if (!(RISK_ORIGINS as readonly string[]).includes(o))
-				throw new ValidationError('Origin is the auditee register or the auditor view.');
+				throw new ValidationError('Origin is the auditee register, the auditor view or research.');
 			out.origin = o;
 		}
 		if ('level' in input || !existing) {

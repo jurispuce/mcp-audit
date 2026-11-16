@@ -49,6 +49,11 @@
 			}
 		};
 	const LEVEL: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+	const ORIGIN: Record<string, string> = {
+		auditee_register: 'Auditee register',
+		auditor: 'Auditor view',
+		research: 'Found by research'
+	};
 	const TONE: Record<string, 'danger' | 'warn' | 'neutral'> = {
 		high: 'danger',
 		medium: 'warn',
@@ -188,8 +193,9 @@
 				<li>
 					<ItemCard
 						state="proposed"
-						ref="{r.origin === 'auditee_register' ? 'Auditee register' : 'Auditor view'} · {LEVEL[r.level] ??
-							r.level}{r.scopeIds.length ? ` · ${r.scopeIds.map((s) => scopeOf.get(s)).join(', ')}` : ''}"
+						ref="{ORIGIN[r.origin] ?? r.origin} · {LEVEL[r.level] ?? r.level}{r.scopeIds.length
+							? ` · ${r.scopeIds.map((s) => scopeOf.get(s)).join(', ')}`
+							: ''}"
 						title={r.title}
 						href="?item=risk:{r.id}"
 						body={[
@@ -273,7 +279,7 @@
 		{#each accepted as r (r.id)}
 			<li>
 				<ItemCard
-					ref="{r.origin === 'auditee_register' ? 'Auditee register' : 'Auditor view'}{r.scopeIds.length
+					ref="{ORIGIN[r.origin] ?? r.origin}{r.scopeIds.length
 						? ` · ${r.scopeIds.map((s) => scopeOf.get(s)).join(', ')}`
 						: ''}"
 					title={r.title}
