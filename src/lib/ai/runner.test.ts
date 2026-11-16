@@ -64,7 +64,7 @@ function lastRevision(type: string, id: string) {
 describe('AI job runner (#64)', () => {
 	it('every action has a skill whose instructions load, and only tools the MCP server has', () => {
 		for (const action of Object.keys(ACTION_TOOLS) as (keyof typeof ACTION_TOOLS)[]) {
-			expect(skillInstructions(action).length).toBeGreaterThan(500);
+			expect(skillInstructions(app, action).length).toBeGreaterThan(500);
 		}
 	});
 

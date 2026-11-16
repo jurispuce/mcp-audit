@@ -586,6 +586,24 @@ export const finding = sqliteTable(
 );
 
 /** The file of a law or standard kept with the library, to import requirements from (#72). Shared: no client data. */
+/**
+ * A skill edited in the app (#80). Defaults live in `skills/<name>/` (SKILL.md for the auditor's own
+ * Claude with the connector, APP.md for the in-app AI); a row exists only once someone edits one.
+ * Deleting the row (reset) brings the default back; history stays.
+ */
+export const skillOverride = sqliteTable(
+	'skill_override',
+	{
+		...entityColumns(),
+		skillSet: text('skill_set', { enum: ['app', 'connector'] }).notNull(),
+		name: text('name').notNull(),
+		body: text('body').notNull(),
+		/** SHA-256 of the default this edit was based on, to tell when a newer default arrived. */
+		defaultHash: text('default_hash').notNull()
+	},
+	(t) => [index('skill_override_name').on(t.skillSet, t.name)]
+);
+
 export const libraryDocument = sqliteTable('library_document', {
 	...entityColumns(),
 	title: text('title'),

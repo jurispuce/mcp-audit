@@ -34,6 +34,7 @@ import { getEngagement } from '#lib/domain/engagements.ts';
 import { registerSetupTools } from './setup-tools';
 import { registerLibraryImportTools } from './library-tools';
 import { assertLibraryDocument } from '#lib/domain/library-documents.ts';
+import { registerSkillPrompts } from './prompts';
 import { registerPlanTools } from './plan-tools';
 import { registerRunTools } from './run-tools';
 
@@ -49,7 +50,8 @@ const INSTRUCTIONS = `mcp-audit is an audit planning and running database. You a
 Rules: every change you make is versioned and shown as "${AGENT_NAME} on behalf of <auditor>". Judgement writes (internal requirements, evidence links, findings, drafted events, roles) are stored as proposed for a person to accept. You cannot approve findings, change plan status or delete files. Results are compact JSON and include ids; pass ids back to other tools.
 Start with list_engagements, then get_engagement_overview to see the phases and what is missing next.
 Set-up: select_requirements, upsert_scopes, set_scope_handling, upsert_people (roles, proposed), upsert_risks. Documents: list_artifacts, get_artifact_text (paged, cite the locator), register_artifact. Internal requirements from the auditee's documents: list_internal_requirements, upsert_internal_requirements (proposed). Planning: first ask the auditor for the fieldwork days, hours, about how many meetings and exceptions, and record them with set_planning_inputs; then list_events, upsert_events and upsert_evidence_items (drafts until the auditor accepts them), get_coverage, render_audit_plan. Running: get_event_status, upsert_notes, link_evidence (proposed), render_post_event_report. Concluding: list_assessment_units, get_assessment_unit, propose_finding (proposed; missing evidence means no reasonable assurance), render_findings_report. Approval is done by the auditor in the app. Engagement tools refuse to run where the auditor switched AI off, and never read another auditee's internal requirements.
-Library: search_requirements and get_requirement read; upsert_sources, upsert_requirements, link_requirements, set_guidance and set_criteria write. Library documents (laws and standards to import from): list_library_documents, get_library_document_text. Sources, requirements and links you write are proposed until the auditor reviews them (list_library_proposals); before mapping, ask the auditor which existing source to map to. A requirement can be named by its id or as "<source code>:<reference>", for example "nis2:Art. 21(2)(b)". Pass engagement_id to get_requirement, add_comment, get_history and revert to work on an engagement's own items.`;
+Library: search_requirements and get_requirement read; upsert_sources, upsert_requirements, link_requirements, set_guidance and set_criteria write. Library documents (laws and standards to import from): list_library_documents, get_library_document_text. Sources, requirements and links you write are proposed until the auditor reviews them (list_library_proposals); before mapping, ask the auditor which existing source to map to. A requirement can be named by its id or as "<source code>:<reference>", for example "nis2:Art. 21(2)(b)". Pass engagement_id to get_requirement, add_comment, get_history and revert to work on an engagement's own items.
+Skills: each audit skill (engagement setup, document analysis, role discovery, plan builder, event debrief, assurance review, library curator) is also offered as a prompt with the instructions saved on this instance; follow it when the auditor's task matches.`;
 
 type Json = Record<string, unknown> | unknown[];
 
@@ -118,6 +120,7 @@ export function createMcpServer(
 	registerSetupTools(server, app, actor, run);
 	registerPlanTools(server, app, actor, run, runAsync);
 	registerRunTools(server, app, actor, run, runAsync);
+	registerSkillPrompts(server, app);
 
 	// ---- Library: read
 

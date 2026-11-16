@@ -11,6 +11,7 @@
 					{ href: resolve('/(app)/settings/ai'), label: 'AI' }
 				]
 			: []),
+		{ href: resolve('/(app)/settings/skills'), label: 'Skills' },
 		{ href: resolve('/(app)/settings/tokens'), label: 'Access tokens' }
 	]);
 </script>

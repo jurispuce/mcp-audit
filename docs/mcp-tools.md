@@ -28,7 +28,12 @@ About 47 tools, grouped by phase. Write tools accept several items per call.
 
 ## Skills
 
-The seven skills in `skills/` currently run in files mode: they read and write YAML and Markdown files in an engagement folder (`references/engagement-files.md` in each skill). Each skill's reference ends with a table mapping its files to these MCP tools. Moving a skill to MCP mode means replacing file reads and writes with the tool calls; the instructions stay.
+Each of the seven skills in `skills/<name>/` comes in two sets (#80):
+
+- `SKILL.md`: for the auditor's own Claude with the mcp-audit connector. Conversational: it asks before drafting, confirms with the auditor and may research online. Shipped as an Agent Skill with `references/audit-rules.md` (the rules every skill follows) and, where it has one, a report template in `assets/` (the same template the app's render functions fill). Downloadable on Settings, Skills, and offered as an MCP prompt of the same name.
+- `APP.md`: for the in-app AI buttons. One run with the inputs from the screen; it never asks, and names only the tools its actions are given (`ACTION_TOOLS`).
+
+Admins edit either set on Settings, Skills. An edit is stored in `skill_override` (versioned through `write()`), applies to the whole instance, and records which default it was based on, so the screen can say when a release brought a newer default. Reset deletes the override and the default applies again. Files mode (YAML folders without the app) was retired.
 
 | Skill | Phase | Main tools |
 | --- | --- | --- |
@@ -69,7 +74,7 @@ Implementation (`src/lib/ai/runner.ts`):
 
 - The job runs the MCP server in process with the actor `{ user: who pressed the button, agent: the model, channel: ai }` and the action's name as revision note, so the review list can say which action proposed what.
 - Each action gets a fixed tool allowlist (`ACTION_TOOLS`): the reads it needs plus its skill's proposal writes. No render, revert or comment tools. The model cannot leave the engagement: a different `engagement_id` is refused and the job's own is filled in; library actions refuse any `engagement_id`.
-- System prompt: a short preamble (no one to ask, proposals only, finish with a summary) and the skill's `SKILL.md` in app mode. The first user message carries `Action:` and `Context:` lines and the task in words.
+- System prompt: a short preamble (no one to ask, proposals only, finish with a summary) and the action's in-app skill (`APP.md`, or its edit from Settings, Skills). The first user message carries `Action:` and `Context:` lines and the task in words.
 - At most 30 rounds; tool results over 30,000 characters are cut. Jobs are recorded in `ai_job` (status, steps, summary, error); a restart closes jobs left running. Only the starter or an admin can cancel.
 - Settings live in `app_setting`: `ai.gateway` (address and write-only key), `ai.models` (each with its tool-calling check), `ai.assignments` (model per action and a default).
 - Tests use `e2e/fake-llm.mjs`, a scripted OpenAI-compatible gateway that calls the real tools.

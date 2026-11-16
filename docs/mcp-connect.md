@@ -74,7 +74,14 @@ The connection lasts until you disconnect it in Settings, Access tokens, Connect
 
 ## 4. Load the audit skills
 
-The skills in `skills/` tell Claude how to run each audit step. In Claude Code, copy a skill folder to `~/.claude/skills/` (or `.claude/skills/` in a project). In Claude Desktop or claude.ai, zip the skill folder and add it under Settings, Capabilities, Skills. When the mcp-audit tools are connected, the skills use them; otherwise they work with files.
+The audit skills tell Claude how to run each step with the mcp-audit tools: set up the engagement and risk list, analyse documents, find roles, build the plan, debrief events, review assurance and curate the library. They ask before they draft (for example the fieldwork time before a plan) and may research online.
+
+There are two ways to give them to your Claude; use either or both:
+
+- **Install them.** In mcp-audit, **Settings → Skills → For your Claude → Download all skills** (or one skill's **Download**). Each skill is a folder with `SKILL.md`, `references/` and, where it has one, a report template in `assets/`. In claude.ai or Claude Desktop, upload each skill's .zip under Settings, Capabilities, Skills. In Claude Code, unzip into `~/.claude/skills/` or a project's `.claude/skills/`. Download again after an admin edits a skill.
+- **Use them as prompts.** The connector offers each skill as a prompt (for example "Audit plan builder"), always the version saved on your instance. In claude.ai and Claude Desktop, pick it from the connector's prompts.
+
+Admins edit both sets on Settings → Skills: **For your Claude** (these skills) and **In the app** (what the AI buttons follow). An edit applies to everyone on the instance, is versioned (History), can be compared with the default shipped with the app, and **Reset to default** brings that back.
 
 ## Tools
 

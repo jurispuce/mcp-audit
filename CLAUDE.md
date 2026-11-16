@@ -45,4 +45,4 @@ An audit planning and running app: a versioned audit database with a thin respon
 
 ## Skills
 
-`skills/` holds seven audit skills. They currently work in files mode (YAML and Markdown in an engagement folder). Each milestone from 3 onwards includes an issue to move the matching skills to the MCP tools. Report templates live in the skills' `assets/` folders and are the templates the app's render functions use.
+`skills/<name>/` holds seven audit skills in two sets (#80): `SKILL.md` for the auditor's own Claude with the mcp-audit connector (conversational, downloadable on Settings, Skills and offered as an MCP prompt), and `APP.md` for the in-app AI buttons (one run, never asks). Both work only through the MCP tools; files mode was retired. Admins can edit either set in the app (stored as `skill_override`, instance-wide). `references/audit-rules.md` holds the rules every skill follows. Report templates live in the skills' `assets/` folders and are the templates the app's render functions use.

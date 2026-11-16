@@ -1,11 +1,10 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { AI_ACTIONS, resolveModel, webSearchFor, type AiAction } from '#lib/domain/ai-settings.ts';
 import { getEngagement } from '#lib/domain/engagements.ts';
 import { planningBrief } from '#lib/domain/plan-inputs.ts';
+import { effectiveSkill, withoutFrontMatter } from '#lib/domain/skills.ts';
 import { listSelected } from '#lib/domain/selection.ts';
 import {
 	addJobStep,
@@ -20,7 +19,6 @@ import {
 import { getUser } from '#lib/domain/users.ts';
 import type { Actor } from '#lib/domain/write.ts';
 import { createMcpServer } from '#lib/mcp/server.ts';
-import { SKILLS_DIR } from '#lib/reports/template.ts';
 import { APP_VERSION } from '#lib/version.ts';
 import { chat, LlmError, type ChatMessage, type FetchLike, type ToolDefinition } from './llm';
 
@@ -139,27 +137,24 @@ function planBriefFor(app: AppDatabase, job: { action: AiAction; context: JobCon
 	return e.planInputs ? planningBrief(e.planInputs, listSelected(app, e.id).length) : undefined;
 }
 
-/** The skill's instructions without the YAML front matter. */
-export function skillInstructions(action: AiAction): string {
-	const file = path.join(SKILLS_DIR(), AI_ACTIONS[action].skill, 'SKILL.md');
+/** The in-app skill for an action (as edited in Settings, Skills, else the default), without front matter. */
+export function skillInstructions(app: AppDatabase, action: AiAction): string {
 	try {
-		return readFileSync(file, 'utf8')
-			.replace(/^---\n[\s\S]*?\n---\n/, '')
-			.trim();
+		return withoutFrontMatter(effectiveSkill(app, 'app', AI_ACTIONS[action].skill));
 	} catch {
 		return '';
 	}
 }
 
-function systemPrompt(job: Job): string {
+function systemPrompt(app: AppDatabase, job: Job): string {
 	const scope = job.engagementId
 		? `Work only on engagement ${job.engagementId}; pass that engagement_id to the tools.`
 		: 'Work only on the shared requirements library.';
-	const skill = skillInstructions(job.action);
+	const skill = skillInstructions(app, job.action);
 	return `You are running inside mcp-audit as the in-app AI action "${job.label}", started by ${job.userName}.
 Nobody can answer questions during the run: use the tools, make your proposals, and finish with a short summary (two to five sentences) of what you proposed and what the auditor should check. State any assumptions in that summary.
 Everything you write is versioned as "${job.model} on behalf of ${job.userName}" and stored as proposed for the auditor to accept, edit or reject. You cannot approve findings or change plan status. ${scope}
-Follow the skill below in app mode. Where it mentions files mode, asking the user, or tools you were not given, skip that part.
+Follow the instructions below. Where they mention a tool you were not given, skip that part.
 
 ${skill}`.trim();
 }
@@ -251,7 +246,7 @@ async function runJob(app: AppDatabase, jobId: string, signal: AbortSignal, deps
 		const planningBrief = planBriefFor(app, job);
 		if (webSearch) addJobStep(app, jobId, { kind: 'info', text: 'Web search is on for this action.' });
 		const messages: ChatMessage[] = [
-			{ role: 'system', content: systemPrompt(job) },
+			{ role: 'system', content: systemPrompt(app, job) },
 			{
 				role: 'user',
 				content: `Action: ${job.action}\nContext: ${JSON.stringify(job.context)}\n\n${taskText(job.action, job.context, { webSearch, planningBrief })}`
