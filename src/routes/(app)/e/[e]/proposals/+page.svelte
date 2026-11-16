@@ -11,6 +11,7 @@
 		{ key: null, label: 'All' },
 		{ key: 'role', label: 'Roles' },
 		{ key: 'internal', label: 'Internal requirements' },
+		{ key: 'recheck', label: 'Needs review' },
 		{ key: 'event', label: 'Events' },
 		{ key: 'evidence', label: 'Evidence' },
 		{ key: 'link', label: 'Evidence links' },
@@ -19,6 +20,7 @@
 	const TYPE_LABEL: Record<string, string> = {
 		role: 'Role',
 		internal: 'Internal requirement',
+		recheck: 'Needs review after a new version',
 		event: 'Drafted event',
 		evidence: 'Planned evidence',
 		link: 'Evidence link',

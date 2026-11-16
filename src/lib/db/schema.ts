@@ -170,7 +170,14 @@ export const requirement = sqliteTable(
 		/** Internal requirements: short quote in the original language. */
 		quote: text('quote'),
 		/** Order among siblings, as in the source. */
-		position: integer('position').notNull().default(0)
+		position: integer('position').notNull().default(0),
+		/**
+		 * Internal requirements, after a new version of their document (#76): `unchanged` when the quote
+		 * was found in the new text, `needs_review` when it was not. Cleared when the auditor keeps it.
+		 */
+		recheck: text('recheck', { enum: ['unchanged', 'needs_review'] }),
+		/** For `needs_review`: the passage of the new text closest to the old quote. */
+		recheckPassage: text('recheck_passage')
 	},
 	(t) => [
 		uniqueIndex('requirement_source_ref').on(t.sourceId, t.refCode),

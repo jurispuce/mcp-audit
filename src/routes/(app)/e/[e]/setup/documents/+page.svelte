@@ -17,8 +17,14 @@
 	const result = $derived((form ?? null) as Result | null);
 	const e = $derived(data.engagement);
 	const kindLabel = $derived(new Map(data.kinds));
-	const proposed = $derived(data.internal.filter((r) => r.status === 'proposed'));
-	const confirmed = $derived(data.internal.filter((r) => r.status === 'confirmed'));
+	const needsReview = $derived(data.internal.filter((r) => r.recheck === 'needs_review'));
+	const proposed = $derived(
+		data.internal.filter((r) => r.status === 'proposed' && r.recheck !== 'needs_review')
+	);
+	const confirmed = $derived(
+		data.internal.filter((r) => r.status === 'confirmed' && r.recheck !== 'needs_review')
+	);
+	let selectedReview = $state<string[]>([]);
 	let editing = $state<string | null>(null);
 	let newVersionOf = $state<string | null>(null);
 	let showReplaced = $state(false);
@@ -164,6 +170,28 @@
 					version={d.version}
 					testid="document-{d.filename ?? d.displayName}"
 				>
+					{#snippet details()}
+						{@const open = data.openSections[d.id]}
+						{#if open?.length && !d.replacedBy}
+							<div class="au-stack" data-testid="open-sections">
+								<p class="au-muted">
+									Sections of this version with no internal requirement:
+									{open
+										.slice(0, 12)
+										.map((h) => `${h.number} ${h.title}`)
+										.join(' · ')}{open.length > 12 ? ` and ${open.length - 12} more` : ''}.
+								</p>
+								<AiAction
+									action="extract_internal"
+									label="Extract from these sections"
+									context={{
+										artifact_id: d.id,
+										sections: open.map((h) => h.number).join(', ')
+									}}
+								/>
+							</div>
+						{/if}
+					{/snippet}
 					{#snippet actions()}
 						{#if editing === d.id || failed('meta', d.id)}
 							{@const v = failed('meta', d.id)?.values ?? {
@@ -402,6 +430,91 @@
 		</form>
 	{/if}
 
+	{#if needsReview.length}
+		<h3 class="au-section__title">Needs review after a new version ({needsReview.length})</h3>
+		<p class="au-muted">
+			The quote of these requirements is not in the new version of their document. Keep each as it is, take
+			the closest passage of the new text as its quote, or remove it.
+		</p>
+		<SelectionBar
+			id="select-review"
+			all={needsReview.map((r) => r.id)}
+			bind:selected={selectedReview}
+			acceptAction="?/keepSelected"
+			rejectAction="?/removeSelected"
+			noun={['internal requirement', 'internal requirements']}
+			verbs={['Keep', 'Remove']}
+		/>
+		<ul class="au-list" aria-label="Internal requirements to review">
+			{#each needsReview as r (r.id)}
+				<li>
+					<ItemCard
+						state={r.status === 'proposed' ? 'proposed' : 'default'}
+						badge={{ label: 'Needs review', tone: 'warn' }}
+						ref="{r.refCode} · {r.sourceTitle}{r.section ? ` § ${r.section}` : ''}"
+						title={r.title}
+						href="?item=requirement:{r.id}"
+						version={r.version}
+						testid="review-{r.refCode}"
+					>
+						{#snippet details()}
+							<p class="au-muted" data-testid="review-compare">
+								{#if r.quote}Old quote: <span class="au-diff-del">“{r.quote}”</span>{:else}No quote was
+									recorded.{/if}
+								<br />
+								{#if r.recheckPassage}Closest in the new version:
+									<span class="au-diff-ins">“{r.recheckPassage}”</span>{:else}Nothing close was found in the
+									new version.{/if}
+							</p>
+						{/snippet}
+						{#snippet actions()}
+							{#if needsReview.length > 1}
+								<label class="au-check-row au-select">
+									<input
+										type="checkbox"
+										form="select-review"
+										name="ids"
+										value={r.id}
+										bind:group={selectedReview}
+										aria-label="Select {r.refCode} to review"
+									/>
+									Select
+								</label>
+							{/if}
+							<form method="POST" action="?/keep" use:enhance={after}>
+								<input type="hidden" name="id" value={r.id} /><button
+									class="au-btn au-btn--small au-btn--primary"
+									type="submit"
+									aria-label="Keep {r.refCode}">Keep</button
+								>
+							</form>
+							{#if r.recheckPassage}
+								<form method="POST" action="?/keep" use:enhance={after}>
+									<input type="hidden" name="id" value={r.id} /><input
+										type="hidden"
+										name="use_new_passage"
+										value="true"
+									/><button
+										class="au-btn au-btn--small"
+										type="submit"
+										aria-label="Use the new passage for {r.refCode}">Use new passage</button
+									>
+								</form>
+							{/if}
+							<form method="POST" action="?/removeReview" use:enhance={after}>
+								<input type="hidden" name="id" value={r.id} /><button
+									class="au-btn au-btn--small au-btn--ghost"
+									type="submit"
+									aria-label="Remove {r.refCode}">Remove</button
+								>
+							</form>
+						{/snippet}
+					</ItemCard>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+
 	{#if proposed.length}
 		<ProposalBar types={['internal']}>
 			<form method="POST" action="?/acceptAll" use:enhance={after}>
@@ -436,7 +549,7 @@
 						testid="internal-{r.refCode}"
 					>
 						{#snippet details()}
-							{#if r.previous}
+							{#if r.previous && (r.previous.title !== r.title || r.previous.quote !== r.quote || r.previous.section !== r.section || r.previous.text !== r.text)}
 								{@const was = r.previous}
 								<p class="au-muted" data-testid="internal-was">
 									Changes an accepted requirement. Was:
@@ -451,6 +564,8 @@
 									{#if was.text !== r.text}<br /><span class="au-diff-del">{was.text ?? '(no text)'}</span>
 										→ <span class="au-diff-ins">{r.text ?? '(no text)'}</span>{/if}
 								</p>
+							{:else if r.previous && r.recheck === 'unchanged'}
+								<p class="au-muted">An accepted requirement, checked against the new version: quote found.</p>
 							{/if}
 						{/snippet}
 						{#snippet actions()}
@@ -495,12 +610,17 @@
 					<ItemCard
 						ref="{r.refCode} · {r.sourceTitle}{r.section ? ` § ${r.section}` : ''}{r.carriedOver
 							? ' · carried over'
-							: ''}"
+							: ''}{r.recheck === 'unchanged' ? ' · quote found in this version' : ''}"
 						title={r.title}
 						href="?item=requirement:{r.id}"
-						body={r.implements.length
-							? `Implements ${r.implements.map((l) => `${l.other.refCode} (${l.coverage})`).join(', ')}`
-							: 'Implements nothing yet'}
+						body={[
+							r.quote ? `“${r.quote}”` : null,
+							r.implements.length
+								? `Implements ${r.implements.map((l) => `${l.other.refCode} (${l.coverage})`).join(', ')}`
+								: 'Implements nothing yet'
+						]
+							.filter(Boolean)
+							.join(' · ')}
 						version={r.version}
 						testid="internal-{r.refCode}"
 					>

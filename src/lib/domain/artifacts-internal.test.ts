@@ -18,9 +18,9 @@ import {
 	removeArtifact,
 	sha256,
 	updateArtifact,
-	uploadArtifacts,
-	uploadNewVersion
+	uploadArtifacts
 } from './artifacts';
+import { uploadNewVersion } from './document-versions';
 import { createEngagement, getEngagement, updateEngagement } from './engagements';
 import { ForbiddenError, ValidationError } from './errors';
 import { assertCanReadRequirement, assertItemReadable } from './guards';
@@ -194,7 +194,7 @@ describe('new versions of a document (#76)', () => {
 			kind: 'policy',
 			language: 'lv'
 		});
-		const v2 = await uploadNewVersion(app, human, files, e.id, v1.id, {
+		const { artifact: v2 } = await uploadNewVersion(app, human, files, e.id, v1.id, {
 			name: 'policy-v2.txt',
 			type: 'text/plain',
 			bytes: text('Passwords have 12 characters.')

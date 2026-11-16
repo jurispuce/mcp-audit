@@ -4,7 +4,7 @@ import { NotFoundError, ValidationError } from './errors';
 import { confirmLink, listLinks, removeLink } from './execution';
 import { acceptProposal, listFindings, rejectProposal } from './findings';
 import { requireHuman } from './guards';
-import { acceptInternal, listInternal, rejectInternal } from './internal';
+import { acceptInternal, keepInternal, listInternal, rejectInternal, removeAfterRecheck } from './internal';
 import { acceptPerson, listPeople, rejectPerson } from './people';
 import {
 	acceptEvent,
@@ -23,12 +23,21 @@ import type { Actor } from './write';
  * through each item's own domain function, so the rules stay where they are.
  */
 
-export const PROPOSAL_TYPES = ['role', 'internal', 'event', 'evidence', 'link', 'finding'] as const;
+export const PROPOSAL_TYPES = [
+	'role',
+	'internal',
+	'recheck',
+	'event',
+	'evidence',
+	'link',
+	'finding'
+] as const;
 export type ProposalType = (typeof PROPOSAL_TYPES)[number];
 
 export const PROPOSAL_LABELS: Record<ProposalType, [string, string]> = {
 	role: ['role', 'roles'],
 	internal: ['internal requirement', 'internal requirements'],
+	recheck: ['internal requirement to review', 'internal requirements to review'],
 	event: ['drafted event', 'drafted events'],
 	evidence: ['planned evidence item', 'planned evidence items'],
 	link: ['evidence link', 'evidence links'],
@@ -38,6 +47,7 @@ export const PROPOSAL_LABELS: Record<ProposalType, [string, string]> = {
 const ENTITY: Record<ProposalType, string> = {
 	role: 'person',
 	internal: 'requirement',
+	recheck: 'requirement',
 	event: 'event',
 	evidence: 'evidence_item',
 	link: 'evidence_link',
@@ -98,7 +108,9 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 				version: p.version
 			});
 	if (want('internal'))
-		for (const r of listInternal(app, e.id).filter((r) => r.status === 'proposed' && !r.carriedOver))
+		for (const r of listInternal(app, e.id).filter(
+			(r) => r.status === 'proposed' && !r.carriedOver && r.recheck !== 'needs_review'
+		))
 			out.push({
 				type: 'internal',
 				id: r.id,
@@ -107,6 +119,21 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 					r.previous ? 'Changes an accepted requirement' : '',
 					`${r.sourceTitle}${r.section ? ` § ${r.section}` : ''}`,
 					r.implements.length ? `implements ${r.implements.map((l) => l.other.refCode).join(', ')}` : ''
+				]
+					.filter(Boolean)
+					.join(' · '),
+				path: '/setup/documents',
+				version: r.version
+			});
+	if (want('recheck'))
+		for (const r of listInternal(app, e.id).filter((r) => r.recheck === 'needs_review' && !r.carriedOver))
+			out.push({
+				type: 'recheck',
+				id: r.id,
+				title: `${r.refCode} ${r.title}`,
+				detail: [
+					r.quote ? `Quote not found in ${r.sourceTitle}` : `No quote to check against ${r.sourceTitle}`,
+					r.recheckPassage ? `closest: “${r.recheckPassage.slice(0, 160)}”` : ''
 				]
 					.filter(Boolean)
 					.join(' · '),
@@ -197,7 +224,10 @@ const WAITING: Record<ProposalType, string> = {
 	        WHERE e.id = ? AND p.id = ? AND p.deleted = 0 AND p.status = 'proposed'`,
 	internal: `SELECT 1 FROM requirement r JOIN source s ON s.id = r.source_id
 	            WHERE s.engagement_id = ? AND r.id = ? AND r.deleted = 0 AND s.deleted = 0
-	              AND r.origin = 'internal' AND r.status = 'proposed'`,
+	              AND r.origin = 'internal' AND r.status = 'proposed' AND coalesce(r.recheck, '') <> 'needs_review'`,
+	recheck: `SELECT 1 FROM requirement r JOIN source s ON s.id = r.source_id
+	           WHERE s.engagement_id = ? AND r.id = ? AND r.deleted = 0 AND s.deleted = 0
+	             AND r.origin = 'internal' AND r.recheck = 'needs_review'`,
 	event: `SELECT 1 FROM event WHERE engagement_id = ? AND id = ? AND deleted = 0 AND proposed = 1`,
 	// Evidence drafted with a drafted event is reviewed with that event.
 	evidence: `SELECT 1 FROM evidence_item x
@@ -229,6 +259,9 @@ export function acceptProposalItem(
 		case 'internal':
 			acceptInternal(app, actor, engagementId, id);
 			break;
+		case 'recheck':
+			keepInternal(app, actor, engagementId, id);
+			break;
 		case 'event':
 			acceptEvent(app, actor, engagementId, id);
 			break;
@@ -258,6 +291,9 @@ export function rejectProposalItem(
 			break;
 		case 'internal':
 			rejectInternal(app, actor, engagementId, id);
+			break;
+		case 'recheck':
+			removeAfterRecheck(app, actor, engagementId, id);
 			break;
 		case 'event':
 			rejectEvent(app, actor, engagementId, id);
@@ -334,9 +370,13 @@ export function reviewProposalItems(
 	return result;
 }
 
-/** "3 accepted." / "3 accepted; 1 skipped: already reviewed." */
-export function bulkMessage(r: BulkResult, verdict: 'accept' | 'reject'): string {
-	const verb = verdict === 'accept' ? 'accepted' : 'rejected';
+/** "3 accepted." / "3 accepted. 1 skipped: already reviewed." */
+export function bulkMessage(
+	r: BulkResult,
+	verdict: 'accept' | 'reject',
+	words: [string, string] = ['accepted', 'rejected']
+): string {
+	const verb = verdict === 'accept' ? words[0] : words[1];
 	const head = `${r.done} ${verb}.`;
 	if (!r.skipped.length) return head;
 	return `${head} ${r.skipped.length} skipped: ${[...new Set(r.skipped.map((s) => s.reason))].join(' ')}`;

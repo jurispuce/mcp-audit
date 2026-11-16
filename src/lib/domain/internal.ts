@@ -14,6 +14,7 @@ import {
 	sourceDefinition,
 	type LinkView
 } from './library';
+import { findQuote, movedSection, sectionAt } from './text-match';
 import { createEntity, deleteEntity, revertEntity, updateEntity, type Actor, type Row } from './write';
 
 /**
@@ -39,6 +40,10 @@ export interface InternalRequirement {
 	/** True when it comes from an earlier engagement of the same auditee. */
 	carriedOver: boolean;
 	implements: LinkView[];
+	/** After a new version of its document (#76): whether its quote was found in the new text. */
+	recheck: 'unchanged' | 'needs_review' | null;
+	/** For needs_review: the passage of the new text closest to the quote. */
+	recheckPassage: string | null;
 	/** For a proposed change to a requirement that was accepted before: what was accepted. */
 	previous: { title: string; text: string | null; quote: string | null; section: string | null } | null;
 	version: number;
@@ -62,6 +67,8 @@ function toInternal(app: AppDatabase, r: Row, engagementId: string | null): Inte
 		engagementId: (r.source_engagement_id as string | null) ?? null,
 		carriedOver: !!engagementId && r.source_engagement_id !== engagementId,
 		implements: linksOf(app, String(r.id)).filter((l) => l.type === 'implements' && l.direction === 'out'),
+		recheck: (r.recheck as InternalRequirement['recheck']) ?? null,
+		recheckPassage: (r.recheck_passage as string | null) ?? null,
 		previous: r.status === 'proposed' ? previousAccepted(app, String(r.id)) : null,
 		version: Number(r.current_version)
 	};
@@ -356,6 +363,57 @@ export function rejectInternal(
 		}
 		return 'restored' as const;
 	})();
+}
+
+/**
+ * Keep a requirement that needs review after a new version of its document: as it is, or with the
+ * closest passage of the new text as its quote. Keeping is a person's decision and accepts it.
+ */
+export function keepInternal(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	id: string,
+	options: { useNewPassage?: boolean } = {}
+): InternalRequirement {
+	requireHuman(actor, 'Keeping an internal requirement after a new version');
+	const r = getInternal(app, engagementId, id);
+	if (r.recheck !== 'needs_review') throw new ValidationError('This requirement does not need review.');
+	if (options.useNewPassage && !r.recheckPassage)
+		throw new ValidationError('No close passage was found in the new version; edit the quote instead.');
+	// With the new passage as its quote, the section is where that passage sits in the new text.
+	let section: string | null = null;
+	if (options.useNewPassage && r.artifactId) {
+		const text = (
+			app.sqlite.prepare('SELECT text FROM artifact_text WHERE artifact_id = ?').get(r.artifactId) as
+				{ text: string } | undefined
+		)?.text;
+		const at = text ? findQuote(text, r.recheckPassage!) : null;
+		section = at ? movedSection(r.section, sectionAt(text!, at.start)) : null;
+	}
+	updateEntity(
+		app,
+		actor,
+		requirementDefinition,
+		id,
+		r.version,
+		{
+			recheck: null,
+			recheck_passage: null,
+			status: 'confirmed',
+			...(options.useNewPassage ? { quote: r.recheckPassage } : {}),
+			...(section ? { locator: section } : {})
+		},
+		options.useNewPassage ? 'Kept with the passage from the new version' : 'Kept after the new version'
+	);
+	return getInternal(app, engagementId, id);
+}
+
+/** Remove a requirement that needs review: the new version no longer has it. */
+export function removeAfterRecheck(app: AppDatabase, actor: Actor, engagementId: string, id: string): void {
+	const r = getInternal(app, engagementId, id);
+	if (r.recheck !== 'needs_review') throw new ValidationError('This requirement does not need review.');
+	deleteEntity(app, actor, requirementDefinition, id, r.version, 'Removed: not in the new version');
 }
 
 export function acceptAllInternal(app: AppDatabase, actor: Actor, engagementId: string): number {

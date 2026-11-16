@@ -34,6 +34,8 @@ export interface JobContext {
 	source_title?: string;
 	from_source?: string;
 	to_source?: string;
+	/** extract_internal on a new version: the sections with no internal requirement yet. */
+	sections?: string;
 }
 
 export interface Job {
@@ -135,6 +137,15 @@ function validContext(app: AppDatabase, action: AiAction, input: Record<string, 
 		}
 		case 'extract_internal':
 			if (str(input.artifact_id)) ctx.artifact_id = str(input.artifact_id);
+			// Section numbers only: they go into the model's task text.
+			if (ctx.artifact_id && str(input.sections))
+				ctx.sections = str(input.sections)!
+					.split(',')
+					.map((x) => x.trim())
+					.filter((x) => /^(?:\d{1,3}\.)*\d{1,3}$/.test(x))
+					.slice(0, 100)
+					.join(', ');
+			if (!ctx.sections) delete ctx.sections;
 			break;
 		case 'propose_findings':
 			if (str(input.unit_id)) ctx.unit_id = str(input.unit_id);

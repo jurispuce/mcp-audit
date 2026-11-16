@@ -9,6 +9,7 @@ import {
 	listArtifacts,
 	registerTextArtifact
 } from '#lib/domain/artifacts.ts';
+import { registerNewTextVersion } from '#lib/domain/document-versions.ts';
 import { getEngagement, listEngagements, listScopes, type Engagement } from '#lib/domain/engagements.ts';
 import { NotFoundError, ValidationError } from '#lib/domain/errors.ts';
 import { assertAiAllowed, assertCanReadRequirement } from '#lib/domain/guards.ts';
@@ -489,6 +490,25 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 		({ engagement_id, title, text, mentioned, kind, language, received_from, filename, replaces }) =>
 			run(() => {
 				const e = engagement(engagement_id);
+				if (replaces && !mentioned) {
+					const { artifact: a, recheck } = registerNewTextVersion(app, actor, loadConfig().filesDir, e.id, {
+						title,
+						text: text ?? '',
+						kind: kind ?? null,
+						language: language ?? null,
+						receivedFrom: received_from ?? null,
+						filename: filename ?? null,
+						supersedesId: replaces
+					});
+					return {
+						id: a.id,
+						title: a.displayName,
+						state: a.state,
+						text: a.textStatus,
+						replaces: a.supersedesId,
+						internal_requirements: { unchanged: recheck.unchanged, needs_review: recheck.needsReview }
+					};
+				}
 				const a = mentioned
 					? addMentionedDocument(app, actor, e.id, title, { kind: kind ?? null })
 					: registerTextArtifact(app, actor, loadConfig().filesDir, e.id, {
@@ -497,16 +517,9 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 							kind: kind ?? null,
 							language: language ?? null,
 							receivedFrom: received_from ?? null,
-							filename: filename ?? null,
-							supersedesId: replaces ?? null
+							filename: filename ?? null
 						});
-				return {
-					id: a.id,
-					title: a.displayName,
-					state: a.state,
-					text: a.textStatus,
-					...(a.supersedesId ? { replaces: a.supersedesId } : {})
-				};
+				return { id: a.id, title: a.displayName, state: a.state, text: a.textStatus };
 			})
 	);
 

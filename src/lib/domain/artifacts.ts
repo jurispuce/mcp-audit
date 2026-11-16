@@ -541,30 +541,6 @@ export function assertReplaceable(
 	return old;
 }
 
-/**
- * Upload a new version of a document. The new document records which one it replaces and keeps its
- * kind and language; the old one stays, with its evidence links, marked as replaced.
- */
-export async function uploadNewVersion(
-	app: AppDatabase,
-	actor: Actor,
-	filesDir: string,
-	engagementId: string,
-	oldId: string,
-	file: UploadFile
-): Promise<Artifact> {
-	if (!file.bytes.length) throw new ValidationError('The file is empty.');
-	const old = assertReplaceable(app, engagementId, oldId, sha256(file.bytes));
-	const [r] = await uploadArtifacts(app, actor, filesDir, engagementId, [file], {
-		kind: old.kind,
-		language: old.language,
-		supersedesId: old.id,
-		eventId: old.eventId
-	});
-	if (!r?.artifact) throw new ValidationError(r?.error ?? 'The file could not be added.');
-	return r.artifact;
-}
-
 /** A document named in an interview but not received yet: no file, state mentioned. */
 export function addMentionedDocument(
 	app: AppDatabase,

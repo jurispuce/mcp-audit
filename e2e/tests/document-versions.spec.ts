@@ -82,3 +82,68 @@ test('Upload new version keeps the old document, marked replaced, and refuses th
 	await expect(old.getByRole('button', { name: /Upload new version/ })).toHaveCount(0);
 	await expect(docs.getByRole('article').filter({ hasText: 'access-v' })).toHaveCount(2);
 });
+
+test('a new version rechecks the internal requirements: unchanged ones move, the rest wait for review', async ({
+	page
+}) => {
+	const e = await sampleCopy(page.request);
+	const file = (name: string, text: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
+	await page.goto(`/e/${e.id}/setup/documents`);
+	await page
+		.getByLabel('Upload documents')
+		.setInputFiles(
+			file(
+				'pw-v1.txt',
+				'3 Passwords\n3.1 Length\nPasswords have at least 8 characters.\n3.2 Sharing\nPasswords are never shared.\n'
+			)
+		);
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByText('1 document added.')).toBeVisible();
+
+	for (const [title, quote, section] of [
+		['Minimum password length', 'Passwords have at least 8 characters.', '3.1'],
+		['No shared passwords', 'Passwords are never shared.', '3.2']
+	]) {
+		await page.getByRole('button', { name: 'Add internal requirement' }).click();
+		await page.getByLabel('Requirement', { exact: true }).fill(title!);
+		await page.getByLabel('Quote in the original language (optional)').fill(quote!);
+		await page.getByLabel('Document', { exact: true }).selectOption({ label: 'pw-v1.txt' });
+		await page.getByLabel('Section (optional)').fill(section!);
+		await page.getByRole('button', { name: 'Add internal requirement' }).click();
+		await expect(page.getByText('Internal requirement added.')).toBeVisible();
+	}
+
+	await page.getByRole('button', { name: 'Upload new version of pw-v1.txt' }).click();
+	await page
+		.getByLabel('New version of pw-v1.txt')
+		.setInputFiles(
+			file(
+				'pw-v2.txt',
+				'5 Passwords\n5.1 Length\nPasswords have at least 14 characters.\n5.2 Sharing\nPasswords are never shared.\n5.3 Managers\nA password manager is used.\n'
+			)
+		);
+	await page.getByRole('button', { name: 'Upload new version', exact: true }).click();
+	await expect(
+		page.getByText(
+			'pw-v2.txt added as the new version. Internal requirements checked against it: 1 unchanged, 1 needs review.'
+		)
+	).toBeVisible();
+
+	const accepted = page.getByRole('list', { name: 'Internal requirements', exact: true });
+	await expect(accepted).toContainText('No shared passwords');
+	await expect(accepted).toContainText('pw-v2.txt § 5.2 · quote found in this version');
+
+	const review = page.getByRole('list', { name: 'Internal requirements to review' });
+	const card = review.getByRole('article').filter({ hasText: 'Minimum password length' });
+	await expect(card.getByTestId('review-compare')).toContainText('“Passwords have at least 8 characters.”');
+	await expect(card.getByTestId('review-compare')).toContainText('Passwords have at least 14 characters');
+	await expect(page.getByTestId('open-sections')).toContainText('5.3 Managers');
+
+	await card.getByRole('button', { name: /^Use the new passage for / }).click();
+	await expect(page.getByText(/kept\.$/)).toBeVisible();
+	await expect(review).toHaveCount(0);
+	await expect(
+		accepted.getByTestId(/^internal-/).filter({ hasText: 'Minimum password length' })
+	).toContainText('pw-v2.txt § 5.1');
+	await expect(accepted).toContainText('“Passwords have at least 14 characters”');
+});

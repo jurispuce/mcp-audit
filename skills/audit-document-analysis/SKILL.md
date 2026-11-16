@@ -24,6 +24,7 @@ Read `references/engagement-files.md` first.
 | 3. Map | the same call's `implements`: `[{requirement: "nis2:Art. 21(2)(i)", coverage: "partial"}]`. Only selected external requirements of this engagement |
 | Re-runs | `list_internal_requirements` first; update an existing one by giving its `ref` (INT-n) instead of adding a duplicate |
 | Mentioned documents | `register_artifact` with `mentioned: true` and the document's name |
+| A new version of a document | `register_artifact` with `replaces` (the old document's id). Its internal requirements are rechecked; for those that need review, read the new text and propose an update with `upsert_internal_requirements` (`ref`), or leave the decision to the auditor |
 | 5. Criteria | `set_criteria` on the external requirement, with `mode: add` |
 
 Everything you add lands as proposed: the auditor accepts, rejects or accepts all on Set-up, Documents. Internal requirements belong to this auditee only and never appear in another client's engagement; do not try to read or reuse another client's documents or requirements.

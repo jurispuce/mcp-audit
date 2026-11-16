@@ -146,7 +146,9 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		'origin',
 		'status',
 		'quote',
-		'position'
+		'position',
+		'recheck',
+		'recheck_passage'
 	],
 	detailColumns: ['ref_code', 'title', 'text', 'language', 'locator', 'status'],
 	fieldLabels: {
@@ -160,7 +162,9 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		origin: 'Origin',
 		status: 'Status',
 		quote: 'Quote',
-		position: 'Position'
+		position: 'Position',
+		recheck: 'Recheck',
+		recheck_passage: 'Closest passage in the new version'
 	},
 	formatValue(column, value) {
 		if (column === 'language') return String(value ?? '').toUpperCase();
@@ -206,6 +210,13 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		}
 		if ('position' in input) out.position = Number(input.position) || 0;
 		else if (!existing) out.position = 0;
+		if ('recheck' in input) {
+			const v = optional(input.recheck);
+			if (v && v !== 'unchanged' && v !== 'needs_review')
+				throw new ValidationError('Recheck is unchanged or needs_review.');
+			out.recheck = v;
+		}
+		if ('recheck_passage' in input) out.recheck_passage = optional(input.recheck_passage);
 		return out;
 	},
 	afterWrite(app, _actor, row) {

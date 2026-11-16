@@ -17,8 +17,18 @@
 		rejectAction: string;
 		/** What is being selected: ['internal requirement', 'internal requirements']. */
 		noun: [string, string];
+		/** Verbs for the two buttons, when they are not Accept and Reject (for example Keep, Remove). */
+		verbs?: [string, string];
 	}
-	let { id, all, selected = $bindable(), acceptAction, rejectAction, noun }: Props = $props();
+	let {
+		id,
+		all,
+		selected = $bindable(),
+		acceptAction,
+		rejectAction,
+		noun,
+		verbs = ['Accept', 'Reject']
+	}: Props = $props();
 	const n = $derived(selected.length);
 	let msg = $state<{ ok: boolean; text: string } | null>(null);
 	const word = (k: number) => noun[k === 1 ? 0 : 1];
@@ -40,7 +50,7 @@
 		data-testid="selection-bar"
 		use:enhance={({ submitter, cancel }) => {
 			const rejecting = submitter?.getAttribute('formaction') === rejectAction;
-			if (rejecting && !confirm(`Reject ${n} ${word(n)}?`)) return cancel();
+			if (rejecting && !confirm(`${verbs[1]} ${n} ${word(n)}?`)) return cancel();
 			msg = null;
 			return async ({ result, update }) => {
 				if (result.type === 'error') {
@@ -89,10 +99,11 @@
 					>Clear selection</button
 				>
 			{/if}
-			<button class="au-btn au-btn--small au-btn--primary" type="submit" disabled={!n}>Accept selected</button
+			<button class="au-btn au-btn--small au-btn--primary" type="submit" disabled={!n}
+				>{verbs[0]} selected</button
 			>
 			<button class="au-btn au-btn--small" type="submit" formaction={rejectAction} disabled={!n}
-				>Reject selected</button
+				>{verbs[1]} selected</button
 			>
 		</span>
 	</form>

@@ -5,9 +5,13 @@ import {
 	listArtifacts,
 	removeArtifact,
 	updateArtifact,
-	uploadArtifacts,
-	uploadNewVersion
+	uploadArtifacts
 } from '#lib/domain/artifacts.ts';
+import {
+	recheckMessage,
+	sectionsWithoutRequirements,
+	uploadNewVersion
+} from '#lib/domain/document-versions.ts';
 import { updateEngagement } from '#lib/domain/engagements.ts';
 import { ValidationError } from '#lib/domain/errors.ts';
 import {
@@ -15,8 +19,10 @@ import {
 	acceptInternal,
 	addInternal,
 	carryOverCandidates,
+	keepInternal,
 	listInternal,
-	rejectInternal
+	rejectInternal,
+	removeAfterRecheck
 } from '#lib/domain/internal.ts';
 import { listSelected } from '#lib/domain/selection.ts';
 import { loadConfig } from '#lib/server/config.ts';
@@ -31,6 +37,12 @@ export const load: PageServerLoad = ({ params }) => {
 		documents: listArtifacts(app, params.e),
 		internal: listInternal(app, params.e),
 		carryOver: carryOverCandidates(app, params.e).length,
+		openSections: Object.fromEntries(
+			[...sectionsWithoutRequirements(app, params.e)].map(([id, hs]) => [
+				id,
+				hs.map((h) => ({ number: h.number, title: h.title }))
+			])
+		),
 		requirements: listSelected(app, params.e).map((s) => ({
 			id: s.requirementId,
 			refCode: s.refCode,
@@ -84,12 +96,16 @@ export const actions: Actions = {
 			return formFailure(new ValidationError('Choose the new file.'), { id, action: 'newVersion' });
 		try {
 			const app = appDatabase();
-			const created = await uploadNewVersion(app, uiActor(locals), loadConfig().filesDir, params.e, id, {
-				name: file.name,
-				type: file.type,
-				bytes: new Uint8Array(await file.arrayBuffer())
-			});
-			return { success: `${created.displayName} added as the new version.` };
+			const { artifact, recheck } = await uploadNewVersion(
+				app,
+				uiActor(locals),
+				loadConfig().filesDir,
+				params.e,
+				id,
+				{ name: file.name, type: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+			);
+			const checked = recheckMessage(recheck);
+			return { success: `${artifact.displayName} added as the new version.${checked ? ` ${checked}` : ''}` };
 		} catch (e) {
 			return formFailure(e, { id, action: 'newVersion' });
 		}
@@ -177,6 +193,44 @@ export const actions: Actions = {
 						? 'Change rejected; the accepted version is back.'
 						: 'Internal requirement rejected.'
 			};
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	keep: async ({ request, locals, params }) => {
+		const data = await request.formData();
+		try {
+			const r = keepInternal(appDatabase(), uiActor(locals), params.e, String(data.get('id')), {
+				useNewPassage: data.get('use_new_passage') === 'true'
+			});
+			return { success: `${r.refCode} kept.` };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	removeReview: async ({ request, locals, params }) => {
+		const data = await request.formData();
+		try {
+			removeAfterRecheck(appDatabase(), uiActor(locals), params.e, String(data.get('id')));
+			return { success: 'Internal requirement removed.' };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	keepSelected: async ({ request, locals, params }) => {
+		const ids = (await request.formData()).getAll('ids').map(String);
+		try {
+			const r = reviewProposalItems(appDatabase(), uiActor(locals), params.e, 'recheck', ids, 'accept');
+			return { success: bulkMessage(r, 'accept', ['kept', 'removed']) };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	removeSelected: async ({ request, locals, params }) => {
+		const ids = (await request.formData()).getAll('ids').map(String);
+		try {
+			const r = reviewProposalItems(appDatabase(), uiActor(locals), params.e, 'recheck', ids, 'reject');
+			return { success: bulkMessage(r, 'reject', ['kept', 'removed']) };
 		} catch (e) {
 			return formFailure(e);
 		}

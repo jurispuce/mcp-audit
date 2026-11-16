@@ -92,7 +92,7 @@ export function taskText(action: AiAction, ctx: JobContext): string {
 			return "Derive the auditee's roles from the engagement's documents. Read the documents, then propose each role with upsert_people, naming the source document and section it was found in.";
 		case 'extract_internal':
 			return ctx.artifact_id
-				? `Extract the internal requirements from the document ${ctx.artifact_id}. Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.`
+				? `Extract the internal requirements from the document ${ctx.artifact_id}.${ctx.sections ? ` It is a new version; its internal requirements were already checked against it, and only these sections hold none yet: ${ctx.sections}. Extract from those sections only and leave the existing internal requirements as they are.` : ''} Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.`
 				: "Extract internal requirements from the auditee's documents that have not been analysed yet. Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.";
 		case 'draft_plan':
 			return 'Draft the audit plan. Check coverage first, then propose events grouping the selected requirements (upsert_events) and the evidence to collect at each (upsert_evidence_items), so that every requirement is covered.';
