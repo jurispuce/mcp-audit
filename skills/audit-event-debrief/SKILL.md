@@ -13,7 +13,7 @@ Read `references/audit-rules.md` first. The report template is `assets/post-even
 
 ### 1. Gather the event's material
 
-Find the event (`list_engagements`, `list_events`); `get_event_status` gives its planned evidence (with status and links), notes and participants. A transcript from a recording tool or pasted in chat: store it first with `register_artifact` (kind `transcript`) so it is part of the record. Files the auditor uploaded on the event screen: `list_artifacts` and `get_artifact_text`.
+Find the event (`list_engagements`, `list_events`); `get_event_status` gives its planned evidence (with status and links), notes and participants. A transcript from a recording tool or pasted in chat: store it first with `register_artifact` (kind `transcript`) so it is part of the record. Files the auditor uploaded on the event screen, and documents received earlier on Set-up, Documents: `list_artifacts` and `get_artifact_text`. A document received before the event may already answer planned evidence: link it rather than asking for it again.
 
 ### 2. Structure the notes
 
@@ -27,7 +27,7 @@ Write them with `upsert_notes`: `type` note, promise or issue, and `mentions` (`
 
 ### 3. Link material to planned evidence
 
-For each planned evidence item of this event, look for material that addresses it, and write `link_evidence` with `artifact_id`, `evidence_item_id`, `locator` (page, paragraph, cell range or timestamp), a short `excerpt` in the original language, and `sufficiency`:
+For each planned evidence item of this event, look for material that addresses it, and write `link_evidence` with `artifact_id`, `evidence_item_id`, `locator` (section, page, paragraph, cell range or timestamp; empty when the whole document is the evidence), a short `excerpt` in the original language, and `sufficiency`:
 
 - `supports`: the material shows what the evidence item asked for,
 - `partial`: it points the right way but is incomplete, covers a shorter period, or is testimony only,

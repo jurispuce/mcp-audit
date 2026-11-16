@@ -27,6 +27,7 @@ import {
 import { listSelected } from '#lib/domain/selection.ts';
 import { loadConfig } from '#lib/server/config.ts';
 import { bulkMessage, reviewProposalItems } from '#lib/domain/proposals.ts';
+import { receivedDocumentCandidates } from '#lib/domain/received-documents.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -81,8 +82,9 @@ export const actions: Actions = {
 						? [`${r.filename}: ${r.error}`]
 						: []
 			);
+			const linkable = receivedDocumentCandidates(appDatabase(), params.e).length;
 			return {
-				success: `${added} ${added === 1 ? 'document' : 'documents'} added.${notes.length ? ` ${notes.join(' ')}` : ''}`
+				success: `${added} ${added === 1 ? 'document' : 'documents'} added.${notes.length ? ` ${notes.join(' ')}` : ''}${linkable ? ` ${linkable} planned evidence ${linkable === 1 ? 'item matches' : 'items match'} documents already received: link them on Plan, Events.` : ''}`
 			};
 		} catch (e) {
 			return formFailure(e);

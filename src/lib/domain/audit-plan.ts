@@ -1,4 +1,5 @@
 import type { AppDatabase } from '#lib/db/client.ts';
+import { listLinks } from './execution';
 import { fillTemplate, readTemplate } from '#lib/reports/template.ts';
 import { planWords } from '#lib/reports/i18n.ts';
 import { markdownToDocx, markdownToPdf } from '#lib/reports/render.ts';
@@ -68,6 +69,16 @@ export function buildAuditPlan(
 	const allEvents = listEvents(app, e.id);
 	const events = allEvents.filter((x) => !x.proposed);
 	const evidence = listEvidence(app, e.id).filter((x) => !x.proposed);
+	// Documents already received answer some evidence: the auditee prepares only the rest (#83).
+	const toPrepare = evidence.filter((x) => x.status !== 'received');
+	const receivedIds = new Set(evidence.filter((x) => x.status === 'received').map((x) => x.id));
+	const receivedDocs = [
+		...new Set(
+			listLinks(app, e.id)
+				.filter((l) => l.status === 'confirmed' && receivedIds.has(l.evidenceItemId))
+				.map((l) => l.artifactTitle)
+		)
+	].sort((a, b) => a.localeCompare(b));
 	const selected = listSelected(app, e.id);
 	const scopes = listScopes(app, e.id);
 	const members = listMembers(app, e.id);
@@ -117,7 +128,8 @@ export function buildAuditPlan(
 					: scopes
 							.map((s) => `- ${escapeLine(s.name)}${s.description ? `: ${escapeLine(s.description)}` : ''}`)
 							.join('\n'),
-			'Changes since the previous version': changes
+			'Changes since the previous version': changes,
+			'What to prepare': receivedDocs.length ? escapeLine(words.alreadyReceived(receivedDocs.join(', '))) : ''
 		},
 		rows: {
 			Schedule: events.map((x) => ({
@@ -132,7 +144,7 @@ export function buildAuditPlan(
 		},
 		sections: {
 			'What to prepare': events
-				.map((x) => ({ x, items: evidence.filter((v) => v.eventId === x.id).map((v) => v.text) }))
+				.map((x) => ({ x, items: toPrepare.filter((v) => v.eventId === x.id).map((v) => v.text) }))
 				.filter((s) => s.items.length)
 				.map(({ x, items }) => ({ values: { 'event title': x.title, date: x.date ?? words.noDate }, items }))
 		}

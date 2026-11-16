@@ -55,6 +55,14 @@ Write with `upsert_events`: format, date, start time, duration, `participants` (
 
 Phrase each item as something concrete to receive ("access review records for the last two cycles"), never as a topic ("access reviews").
 
+**Use what is already received.** Before planning evidence, look at what the auditee sent (`list_artifacts`) and the rules taken from it (`list_internal_requirements`):
+
+- Never plan to obtain a document that is already received. Plan the evidence item and link the document at once: `link_received_documents` does it for rule evidence, by the sections of the document's internal requirements or as the whole document when the item asks for that document. Link anything it cannot match with `link_evidence` (`locator`: the sections; empty for the whole document).
+- Where a requirement's rule is already documented, spend meeting time on whether it **operates**: records over the period, samples, observation, testimony. Name the internal requirement the evidence tests ("INT-12: access reviews every six months").
+- An event left with nothing to obtain is a document review without the auditee, or no meeting at all. Say so to the auditor.
+
+The plan document lists only what is still to obtain, and names what is already received, so the auditee does not send it again.
+
 ### 4. Produce the plan document
 
 `render_audit_plan` with no format returns the Markdown to show the auditor; `format: docx` or `pdf` saves it with the engagement's documents. It lists events, formats, times, participants, requirements and what to prepare, and leaves out criticality, the risk list and your reasoning.

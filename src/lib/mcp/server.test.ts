@@ -76,6 +76,7 @@ describe('MCP endpoint (#30)', () => {
 				'get_requirement',
 				'get_soa_check',
 				'link_evidence',
+				'link_received_documents',
 				'link_requirements',
 				'list_assessment_units',
 				'list_artifacts',

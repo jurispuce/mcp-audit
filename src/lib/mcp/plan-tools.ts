@@ -25,6 +25,7 @@ import {
 } from '#lib/domain/planning.ts';
 import { criticalityOf } from '#lib/domain/risks.ts';
 import { capacity, planningBrief } from '#lib/domain/plan-inputs.ts';
+import { linkReceivedDocuments } from '#lib/domain/received-documents.ts';
 import { CRITICALITY, listSelected } from '#lib/domain/selection.ts';
 import type { Actor } from '#lib/domain/write.ts';
 import { loadConfig } from '#lib/server/config.ts';
@@ -159,6 +160,32 @@ export function registerPlanTools(
 					fieldwork_days: c.days,
 					meetings_that_fit: c.meetingsThatFit,
 					brief: planningBrief(saved, listSelected(app, e.id).length)
+				};
+			})
+	);
+
+	server.registerTool(
+		'link_received_documents',
+		{
+			title: 'Link documents already received',
+			description:
+				'Propose links from documents already received to planned evidence of kind rule: to the sections of the internal requirements taken from a document, or to the whole document when the evidence asks for that document. Deterministic; run it after drafting evidence and after new documents arrive, so events focus on what is still missing. Links are proposed for the auditor.',
+			inputSchema: {
+				engagement_id: engagementId,
+				event_id: z.string().optional().describe('Only this event; leave out for the whole plan.')
+			}
+		},
+		({ engagement_id, event_id }) =>
+			run(() => {
+				const e = engagement(engagement_id);
+				const linked = linkReceivedDocuments(app, actor, e.id, event_id ? { eventId: event_id } : {});
+				return {
+					proposed: linked.length,
+					links: linked.map((l) => ({
+						evidence: l.evidenceText,
+						document: l.artifactName,
+						where: l.locator ?? 'whole document'
+					}))
 				};
 			})
 	);

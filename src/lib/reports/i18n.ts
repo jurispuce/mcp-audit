@@ -20,6 +20,8 @@ export interface PlanWords {
 	since: (date: string) => string;
 	nothing: string;
 	notCovered: string;
+	/** "What to prepare": documents the auditors already have (#83). */
+	alreadyReceived: (documents: string) => string;
 }
 
 const EN: PlanWords = {
@@ -30,6 +32,9 @@ const EN: PlanWords = {
 		document_review: 'Document review',
 		technical_test: 'Technical test',
 		site_visit: 'Site visit',
+		opening_meeting: 'Opening meeting',
+		closing_meeting: 'Closing meeting',
+		daily_summary: 'Daily summary',
 		other: 'Other'
 	},
 	noEndDate: 'end date to be agreed',
@@ -44,7 +49,8 @@ const EN: PlanWords = {
 	removed: 'Removed',
 	since: (d) => `Compared with the version of ${d}:`,
 	nothing: 'No changes to events since the previous version.',
-	notCovered: 'not yet in any event'
+	notCovered: 'not yet in any event',
+	alreadyReceived: (d) => `Already received, no need to send again: ${d}.`
 };
 
 const LV: PlanWords = {
@@ -55,6 +61,9 @@ const LV: PlanWords = {
 		document_review: 'Dokumentu pārbaude',
 		technical_test: 'Tehniskā pārbaude',
 		site_visit: 'Apmeklējums uz vietas',
+		opening_meeting: 'Atklāšanas sanāksme',
+		closing_meeting: 'Noslēguma sanāksme',
+		daily_summary: 'Dienas kopsavilkums',
 		other: 'Cits'
 	},
 	noEndDate: 'beigu datums jāsaskaņo',
@@ -69,7 +78,8 @@ const LV: PlanWords = {
 	removed: 'Izņemts',
 	since: (d) => `Salīdzinājumā ar ${d} versiju:`,
 	nothing: 'Kopš iepriekšējās versijas pasākumi nav mainīti.',
-	notCovered: 'vēl nav iekļauta nevienā pasākumā'
+	notCovered: 'vēl nav iekļauta nevienā pasākumā',
+	alreadyReceived: (d) => `Jau saņemts, atkārtoti sūtīt nav nepieciešams: ${d}.`
 };
 
 /** audit-plan-template.md, line by line. */

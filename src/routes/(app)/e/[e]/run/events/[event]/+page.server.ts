@@ -18,6 +18,7 @@ import {
 	STATUS_LABELS,
 	updateEvidence
 } from '#lib/domain/planning.ts';
+import { linkReceivedDocuments, receivedDocumentCandidates } from '#lib/domain/received-documents.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import { captureAction, linkActions } from '#lib/server/run.ts';
@@ -44,6 +45,7 @@ export const load: PageServerLoad = ({ params }) => {
 				textStatus: a.textStatus
 			})),
 			links: listLinks(app, params.e, { eventId: event.id }),
+			receivedCandidates: receivedDocumentCandidates(app, params.e, { eventId: event.id }).length,
 			mentions: mentionOptions(app, params.e, event.id),
 			statuses: EVIDENCE_STATUSES.map((s) => [s, STATUS_LABELS[s]] as [string, string]),
 			report: (() => {
@@ -60,6 +62,18 @@ export const load: PageServerLoad = ({ params }) => {
 export const actions: Actions = {
 	...linkActions,
 	capture: captureAction,
+	linkReceived: async ({ locals, params }) => {
+		try {
+			const n = linkReceivedDocuments(appDatabase(), uiActor(locals), params.e, {
+				eventId: params.event
+			}).length;
+			return {
+				success: `${n} ${n === 1 ? 'link' : 'links'} to documents already received proposed. Accept them below.`
+			};
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
 	held: async ({ request, locals, params }) => {
 		const held = (await request.formData()).get('held') === 'true';
 		try {

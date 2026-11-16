@@ -34,6 +34,10 @@
 		return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 	};
 	const linksOf = (id: string) => data.links.filter((l) => l.evidenceItemId === id);
+	// What the meeting still has to get; what came in before (documents received on Set-up) stays below.
+	const toObtain = $derived(data.evidence.filter((x) => x.status !== 'received'));
+	const received = $derived(data.evidence.filter((x) => x.status === 'received'));
+	const where = (locator: string | null) => locator || 'whole document';
 	const keep =
 		() =>
 		async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) =>
@@ -99,7 +103,28 @@
 	{/if}
 
 	<section class="au-section" aria-labelledby="evidence-title">
-		<h3 class="au-section__title" id="evidence-title">Planned evidence</h3>
+		<div class="au-row au-between au-wrap">
+			<h3 class="au-section__title" id="evidence-title">Planned evidence</h3>
+			{#if data.evidence.length}<span class="au-muted" data-testid="evidence-counts"
+					>{toObtain.length} to obtain at this event, {received.length} already received</span
+				>{/if}
+		</div>
+		{#if data.receivedCandidates}
+			<form
+				method="POST"
+				action="?/linkReceived"
+				class="au-proposal"
+				use:enhance={keep}
+				data-testid="link-received"
+			>
+				<span class="au-proposal__text"
+					>{data.receivedCandidates} planned evidence {data.receivedCandidates === 1
+						? 'item matches a document'
+						: 'items match documents'} already received.</span
+				>
+				<button class="au-btn au-btn--small au-btn--primary" type="submit">Link received documents</button>
+			</form>
+		{/if}
 		{#if data.evidence.length === 0}
 			<div class="au-empty">
 				<p>
@@ -109,133 +134,148 @@
 				</p>
 			</div>
 		{/if}
-		<ul class="au-list au-evidence-rows" aria-label="Planned evidence">
-			{#each data.evidence as x (x.id)}
-				{@const links = linksOf(x.id)}
-				<li class="au-evidence" data-testid="evidence-{x.text}" data-status={x.status}>
-					<span
-						class="au-check"
-						class:au-check--on={x.status === 'received'}
-						class:au-check--part={x.status === 'partial' || x.status === 'promised'}
-						aria-hidden="true"
+		{#snippet evidenceRow(x: (typeof data.evidence)[number])}
+			{@const links = linksOf(x.id)}
+			<li class="au-evidence" data-testid="evidence-{x.text}" data-status={x.status}>
+				<span
+					class="au-check"
+					class:au-check--on={x.status === 'received'}
+					class:au-check--part={x.status === 'partial' || x.status === 'promised'}
+					aria-hidden="true"
+				>
+					{#if x.status === 'received'}<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10" /></svg
+						>{:else if x.status === 'partial' || x.status === 'promised'}<svg viewBox="0 0 24 24"
+							><path d="M6 12h12" /></svg
+						>{/if}
+				</span>
+				<span class="au-evidence__text">
+					<a class="au-titlelink" href="?item=evidence_item:{x.id}" data-sveltekit-reset="false">{x.text}</a>
+					<span class="au-muted">
+						{x.requirementRefs.join(', ') || 'No requirement'}{links.length
+							? ` · linked: ${links.map((l) => `${l.artifactTitle} (${where(l.locator)}${l.status === 'proposed' ? ', proposed' : ''})`).join('; ')}`
+							: ''}{x.status === 'promised'
+							? ` · promised${x.promisedBy ? ` by ${x.promisedBy}` : ''}${x.promisedDue ? `, due ${x.promisedDue}` : ''}`
+							: ''}
+					</span>
+					<span class="au-crit au-crit--{x.criticality}"
+						>{x.criticality.charAt(0).toUpperCase() + x.criticality.slice(1)} criticality</span
 					>
-						{#if x.status === 'received'}<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10" /></svg
-							>{:else if x.status === 'partial' || x.status === 'promised'}<svg viewBox="0 0 24 24"
-								><path d="M6 12h12" /></svg
-							>{/if}
-					</span>
-					<span class="au-evidence__text">
-						<a class="au-titlelink" href="?item=evidence_item:{x.id}" data-sveltekit-reset="false">{x.text}</a
-						>
-						<span class="au-muted">
-							{x.requirementRefs.join(', ') || 'No requirement'}{links.length
-								? ` · linked: ${links.map((l) => `${l.artifactTitle}${l.status === 'proposed' ? ' (proposed)' : ''}`).join(', ')}`
-								: ''}{x.status === 'promised'
-								? ` · promised${x.promisedBy ? ` by ${x.promisedBy}` : ''}${x.promisedDue ? `, due ${x.promisedDue}` : ''}`
-								: ''}
-						</span>
-						<span class="au-crit au-crit--{x.criticality}"
-							>{x.criticality.charAt(0).toUpperCase() + x.criticality.slice(1)} criticality</span
-						>
-						{#each links.filter((l) => l.status === 'proposed') as l (l.id)}
-							<span class="au-row au-wrap au-proposed-link" data-testid="proposed-link">
-								{#if proposed.length > 1}
-									<label class="au-check-row">
-										<input
-											type="checkbox"
-											form="select-links"
-											name="ids"
-											value={l.id}
-											bind:group={selectedLinks}
-											aria-label="Select link {l.artifactTitle} to {x.text}"
-										/>
-										Select
-									</label>
-								{/if}
-								<span class="au-badge au-badge--ai">Proposed</span>
-								<span
-									>{l.artifactTitle}{l.locator ? `, ${l.locator}` : ''} · {l.sufficiency === 'supports'
-										? 'supports'
-										: l.sufficiency === 'partial'
-											? 'partly supports'
-											: 'contradicts'}</span
-								>
-								<form method="POST" action="?/confirmLink" use:enhance={keep}>
-									<input type="hidden" name="id" value={l.id} /><button
-										class="au-btn au-btn--small au-btn--primary"
-										type="submit"
-										aria-label="Accept link {l.artifactTitle} to {x.text}">Accept</button
-									>
-								</form>
-								<form method="POST" action="?/removeLink" use:enhance={keep}>
-									<input type="hidden" name="id" value={l.id} />
-									<input type="hidden" name="proposed" value="true" />
-									<button
-										class="au-btn au-btn--small au-btn--ghost"
-										type="submit"
-										aria-label="Reject link {l.artifactTitle} to {x.text}">Reject</button
-									>
-								</form>
-							</span>
-						{/each}
-						{#if promising === x.id}
-							<form
-								method="POST"
-								action="?/status"
-								class="au-row au-wrap"
-								use:enhance={() =>
-									async ({ update, result: r }) => {
-										await update({ reset: false });
-										if (r.type === 'success') promising = null;
-									}}
+					{#each links.filter((l) => l.status === 'proposed') as l (l.id)}
+						<span class="au-row au-wrap au-proposed-link" data-testid="proposed-link">
+							{#if proposed.length > 1}
+								<label class="au-check-row">
+									<input
+										type="checkbox"
+										form="select-links"
+										name="ids"
+										value={l.id}
+										bind:group={selectedLinks}
+										aria-label="Select link {l.artifactTitle} to {x.text}"
+									/>
+									Select
+								</label>
+							{/if}
+							<span class="au-badge au-badge--ai">Proposed</span>
+							<span
+								>{l.artifactTitle}, {where(l.locator)} · {l.sufficiency === 'supports'
+									? 'supports'
+									: l.sufficiency === 'partial'
+										? 'partly supports'
+										: 'contradicts'}</span
 							>
-								<input type="hidden" name="id" value={x.id} />
-								<input type="hidden" name="base_version" value={x.version} />
-								<input type="hidden" name="status" value="promised" />
-								<span class="au-field"
-									><label for="pby-{x.id}">Promised by</label><input
-										id="pby-{x.id}"
-										name="promised_by"
-										defaultValue={x.promisedBy ?? ''}
-									/></span
+							<form method="POST" action="?/confirmLink" use:enhance={keep}>
+								<input type="hidden" name="id" value={l.id} /><button
+									class="au-btn au-btn--small au-btn--primary"
+									type="submit"
+									aria-label="Accept link {l.artifactTitle} to {x.text}">Accept</button
 								>
-								<span class="au-field"
-									><label for="pdue-{x.id}">Due</label><input
-										id="pdue-{x.id}"
-										name="promised_due"
-										type="date"
-										defaultValue={x.promisedDue ?? ''}
-									/></span
-								>
-								<button class="au-btn au-btn--small au-btn--primary" type="submit">Save promise</button>
 							</form>
-						{/if}
-					</span>
-					<span class="au-stack au-evidence__state">
-						<span class="au-badge {STATUS_TONE[x.status]}">{statusLabel.get(x.status)}</span>
-						<form method="POST" action="?/status" use:enhance={keep}>
+							<form method="POST" action="?/removeLink" use:enhance={keep}>
+								<input type="hidden" name="id" value={l.id} />
+								<input type="hidden" name="proposed" value="true" />
+								<button
+									class="au-btn au-btn--small au-btn--ghost"
+									type="submit"
+									aria-label="Reject link {l.artifactTitle} to {x.text}">Reject</button
+								>
+							</form>
+						</span>
+					{/each}
+					{#if promising === x.id}
+						<form
+							method="POST"
+							action="?/status"
+							class="au-row au-wrap"
+							use:enhance={() =>
+								async ({ update, result: r }) => {
+									await update({ reset: false });
+									if (r.type === 'success') promising = null;
+								}}
+						>
 							<input type="hidden" name="id" value={x.id} />
 							<input type="hidden" name="base_version" value={x.version} />
-							<input type="hidden" name="promised_by" value={x.promisedBy ?? ''} />
-							<input type="hidden" name="promised_due" value={x.promisedDue ?? ''} />
-							<label class="au-visually-hidden" for="st-{x.id}">Status of {x.text}</label>
-							<select
-								id="st-{x.id}"
-								name="status"
-								onchange={(e) => {
-									if (e.currentTarget.value === 'promised') promising = x.id;
-									e.currentTarget.form?.requestSubmit();
-								}}
+							<input type="hidden" name="status" value="promised" />
+							<span class="au-field"
+								><label for="pby-{x.id}">Promised by</label><input
+									id="pby-{x.id}"
+									name="promised_by"
+									defaultValue={x.promisedBy ?? ''}
+								/></span
 							>
-								{#each data.statuses as [v, l] (v)}<option value={v} selected={x.status === v}>{l}</option
-									>{/each}
-							</select>
-							<button class="au-visually-hidden" type="submit">Save status</button>
+							<span class="au-field"
+								><label for="pdue-{x.id}">Due</label><input
+									id="pdue-{x.id}"
+									name="promised_due"
+									type="date"
+									defaultValue={x.promisedDue ?? ''}
+								/></span
+							>
+							<button class="au-btn au-btn--small au-btn--primary" type="submit">Save promise</button>
 						</form>
-					</span>
-				</li>
-			{/each}
-		</ul>
+					{/if}
+				</span>
+				<span class="au-stack au-evidence__state">
+					<span class="au-badge {STATUS_TONE[x.status]}">{statusLabel.get(x.status)}</span>
+					<form method="POST" action="?/status" use:enhance={keep}>
+						<input type="hidden" name="id" value={x.id} />
+						<input type="hidden" name="base_version" value={x.version} />
+						<input type="hidden" name="promised_by" value={x.promisedBy ?? ''} />
+						<input type="hidden" name="promised_due" value={x.promisedDue ?? ''} />
+						<label class="au-visually-hidden" for="st-{x.id}">Status of {x.text}</label>
+						<select
+							id="st-{x.id}"
+							name="status"
+							onchange={(e) => {
+								if (e.currentTarget.value === 'promised') promising = x.id;
+								e.currentTarget.form?.requestSubmit();
+							}}
+						>
+							{#each data.statuses as [v, l] (v)}<option value={v} selected={x.status === v}>{l}</option
+								>{/each}
+						</select>
+						<button class="au-visually-hidden" type="submit">Save status</button>
+					</form>
+				</span>
+			</li>
+		{/snippet}
+		{#if toObtain.length || !received.length}
+			{#if received.length}<h4 class="au-section__title">To obtain at this event</h4>{/if}
+			<ul class="au-list au-evidence-rows" aria-label="Planned evidence">
+				{#each toObtain as x (x.id)}
+					{@render evidenceRow(x)}
+				{/each}
+			</ul>
+		{/if}
+		{#if received.length}
+			<details class="au-received" data-testid="already-received" open={toObtain.length === 0}>
+				<summary>Already received ({received.length})</summary>
+				<ul class="au-list au-evidence-rows" aria-label="Already received">
+					{#each received as x (x.id)}
+						{@render evidenceRow(x)}
+					{/each}
+				</ul>
+			</details>
+		{/if}
 	</section>
 
 	<section class="au-section" aria-labelledby="notes-title">
@@ -332,7 +372,7 @@
 											? 'Partly supports'
 											: 'Contradicts'}</span
 								>
-								{l.evidenceText}{l.locator ? `, ${l.locator}` : ''}
+								{l.evidenceText}, {where(l.locator)}
 							</span>
 							<span class="au-row">
 								{#if l.status === 'proposed'}

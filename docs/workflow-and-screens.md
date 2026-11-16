@@ -59,6 +59,7 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 
 ### Plan, Events
 - Plan header: status of the plan as a whole (draft, sent to auditee, agreed), with a "Changed since then" flag when events change after sending.
+- Documents already received count before the meeting (#83): **Link received documents** (Plan, Events and each event's Run screen, and automatically after Draft plan) proposes links from received documents to rule evidence, by section or the whole document. The event screen lists what is still **to obtain at this event** first and what is **already received** below; the plan document asks the auditee only for what is missing and names what is already received.
 - Plan, Coverage: requirements no event covers can be removed from the audit scope, one or several, with a reason kept in their history (#82). A requirement still in an event, in planned evidence or with a finding is not removed.
 - Planning inputs come first: fieldwork days, working hours and lunch, about how many meetings (the form shows how many fit) and exceptions. "Draft plan" runs only once they are saved.
 - "Draft plan" proposes events grouped by topic with planned evidence, fitted into the fieldwork time: an opening meeting (30 min) at the start, a closing meeting (30 min) at the end, a daily summary (15 min) at the end of the other days, lunch, and 10 minutes after every meeting for notes.

@@ -26,6 +26,8 @@ Audit criteria: {{sources and the selected requirements, by reference}}
 
 For each event, the records and documents the auditors expect to see. Having them ready keeps each session within its planned time.
 
+{{Documents the auditors already have, so the auditee need not send them again.}}
+
 ### {{event title}} ({{date}})
 
 - {{evidence item, phrased as something to bring or show}}

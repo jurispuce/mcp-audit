@@ -4,6 +4,7 @@ import type { AppDatabase } from '#lib/db/client.ts';
 import { AI_ACTIONS, resolveModel, webSearchFor, type AiAction } from '#lib/domain/ai-settings.ts';
 import { getEngagement } from '#lib/domain/engagements.ts';
 import { planningBrief } from '#lib/domain/plan-inputs.ts';
+import { linkReceivedDocuments } from '#lib/domain/received-documents.ts';
 import { effectiveSkill, withoutFrontMatter } from '#lib/domain/skills.ts';
 import { listSelected } from '#lib/domain/selection.ts';
 import {
@@ -64,10 +65,13 @@ export const ACTION_TOOLS: Record<AiAction, string[]> = {
 	draft_plan: [
 		'get_engagement_overview',
 		'get_coverage',
+		'link_received_documents',
+		'link_evidence',
+		'get_artifact_text',
+		'list_internal_requirements',
 		'list_events',
 		'upsert_events',
 		'upsert_evidence_items',
-		'list_internal_requirements',
 		'list_artifacts',
 		'search_requirements',
 		'get_requirement'
@@ -300,7 +304,16 @@ async function runJob(app: AppDatabase, jobId: string, signal: AbortSignal, deps
 				);
 			}
 			if (res.toolCalls.length === 0) {
-				const summary = res.content?.trim() || 'The model finished without a summary.';
+				let summary = res.content?.trim() || 'The model finished without a summary.';
+				// After drafting, documents already received are linked to the rule evidence they hold (#83).
+				if (job.action === 'draft_plan' && job.context.engagement_id) {
+					const linked = linkReceivedDocuments(app, actor, job.context.engagement_id);
+					if (linked.length) {
+						const text = `${linked.length} planned evidence ${linked.length === 1 ? 'link' : 'links'} to documents already received proposed.`;
+						addJobStep(app, jobId, { kind: 'info', text });
+						summary = `${summary}\n\n${text}`;
+					}
+				}
 				addJobStep(app, jobId, { kind: 'info', text: 'Finished.' });
 				finishJob(app, jobId, 'succeeded', { summary });
 				return;
