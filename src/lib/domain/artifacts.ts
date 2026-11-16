@@ -68,7 +68,8 @@ export const artifactDefinition: EntityDefinition = registerEntity({
 		'received_from',
 		'received_at',
 		'event_id',
-		'text_status'
+		'text_status',
+		'supersedes_id'
 	],
 	detailColumns: [
 		'title',
@@ -117,7 +118,14 @@ export const artifactDefinition: EntityDefinition = registerEntity({
 		if (!existing) {
 			out.engagement_id = str(input.engagement_id);
 			out.origin = str(input.origin || 'upload');
-			for (const col of ['file_hash', 'filename', 'mime_type', 'received_from', 'event_id'] as const)
+			for (const col of [
+				'file_hash',
+				'filename',
+				'mime_type',
+				'received_from',
+				'event_id',
+				'supersedes_id'
+			] as const)
 				out[col] = optional(input[col]);
 			out.size = input.size == null ? null : Number(input.size);
 			out.received_at = input.received_at == null ? null : Number(input.received_at);
@@ -277,6 +285,10 @@ export interface Artifact {
 	eventId: string | null;
 	textStatus: string;
 	textLength: number;
+	/** The earlier version this document replaces. */
+	supersedesId: string | null;
+	/** The newer version that replaces this document, if one was uploaded. */
+	replacedBy: { id: string; displayName: string } | null;
 	version: number;
 	createdAt: Date;
 }
@@ -301,12 +313,20 @@ function toArtifact(r: Row): Artifact {
 		eventId: (r.event_id as string | null) ?? null,
 		textStatus: String(r.text_status),
 		textLength: Number(r.text_length ?? 0),
+		supersedesId: (r.supersedes_id as string | null) ?? null,
+		replacedBy: r.replaced_by_id
+			? { id: String(r.replaced_by_id), displayName: String(r.replaced_by_name || 'Untitled document') }
+			: null,
 		version: Number(r.current_version),
 		createdAt: new Date(Number(r.created_at))
 	};
 }
 
-const ART_SELECT = `SELECT a.*, length(t.text) AS text_length FROM artifact a LEFT JOIN artifact_text t ON t.artifact_id = a.id`;
+const ART_SELECT = `SELECT a.*, length(t.text) AS text_length, n.id AS replaced_by_id,
+	       coalesce(n.title, n.filename) AS replaced_by_name
+	  FROM artifact a LEFT JOIN artifact_text t ON t.artifact_id = a.id
+	  LEFT JOIN artifact n ON n.id = (SELECT x.id FROM artifact x WHERE x.supersedes_id = a.id AND x.deleted = 0
+	                                   ORDER BY x.created_at DESC LIMIT 1)`;
 
 export function listArtifacts(
 	app: AppDatabase,
@@ -426,7 +446,13 @@ export async function uploadArtifacts(
 	filesDir: string,
 	engagementId: string,
 	files: UploadFile[],
-	extra: { eventId?: string | null; kind?: string | null; origin?: 'upload' | 'mcp' } = {}
+	extra: {
+		eventId?: string | null;
+		kind?: string | null;
+		origin?: 'upload' | 'mcp';
+		supersedesId?: string | null;
+		language?: string | null;
+	} = {}
 ): Promise<UploadResult[]> {
 	getEngagement(app, engagementId);
 	const results: UploadResult[] = [];
@@ -467,7 +493,9 @@ export async function uploadArtifacts(
 				received_at: now.getTime(),
 				event_id: extra.eventId ?? null,
 				kind: extra.kind ?? null,
-				text_status: ex.status
+				text_status: ex.status,
+				supersedes_id: extra.supersedesId ?? null,
+				...(extra.language ? { language: extra.language } : {})
 			}).row;
 			if (ex.status === 'extracted') saveText(app, String(created.id), ex, now);
 			return created;
@@ -480,6 +508,61 @@ export async function uploadArtifacts(
 		});
 	}
 	return results;
+}
+
+/**
+ * The document a new version will replace: a received document of this engagement with a file, not
+ * replaced already. The new file must differ from every document in the engagement.
+ */
+export function assertReplaceable(
+	app: AppDatabase,
+	engagementId: string,
+	oldId: string,
+	newHash?: string
+): Artifact {
+	const old = getEngagementArtifact(app, engagementId, oldId);
+	if (old.state !== 'received' || !old.fileHash)
+		throw new ValidationError('Only a received document with a file can get a new version.');
+	if (old.replacedBy)
+		throw new ValidationError(
+			`${old.displayName} was already replaced by ${old.replacedBy.displayName}; upload the new version there.`
+		);
+	if (newHash) {
+		if (newHash === old.fileHash)
+			throw new ValidationError(`This is the same file as ${old.displayName}; nothing changed.`);
+		const dup = app.sqlite
+			.prepare('SELECT id FROM artifact WHERE engagement_id = ? AND file_hash = ? AND deleted = 0')
+			.get(engagementId, newHash) as { id: string } | undefined;
+		if (dup)
+			throw new ValidationError(
+				`This file is already in the engagement as ${getArtifact(app, dup.id).displayName}.`
+			);
+	}
+	return old;
+}
+
+/**
+ * Upload a new version of a document. The new document records which one it replaces and keeps its
+ * kind and language; the old one stays, with its evidence links, marked as replaced.
+ */
+export async function uploadNewVersion(
+	app: AppDatabase,
+	actor: Actor,
+	filesDir: string,
+	engagementId: string,
+	oldId: string,
+	file: UploadFile
+): Promise<Artifact> {
+	if (!file.bytes.length) throw new ValidationError('The file is empty.');
+	const old = assertReplaceable(app, engagementId, oldId, sha256(file.bytes));
+	const [r] = await uploadArtifacts(app, actor, filesDir, engagementId, [file], {
+		kind: old.kind,
+		language: old.language,
+		supersedesId: old.id,
+		eventId: old.eventId
+	});
+	if (!r?.artifact) throw new ValidationError(r?.error ?? 'The file could not be added.');
+	return r.artifact;
 }
 
 /** A document named in an interview but not received yet: no file, state mentioned. */
@@ -518,6 +601,8 @@ export function registerTextArtifact(
 		receivedFrom?: string | null;
 		eventId?: string | null;
 		filename?: string | null;
+		/** The document this text is a new version of. */
+		supersedesId?: string | null;
 	}
 ): Artifact {
 	getEngagement(app, engagementId);
@@ -525,6 +610,9 @@ export function registerTextArtifact(
 	if (!text.trim()) throw new ValidationError('The artifact has no text.');
 	if (!str(input.title)) throw new ValidationError('Give the artifact a title.', { title: 'Required' });
 	const bytes = new TextEncoder().encode(text);
+	const old = input.supersedesId
+		? assertReplaceable(app, engagementId, input.supersedesId, sha256(bytes))
+		: null;
 	const hash = storeFile(filesDir, bytes);
 	const now = new Date();
 	return app.sqlite.transaction(() => {
@@ -543,12 +631,13 @@ export function registerTextArtifact(
 			received_at: now.getTime(),
 			received_from: input.receivedFrom ?? null,
 			event_id: input.eventId ?? null,
-			kind: input.kind ?? null,
-			text_status: 'extracted'
+			kind: input.kind ?? old?.kind ?? null,
+			text_status: 'extracted',
+			supersedes_id: old?.id ?? null
 		}).row;
 		updateEntity(app, actor, artifactDefinition, String(row.id), 1, {
 			title: input.title,
-			language: input.language ?? null
+			language: input.language ?? old?.language ?? null
 		});
 		saveText(app, String(row.id), { status: 'extracted', text: normalise(text), pageStarts: [0] }, now);
 		return getArtifact(app, String(row.id));

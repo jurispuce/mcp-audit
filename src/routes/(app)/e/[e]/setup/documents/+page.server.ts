@@ -5,7 +5,8 @@ import {
 	listArtifacts,
 	removeArtifact,
 	updateArtifact,
-	uploadArtifacts
+	uploadArtifacts,
+	uploadNewVersion
 } from '#lib/domain/artifacts.ts';
 import { updateEngagement } from '#lib/domain/engagements.ts';
 import { ValidationError } from '#lib/domain/errors.ts';
@@ -73,6 +74,24 @@ export const actions: Actions = {
 			};
 		} catch (e) {
 			return formFailure(e);
+		}
+	},
+	newVersion: async ({ request, locals, params }) => {
+		const data = await request.formData();
+		const id = String(data.get('id'));
+		const file = data.get('file');
+		if (!(file instanceof File) || file.size === 0)
+			return formFailure(new ValidationError('Choose the new file.'), { id, action: 'newVersion' });
+		try {
+			const app = appDatabase();
+			const created = await uploadNewVersion(app, uiActor(locals), loadConfig().filesDir, params.e, id, {
+				name: file.name,
+				type: file.type,
+				bytes: new Uint8Array(await file.arrayBuffer())
+			});
+			return { success: `${created.displayName} added as the new version.` };
+		} catch (e) {
+			return formFailure(e, { id, action: 'newVersion' });
 		}
 	},
 	meta: async ({ request, locals }) => {

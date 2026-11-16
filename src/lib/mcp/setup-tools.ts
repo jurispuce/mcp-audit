@@ -410,7 +410,7 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 		{
 			title: 'List documents',
 			description:
-				"The engagement's documents and other artifacts with ids, kind, state (received or mentioned) and whether their text could be read.",
+				"The engagement's documents and other artifacts with ids, kind, state (received or mentioned) and whether their text could be read. A document with replaced_by set is an earlier version; read the newer one.",
 			inputSchema: { engagement_id: engagementId },
 			annotations: { readOnlyHint: true }
 		},
@@ -426,7 +426,9 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 					text_length: a.textLength,
 					version_label: a.versionLabel,
 					approval_date: a.approvalDate,
-					language: a.language
+					language: a.language,
+					replaces: a.supersedesId,
+					replaced_by: a.replacedBy?.id ?? null
 				}))
 			}))
 	);
@@ -468,7 +470,7 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 		{
 			title: 'Register an artifact',
 			description:
-				'Store text as an artifact of the engagement: an interview transcript, meeting notes, or a document fetched from another system. With mentioned: true and no text, record a document that was named but not received yet.',
+				'Store text as an artifact of the engagement: an interview transcript, meeting notes, or a document fetched from another system. With mentioned: true and no text, record a document that was named but not received yet. With replaces, the text is a new version of that document: the old one stays, marked as replaced.',
 			inputSchema: {
 				engagement_id: engagementId,
 				title: z.string().min(1),
@@ -477,10 +479,14 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 				kind: z.enum(ARTIFACT_KINDS).optional(),
 				language: z.string().optional(),
 				received_from: z.string().optional().describe('Who or which system it came from.'),
-				filename: z.string().optional()
+				filename: z.string().optional(),
+				replaces: z
+					.string()
+					.optional()
+					.describe('Id of the document (from list_artifacts) this text is a new version of.')
 			}
 		},
-		({ engagement_id, title, text, mentioned, kind, language, received_from, filename }) =>
+		({ engagement_id, title, text, mentioned, kind, language, received_from, filename, replaces }) =>
 			run(() => {
 				const e = engagement(engagement_id);
 				const a = mentioned
@@ -491,9 +497,16 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 							kind: kind ?? null,
 							language: language ?? null,
 							receivedFrom: received_from ?? null,
-							filename: filename ?? null
+							filename: filename ?? null,
+							supersedesId: replaces ?? null
 						});
-				return { id: a.id, title: a.displayName, state: a.state, text: a.textStatus };
+				return {
+					id: a.id,
+					title: a.displayName,
+					state: a.state,
+					text: a.textStatus,
+					...(a.supersedesId ? { replaces: a.supersedesId } : {})
+				};
 			})
 	);
 

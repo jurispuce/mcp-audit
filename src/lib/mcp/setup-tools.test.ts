@@ -225,6 +225,28 @@ describe('artifact tools (#43)', () => {
 			mentioned: true
 		});
 		expect(m.data).toMatchObject({ state: 'mentioned', text: 'none' });
+		// A new version of the transcript names the one it replaces (#76).
+		const t2 = await call('register_artifact', {
+			engagement_id: e.id,
+			title: 'Interview with the Head of IT (corrected)',
+			text: 'Leavers are disabled within a day by the service desk.',
+			replaces: t.data.id
+		});
+		expect(t2.data).toMatchObject({ replaces: t.data.id });
+		const listed = (await call('list_artifacts', { engagement_id: e.id })).data.artifacts as {
+			id: string;
+			kind: string | null;
+			replaced_by: string | null;
+		}[];
+		expect(listed.find((a) => a.id === t.data.id)?.replaced_by).toBe(t2.data.id);
+		expect(listed.find((a) => a.id === t2.data.id)?.kind).toBe('transcript');
+		const again = await call('register_artifact', {
+			engagement_id: e.id,
+			title: 'Again',
+			text: 'Something else.',
+			replaces: t.data.id
+		});
+		expect(again).toMatchObject({ isError: true, text: expect.stringMatching(/already replaced/) });
 		expect((await call('get_artifact_text', { engagement_id: e.id, artifact_id: m.data.id })).text).toContain(
 			'mentioned'
 		);

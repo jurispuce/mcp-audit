@@ -20,6 +20,11 @@
 	const proposed = $derived(data.internal.filter((r) => r.status === 'proposed'));
 	const confirmed = $derived(data.internal.filter((r) => r.status === 'confirmed'));
 	let editing = $state<string | null>(null);
+	let newVersionOf = $state<string | null>(null);
+	let showReplaced = $state(false);
+	const replacedCount = $derived(data.documents.filter((d) => d.replacedBy).length);
+	const shownDocuments = $derived(data.documents.filter((d) => showReplaced || !d.replacedBy));
+	const docName = $derived(new Map(data.documents.map((d) => [d.id, d.displayName])));
 	let mentioning = $state(false);
 	let addingInternal = $state(false);
 	let uploading = $state(false);
@@ -38,6 +43,7 @@
 			uploading = false;
 			if (r.type === 'success') {
 				editing = null;
+				newVersionOf = null;
 				mentioning = false;
 				addingInternal = false;
 			}
@@ -124,8 +130,14 @@
 			<p>No documents yet. Upload the auditee’s policies, procedures and registers.</p>
 		</div>
 	{/if}
+	{#if replacedCount}
+		<label class="au-check-row">
+			<input type="checkbox" bind:checked={showReplaced} />
+			Show replaced versions ({replacedCount})
+		</label>
+	{/if}
 	<ul class="au-list" aria-label="Documents">
-		{#each data.documents as d (d.id)}
+		{#each shownDocuments as d (d.id)}
 			<li>
 				<ItemCard
 					ref={[
@@ -133,19 +145,22 @@
 						d.filename,
 						size(d.size),
 						d.versionLabel ? `v ${d.versionLabel}` : null,
-						d.approvalDate ? `approved ${d.approvalDate}` : null
+						d.approvalDate ? `approved ${d.approvalDate}` : null,
+						d.supersedesId ? `replaces ${docName.get(d.supersedesId) ?? 'an earlier version'}` : null
 					]
 						.filter(Boolean)
 						.join(' · ')}
 					title={d.displayName}
 					href="?item=artifact:{d.id}"
-					badge={d.state === 'mentioned'
-						? { label: 'Mentioned, not received', tone: 'warn' }
-						: d.textStatus === 'extracted'
-							? { label: TEXT.extracted, tone: 'ok' }
-							: d.textStatus === 'failed'
-								? { label: TEXT.failed, tone: 'danger' }
-								: null}
+					badge={d.replacedBy
+						? { label: `Replaced by ${d.replacedBy.displayName}`, tone: 'neutral' }
+						: d.state === 'mentioned'
+							? { label: 'Mentioned, not received', tone: 'warn' }
+							: d.textStatus === 'extracted'
+								? { label: TEXT.extracted, tone: 'ok' }
+								: d.textStatus === 'failed'
+									? { label: TEXT.failed, tone: 'danger' }
+									: null}
 					version={d.version}
 					testid="document-{d.filename ?? d.displayName}"
 				>
@@ -197,6 +212,39 @@
 									>
 								</div>
 							</form>
+						{:else if newVersionOf === d.id || failed('newVersion', d.id)}
+							<form
+								method="POST"
+								action="?/newVersion"
+								enctype="multipart/form-data"
+								class="au-form au-grow"
+								use:enhance={() => {
+									uploading = true;
+									return after();
+								}}
+							>
+								<input type="hidden" name="id" value={d.id} />
+								<div class="au-field">
+									<label for="newver-{d.id}">New version of {d.displayName}</label>
+									<input id="newver-{d.id}" name="file" type="file" required />
+									<span class="au-muted"
+										>The current file stays, with its evidence links, marked as replaced.</span
+									>
+								</div>
+								{#if failed('newVersion', d.id)}<p class="au-field__error">
+										{failed('newVersion', d.id)?.message}
+									</p>{/if}
+								<div class="au-row">
+									<button class="au-btn au-btn--primary au-btn--small" type="submit" disabled={uploading}
+										>{uploading ? 'Uploading…' : 'Upload new version'}</button
+									>
+									<button
+										class="au-btn au-btn--ghost au-btn--small"
+										type="button"
+										onclick={() => (newVersionOf = null)}>Cancel</button
+									>
+								</div>
+							</form>
 						{:else}
 							<button
 								class="au-btn au-btn--small"
@@ -204,6 +252,17 @@
 								onclick={() => (editing = d.id)}
 								aria-label="Edit {d.displayName}">Edit</button
 							>
+							{#if d.state === 'received' && d.fileHash && !d.replacedBy}<button
+									class="au-btn au-btn--small"
+									type="button"
+									onclick={() => (newVersionOf = d.id)}
+									aria-label="Upload new version of {d.displayName}">Upload new version</button
+								>{/if}
+							{#if d.replacedBy}<a
+									class="au-btn au-btn--small au-btn--ghost"
+									href="?item=artifact:{d.replacedBy.id}"
+									data-sveltekit-reset="false">Open new version</a
+								>{/if}
 							{#if d.fileHash}<a
 									class="au-btn au-btn--small au-btn--ghost"
 									href="/e/{e.id}/documents/{d.id}/file"
@@ -302,7 +361,7 @@
 				<label for="int-doc">Document</label>
 				<select id="int-doc" name="artifact"
 					><option value="">None (added by hand)</option
-					>{#each data.documents.filter((d) => d.state === 'received') as d (d.id)}<option
+					>{#each data.documents.filter((d) => d.state === 'received' && !d.replacedBy) as d (d.id)}<option
 							value={d.id}
 							selected={v.artifact === d.id}>{d.displayName}</option
 						>{/each}</select

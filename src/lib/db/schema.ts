@@ -415,9 +415,15 @@ export const artifact = sqliteTable(
 		receivedFrom: text('received_from'),
 		receivedAt: integer('received_at', { mode: 'timestamp_ms' }),
 		eventId: text('event_id'),
-		textStatus: text('text_status', { enum: ['none', 'extracted', 'failed', 'unsupported'] }).notNull()
+		textStatus: text('text_status', { enum: ['none', 'extracted', 'failed', 'unsupported'] }).notNull(),
+		/** The earlier version of the same document that this one replaces (#76). */
+		supersedesId: text('supersedes_id')
 	},
-	(t) => [index('artifact_engagement').on(t.engagementId), index('artifact_hash').on(t.fileHash)]
+	(t) => [
+		index('artifact_engagement').on(t.engagementId),
+		index('artifact_hash').on(t.fileHash),
+		index('artifact_supersedes').on(t.supersedesId)
+	]
 );
 
 /** Text extracted from an artifact's file, with page breaks. Derived from an immutable file, so not versioned. */

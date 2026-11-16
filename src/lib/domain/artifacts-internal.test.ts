@@ -11,13 +11,15 @@ import {
 	addMentionedDocument,
 	extractText,
 	filePath,
+	getArtifact,
 	getArtifactText,
 	listArtifacts,
 	registerTextArtifact,
 	removeArtifact,
 	sha256,
 	updateArtifact,
-	uploadArtifacts
+	uploadArtifacts,
+	uploadNewVersion
 } from './artifacts';
 import { createEngagement, getEngagement, updateEngagement } from './engagements';
 import { ForbiddenError, ValidationError } from './errors';
@@ -179,6 +181,86 @@ describe('document upload and text extraction (#41)', () => {
 		});
 		expect(a).toMatchObject({ origin: 'mcp', textStatus: 'extracted', kind: 'transcript' });
 		expect(getHistory(app, 'artifact', a.id)[0]).toMatchObject({ authorAgent: 'Claude' });
+	});
+});
+
+describe('new versions of a document (#76)', () => {
+	it('uploads a new version that records what it replaces; the old one stays, marked replaced', async () => {
+		const e = engagement();
+		const [r] = await uploadArtifacts(app, human, files, e.id, [
+			{ name: 'policy-v1.txt', type: 'text/plain', bytes: text('Passwords have 8 characters.') }
+		]);
+		const v1 = updateArtifact(app, human, r!.artifact!.id, r!.artifact!.version, {
+			kind: 'policy',
+			language: 'lv'
+		});
+		const v2 = await uploadNewVersion(app, human, files, e.id, v1.id, {
+			name: 'policy-v2.txt',
+			type: 'text/plain',
+			bytes: text('Passwords have 12 characters.')
+		});
+		expect(v2).toMatchObject({ supersedesId: v1.id, kind: 'policy', language: 'lv', replacedBy: null });
+		expect(getArtifact(app, v1.id).replacedBy).toEqual({ id: v2.id, displayName: 'policy-v2.txt' });
+		expect(listArtifacts(app, e.id).map((a) => a.id)).toEqual([v1.id, v2.id]);
+		expect(getHistory(app, 'artifact', v1.id)).toHaveLength(2);
+
+		// Refused: the same file again, a file already in the engagement, and a second successor.
+		await expect(
+			uploadNewVersion(app, human, files, e.id, v2.id, {
+				name: 'again.txt',
+				type: 'text/plain',
+				bytes: text('Passwords have 12 characters.')
+			})
+		).rejects.toThrow('This is the same file as policy-v2.txt; nothing changed.');
+		await expect(
+			uploadNewVersion(app, human, files, e.id, v2.id, {
+				name: 'old.txt',
+				type: 'text/plain',
+				bytes: text('Passwords have 8 characters.')
+			})
+		).rejects.toThrow('This file is already in the engagement as policy-v1.txt.');
+		await expect(
+			uploadNewVersion(app, human, files, e.id, v1.id, {
+				name: 'v3.txt',
+				type: 'text/plain',
+				bytes: text('Passwords have 14 characters.')
+			})
+		).rejects.toThrow(/already replaced by policy-v2\.txt; upload the new version there/);
+		const mentioned = addMentionedDocument(app, human, e.id, 'Backup plan');
+		await expect(
+			uploadNewVersion(app, human, files, e.id, mentioned.id, {
+				name: 'b.txt',
+				type: 'text/plain',
+				bytes: text('x')
+			})
+		).rejects.toThrow(ValidationError);
+		const other = engagement('Other Client SIA', 'Other audit');
+		await expect(
+			uploadNewVersion(app, human, files, other.id, v2.id, {
+				name: 'c.txt',
+				type: 'text/plain',
+				bytes: text('y')
+			})
+		).rejects.toThrow('Document not found');
+
+		// Removing the new version makes the old one current again.
+		removeArtifact(app, human, v2.id);
+		expect(getArtifact(app, v1.id).replacedBy).toBeNull();
+	});
+
+	it('register_artifact text can be a new version too, written as the AI', () => {
+		const e = engagement();
+		const v1 = registerTextArtifact(app, human, files, e.id, { title: 'Access policy', text: 'Old rules.' });
+		const v2 = registerTextArtifact(app, ai, files, e.id, {
+			title: 'Access policy 2026',
+			text: 'New rules.',
+			supersedesId: v1.id
+		});
+		expect(v2.supersedesId).toBe(v1.id);
+		expect(getArtifact(app, v1.id).replacedBy?.id).toBe(v2.id);
+		expect(() =>
+			registerTextArtifact(app, ai, files, e.id, { title: 'Same', text: 'New rules.', supersedesId: v2.id })
+		).toThrow(/same file/);
 	});
 });
 

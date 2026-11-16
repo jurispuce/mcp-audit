@@ -46,3 +46,39 @@ test('rejecting an AI change to an accepted internal requirement brings the acce
 	await expect(accepted).toContainText('Leavers disabled within a day');
 	await expect(accepted).not.toContainText('within a week');
 });
+
+test('Upload new version keeps the old document, marked replaced, and refuses the same file', async ({
+	page
+}) => {
+	const e = await sampleCopy(page.request);
+	const file = (name: string, text: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
+	await page.goto(`/e/${e.id}/setup/documents`);
+	await page.getByLabel('Upload documents').setInputFiles(file('access-v1.txt', 'Reviews every 12 months.'));
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByText('1 document added.')).toBeVisible();
+
+	const docs = page.getByRole('list', { name: 'Documents' });
+	await page.getByRole('button', { name: 'Upload new version of access-v1.txt' }).click();
+	// The same file is refused.
+	await page
+		.getByLabel('New version of access-v1.txt')
+		.setInputFiles(file('copy.txt', 'Reviews every 12 months.'));
+	await page.getByRole('button', { name: 'Upload new version', exact: true }).click();
+	await expect(page.getByRole('alert')).toHaveText(
+		'This is the same file as access-v1.txt; nothing changed.'
+	);
+
+	await page
+		.getByLabel('New version of access-v1.txt')
+		.setInputFiles(file('access-v2.txt', 'Reviews every 6 months.'));
+	await page.getByRole('button', { name: 'Upload new version', exact: true }).click();
+	await expect(page.getByText('access-v2.txt added as the new version.')).toBeVisible();
+	await expect(page.getByTestId('document-access-v2.txt')).toContainText('replaces access-v1.txt');
+	await expect(page.getByTestId('document-access-v1.txt')).toHaveCount(0);
+
+	await page.getByLabel('Show replaced versions (1)').check();
+	const old = page.getByTestId('document-access-v1.txt');
+	await expect(old).toContainText('Replaced by access-v2.txt');
+	await expect(old.getByRole('button', { name: /Upload new version/ })).toHaveCount(0);
+	await expect(docs.getByRole('article').filter({ hasText: 'access-v' })).toHaveCount(2);
+});
