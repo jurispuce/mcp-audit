@@ -11,6 +11,7 @@ import {
 } from '#lib/domain/artifacts.ts';
 import { registerNewTextVersion } from '#lib/domain/document-versions.ts';
 import { capacity } from '#lib/domain/plan-inputs.ts';
+import { recordSoa, soaCheck } from '#lib/domain/soa.ts';
 import { getEngagement, listEngagements, listScopes, type Engagement } from '#lib/domain/engagements.ts';
 import { NotFoundError, ValidationError } from '#lib/domain/errors.ts';
 import { assertAiAllowed, assertCanReadRequirement } from '#lib/domain/guards.ts';
@@ -532,6 +533,84 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 							filename: filename ?? null
 						});
 				return { id: a.id, title: a.displayName, state: a.state, text: a.textStatus };
+			})
+	);
+
+	// ---- Statement of Applicability (#81)
+
+	server.registerTool(
+		'record_soa',
+		{
+			title: 'Record the Statement of Applicability',
+			description:
+				"Record the lines of the auditee's Statement of Applicability (ISO/IEC 27001 or 27701), one per Annex control: whether it applies, the justification and the implementation status as written, and where in the document. Read the document with get_artifact_text first. The app then compares the SoA with the audit scope (get_soa_check); the auditor decides what to do with each conflict.",
+			inputSchema: {
+				engagement_id: engagementId,
+				artifact_id: z.string().min(1).describe('The SoA document (kind statement_of_applicability).'),
+				entries: z
+					.array(
+						z.object({
+							requirement: reqRef.describe('The control, for example "iso27001-2022:A.5.1".'),
+							applicable: z.boolean(),
+							justification: z.string().nullable().optional(),
+							implementation: z
+								.string()
+								.nullable()
+								.optional()
+								.describe('Implementation status as the SoA states it, for example "Implemented".'),
+							locator: z.string().nullable().optional().describe('Row, page or cell range.')
+						})
+					)
+					.min(1)
+					.max(200)
+			}
+		},
+		({ engagement_id, artifact_id, entries }) =>
+			run(() => {
+				const e = engagement(engagement_id);
+				const res = recordSoa(
+					app,
+					actor,
+					e.id,
+					artifact_id,
+					entries.map((x) => ({
+						requirementId: resolveRequirementRef(app, x.requirement),
+						applicable: x.applicable,
+						justification: x.justification ?? null,
+						implementation: x.implementation ?? null,
+						locator: x.locator ?? null
+					}))
+				);
+				const check = soaCheck(app, e.id);
+				return { ...res, conflicts: check.conflicts.length };
+			})
+	);
+
+	server.registerTool(
+		'get_soa_check',
+		{
+			title: 'Check the scope against the SoA',
+			description:
+				"Compare the audit scope with the recorded Statement of Applicability: selected requirements the SoA excludes or does not list (conflicts, with the auditor's decision if any), and controls the SoA marks applicable that the audit leaves out. Only for ISO/IEC 27001 and 27701 requirements.",
+			inputSchema: { engagement_id: engagementId },
+			annotations: { readOnlyHint: true }
+		},
+		({ engagement_id }) =>
+			run(() => {
+				const c = soaCheck(app, engagement(engagement_id).id);
+				return {
+					relevant: c.relevant,
+					soa: c.soa,
+					entries: c.entries,
+					conflicts: c.conflicts.map((x) => ({
+						requirement: `${x.sourceCode}:${x.refCode}`,
+						title: x.title,
+						kind: x.kind,
+						justification: x.justification,
+						kept_in_scope: x.kept ? (x.kept.note ?? true) : null
+					})),
+					applicable_not_in_scope: c.applicableNotInScope.map((x) => x.refCode)
+				};
 			})
 	);
 

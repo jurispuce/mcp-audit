@@ -24,6 +24,17 @@
 		() =>
 		async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) =>
 			update({ reset: false });
+	// Changing the audit scope while planning (#82): requirements no event covers can leave the scope.
+	let removing = $state<string[]>([]);
+	let reason = $state('');
+	let reasonInput = $state<HTMLInputElement | null>(null);
+	const uncoveredIds = $derived(rows.filter((r) => r.events.length === 0).map((r) => r.requirementId));
+	$effect.pre(() => {
+		const still = removing.filter((id) => c.rows.some((r) => r.requirementId === id));
+		if (still.length !== removing.length) removing = still;
+	});
+	const toggle = (id: string, on: boolean) =>
+		(removing = on ? [...new Set([...removing, id])] : removing.filter((x) => x !== id));
 </script>
 
 <svelte:head><title>Coverage · Plan · mcp-audit</title></svelte:head>
@@ -64,6 +75,61 @@
 		</div>
 	{/if}
 
+	{#if uncoveredIds.length}
+		<form
+			id="remove-scope"
+			method="POST"
+			action="?/removeFromScope"
+			class="au-selectbar"
+			class:au-selectbar--active={removing.length > 0}
+			aria-label="Change the audit scope"
+			data-testid="scope-bar"
+			use:enhance={({ cancel }) => {
+				if (
+					!confirm(
+						`Remove ${removing.length} ${removing.length === 1 ? 'requirement' : 'requirements'} from the audit scope?`
+					)
+				)
+					return cancel();
+				return async ({ result, update }) => {
+					await update({ reset: false });
+					if (result.type === 'success') {
+						removing = [];
+						reason = '';
+					}
+				};
+			}}
+		>
+			<span class="au-selectbar__count" aria-live="polite"
+				>{removing.length
+					? `${removing.length} selected to leave the audit scope`
+					: 'Not every requirement needs auditing this time: select uncovered ones to remove them from the audit scope'}</span
+			>
+			{#if removing.length}
+				<span class="au-row au-wrap">
+					<input
+						name="reason"
+						bind:this={reasonInput}
+						bind:value={reason}
+						required
+						aria-label="Why they leave the audit scope"
+						placeholder="Why, for example: no site visit in this audit"
+					/>
+					<button class="au-btn au-btn--small au-btn--primary" type="submit">Remove from scope</button>
+					<button class="au-btn au-btn--small au-btn--ghost" type="button" onclick={() => (removing = [])}
+						>Clear selection</button
+					>
+				</span>
+			{:else if uncoveredIds.length > 1}
+				<button
+					class="au-btn au-btn--small au-btn--ghost"
+					type="button"
+					onclick={() => (removing = [...uncoveredIds])}>Select all {uncoveredIds.length} not covered</button
+				>
+			{/if}
+		</form>
+	{/if}
+
 	<ul class="au-list" aria-label="Requirements">
 		{#each rows as r (r.requirementId)}
 			{@const others = data.events.filter((e) => !e.requirementIds.includes(r.requirementId))}
@@ -101,6 +167,29 @@
 								</form>
 							</span>
 						{/each}
+						{#if r.events.length === 0}
+							<label class="au-check-row au-select">
+								<input
+									type="checkbox"
+									form="remove-scope"
+									name="ids"
+									value={r.requirementId}
+									checked={removing.includes(r.requirementId)}
+									onchange={(ev) => toggle(r.requirementId, ev.currentTarget.checked)}
+									aria-label="Select {r.refCode} to remove from scope"
+								/>
+								Select
+							</label>
+							<button
+								class="au-btn au-btn--small au-btn--ghost"
+								type="button"
+								onclick={() => {
+									toggle(r.requirementId, true);
+									queueMicrotask(() => reasonInput?.focus());
+								}}
+								aria-label="Remove {r.refCode} from scope">Remove from scope</button
+							>
+						{/if}
 						<button
 							class="au-btn au-btn--small"
 							type="button"

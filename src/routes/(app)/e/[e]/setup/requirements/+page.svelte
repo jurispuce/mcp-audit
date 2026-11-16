@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import AutoSubmit from '#lib/components/AutoSubmit.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
+	import SoaPanel from '#lib/components/setup/SoaPanel.svelte';
 	import ItemCard from '#lib/components/ItemCard.svelte';
 
 	let { data, form } = $props();
@@ -18,6 +19,8 @@
 <svelte:head><title>Requirements · Set-up · mcp-audit</title></svelte:head>
 
 <FormMessage form={form as { message?: string; success?: string } | null} />
+
+<SoaPanel check={data.soa} />
 
 <section class="au-section" aria-labelledby="selected-title">
 	<div class="au-row au-between">

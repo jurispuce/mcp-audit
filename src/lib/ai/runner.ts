@@ -53,6 +53,14 @@ export const ACTION_TOOLS: Record<AiAction, string[]> = {
 		'search_requirements',
 		'get_requirement'
 	],
+	check_soa: [
+		'get_engagement_overview',
+		'list_artifacts',
+		'get_artifact_text',
+		'search_requirements',
+		'record_soa',
+		'get_soa_check'
+	],
 	draft_plan: [
 		'get_engagement_overview',
 		'get_coverage',
@@ -115,6 +123,8 @@ export function taskText(
 				: ' Web search is not available in this run: skip researching current risks and say so in your summary.';
 			return register + research;
 		}
+		case 'check_soa':
+			return `Read the auditee's Statement of Applicability${ctx.artifact_id ? `, document ${ctx.artifact_id},` : ' (the document of kind statement_of_applicability)'} in full with get_artifact_text and record every Annex control it lists with record_soa: whether it is applicable, the justification and implementation status as written, and the row or page. Then call get_soa_check and summarise the conflicts with the audit scope. Do not change the audit scope: the auditor decides.`;
 		case 'draft_plan':
 			return `Draft the audit plan. Check coverage first, then propose events grouping the selected requirements (upsert_events) and the evidence to collect at each (upsert_evidence_items), so that every requirement is covered. Fit the events into the fieldwork time below, with dates and start times.${opts.planningBrief ? `\n\n${opts.planningBrief}` : ''}`;
 		case 'process_event':

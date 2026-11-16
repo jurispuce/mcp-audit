@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { addEvent, coverage, listEvents, setEventRequirement } from '#lib/domain/planning.ts';
+import { removeFromScope } from '#lib/domain/scope-changes.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, uiActor } from '#lib/server/http.ts';
 import { planHeader, planStatusAction } from '#lib/server/plan.ts';
@@ -25,6 +26,24 @@ export const load: PageServerLoad = ({ params }) => {
 
 export const actions: Actions = {
 	planStatus: planStatusAction,
+	removeFromScope: async ({ request, locals, params }) => {
+		const data = await request.formData();
+		const ids = data.getAll('ids').map(String);
+		try {
+			const { removed } = removeFromScope(
+				appDatabase(),
+				uiActor(locals),
+				params.e,
+				ids,
+				String(data.get('reason') ?? '')
+			);
+			return {
+				success: `${removed} ${removed === 1 ? 'requirement' : 'requirements'} removed from the audit scope. Select them again on Set-up, Requirements if needed.`
+			};
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
 	include: async ({ request, locals, params }) => {
 		const data = await request.formData();
 		const included = data.get('included') === 'true';

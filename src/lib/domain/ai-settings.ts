@@ -26,6 +26,11 @@ export const AI_ACTIONS = {
 		skill: 'audit-engagement-setup',
 		scope: 'engagement'
 	},
+	check_soa: {
+		label: 'Check scope against SoA',
+		skill: 'audit-engagement-setup',
+		scope: 'engagement'
+	},
 	draft_plan: { label: 'Draft plan', skill: 'audit-plan-builder', scope: 'engagement' },
 	process_event: {
 		label: 'Process event materials',

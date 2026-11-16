@@ -362,7 +362,10 @@ export const engagementRequirement = sqliteTable(
 			.references(() => requirement.id),
 		pinnedVersion: integer('pinned_version').notNull(),
 		scopeHandling: text('scope_handling', { enum: ['common', 'per_scope'] }).notNull(),
-		criticality: text('criticality', { enum: ['high', 'medium', 'low'] })
+		criticality: text('criticality', { enum: ['high', 'medium', 'low'] }),
+		/** The auditor kept this requirement in scope although the Statement of Applicability excludes it (#81). */
+		soaDecision: text('soa_decision', { enum: ['keep'] }),
+		soaNote: text('soa_note')
 	},
 	(t) => [index('engagement_requirement_engagement').on(t.engagementId)]
 );
@@ -586,6 +589,27 @@ export const finding = sqliteTable(
 );
 
 /** The file of a law or standard kept with the library, to import requirements from (#72). Shared: no client data. */
+/**
+ * One line of the auditee's Statement of Applicability (ISO/IEC 27001, 27701; #81): whether a control
+ * applies, why, and how far it is implemented, as the document says.
+ */
+export const soaEntry = sqliteTable(
+	'soa_entry',
+	{
+		...entityColumns(),
+		engagementId: text('engagement_id')
+			.notNull()
+			.references(() => engagement.id),
+		artifactId: text('artifact_id').notNull(),
+		requirementId: text('requirement_id').notNull(),
+		applicable: integer('applicable').notNull(),
+		justification: text('justification'),
+		implementation: text('implementation'),
+		locator: text('locator')
+	},
+	(t) => [index('soa_entry_engagement').on(t.engagementId, t.requirementId)]
+);
+
 /**
  * A skill edited in the app (#80). Defaults live in `skills/<name>/` (SKILL.md for the auditor's own
  * Claude with the connector, APP.md for the in-app AI); a row exists only once someone edits one.

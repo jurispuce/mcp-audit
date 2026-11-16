@@ -52,12 +52,14 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 ### Set-up, Documents
 - Upload one or many files at once with no metadata. Title and kind are edited in the list afterwards.
 - "Extract requirements" proposes internal requirements with document, section and the external requirement implemented; accept, reject, accept all.
+- Set-up, Requirements, for ISO/IEC 27001 and 27701 audits: upload the Statement of Applicability; "Check scope against SoA" records its lines and flags selected controls it excludes or does not list. The auditor keeps each in scope with a reason, or removes it (#81).
 - Set-up, Risks: upload the auditee's risk register (PDF, Excel, Word, CSV or Markdown); "Extract risks" proposes its risks with level, description and affected requirements. Proposed risks set no criticality until accepted (#78).
 - Add an internal requirement by hand.
 - *Prototype only:* only file names are recorded; extraction is simulated.
 
 ### Plan, Events
 - Plan header: status of the plan as a whole (draft, sent to auditee, agreed), with a "Changed since then" flag when events change after sending.
+- Plan, Coverage: requirements no event covers can be removed from the audit scope, one or several, with a reason kept in their history (#82). A requirement still in an event, in planned evidence or with a finding is not removed.
 - Planning inputs come first: fieldwork days, working hours and lunch, about how many meetings (the form shows how many fit) and exceptions. "Draft plan" runs only once they are saved.
 - "Draft plan" proposes events grouped by topic with planned evidence, fitted into the fieldwork time: an opening meeting (30 min) at the start, a closing meeting (30 min) at the end, a daily summary (15 min) at the end of the other days, lunch, and 10 minutes after every meeting for notes.
 - Every event can be edited (title, format, date, start time, duration, participants, requirements), including AI drafts before acceptance. Events can be removed.

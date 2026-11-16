@@ -67,7 +67,18 @@ A register is often a year old or more. Use web search to check that it covers w
 4. **Propose what is missing** with `upsert_risks`: origin `research`, a level, the selected requirements it affects, and in the description why it applies to this auditee and its sources (title, URL and publication date, at least one per risk). Prefer primary sources over news.
 5. List the new risks in one line each and what you searched for, so the auditor can judge coverage.
 
-### 7. Hand over
+### 7. Statement of Applicability (ISO/IEC 27001 and 27701)
+
+When the audit covers ISO/IEC 27001 or 27701 controls, ask the auditor for the auditee's Statement of Applicability (SoA). It is uploaded on Set-up, Requirements (or as kind `statement_of_applicability` on Set-up, Documents).
+
+1. Read it in full (`list_artifacts`, `get_artifact_text`).
+2. Record every Annex control it lists with `record_soa`: applicable or excluded, the justification and implementation status as written, and the row or page. Use the control numbers as the library has them (`"<source>:A.5.1"`).
+3. `get_soa_check` compares the SoA with the audit scope. It reports selected controls the SoA **excludes**, selected Annex controls it **does not list**, and controls it marks applicable that the audit leaves out.
+4. Put each conflict to the auditor with the SoA's justification. **The auditor decides**: keep the control in scope, with a reason (for example to test that the exclusion is justified), or remove it. They do this on Set-up, Requirements; you never change the scope for them.
+
+An exclusion is itself audit evidence: an excluded control with a weak justification is worth a question at the opening meeting.
+
+### 8. Hand over
 
 Read `get_engagement_overview` again and summarise its phases and the open points: documents not received, roles unknown, no risk register. Suggest the next step: document analysis if documents have arrived, otherwise the plan builder.
 

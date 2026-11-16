@@ -104,6 +104,44 @@ const SCRIPTS = {
 			return [toolCall('upsert_risks', { engagement_id: ctx.engagement_id, risks })];
 		}
 	],
+	check_soa: [
+		({ ctx }) => [
+			toolCall('list_artifacts', { engagement_id: ctx.engagement_id }),
+			toolCall('get_engagement_overview', { engagement_id: ctx.engagement_id })
+		],
+		({ ctx, results }) => {
+			const docs = results[0]?.artifacts ?? [];
+			const doc =
+				docs.find((d) => d.id === ctx.artifact_id) ??
+				docs.find((d) => d.kind === 'statement_of_applicability');
+			if (!doc) return null;
+			return [
+				toolCall('get_artifact_text', { engagement_id: ctx.engagement_id, artifact_id: doc.id }),
+				toolCall('get_engagement_overview', { engagement_id: ctx.engagement_id })
+			];
+		},
+		({ ctx, results }) => {
+			const docId = ctx.artifact_id ?? results[0]?.artifact_id;
+			const text = results[0]?.text ?? '';
+			// The source of the selected controls, from the overview: "<code>:<ref>".
+			const source = (results[1]?.requirements ?? [])
+				.map((r) => r.ref)
+				.find((r) => /:A\./.test(r))
+				?.split(':')[0];
+			if (!source) return null;
+			// One entry per line such as "A.5.1 | Control 5.1 | Yes | justification".
+			const entries = [...text.matchAll(/^(A\.[\d.]+) \| [^|]* \| (Yes|No) \| ([^\n]*)$/gm)].map((m, i) => ({
+				requirement: `${source}:${m[1]}`,
+				applicable: m[2] === 'Yes',
+				justification: m[3].trim() || null,
+				locator: `row ${i + 2}`
+			}));
+			if (!entries.length) return null;
+			if (!docId) return null;
+			return [toolCall('record_soa', { engagement_id: ctx.engagement_id, artifact_id: docId, entries })];
+		},
+		({ ctx }) => [toolCall('get_soa_check', { engagement_id: ctx.engagement_id })]
+	],
 	draft_plan: [
 		({ ctx }) => [toolCall('get_coverage', { engagement_id: ctx.engagement_id })],
 		({ ctx }) => [

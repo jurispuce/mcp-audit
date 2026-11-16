@@ -1,5 +1,6 @@
 import { makePdf, makeXlsx } from '../../tests/fixtures/make-docs';
 import { ADMIN, AUDITOR, expect, loginAs, sampleCopy, seed, test, unique } from '../helpers';
+import { call, createToken, mcpClient } from '../mcp-helpers';
 
 /**
  * In-app AI (milestone 7) against the scripted fake gateway (e2e/fake-llm.mjs), which calls the app's
@@ -230,4 +231,65 @@ test('Risks: upload the auditee register, extract its risks with AI, accept them
 	await expect(page.getByRole('list', { name: 'Risks', exact: true })).toContainText(
 		'Supplier outage stops deliveries'
 	);
+});
+
+test('ISO 27001: upload the SoA, check the scope against it with AI, keep or remove each conflict (#81)', async ({
+	page,
+	baseURL
+}) => {
+	const code = unique('iso27001');
+	const refs = ['A.5.1', 'A.5.2', 'A.7.1', 'A.7.2', 'A.8.1'];
+	await page.goto('/library/import');
+	await page
+		.getByLabel('Or paste the YAML')
+		.fill(
+			`id: ${code}\ntitle: ISO/IEC 27001 test ${code}\ntype: standard\nlanguage: en\nrequirements:\n${refs.map((r) => `  - {id: "${r}", title: Control ${r}}`).join('\n')}\n`
+		);
+	await page.getByRole('button', { name: 'Import source' }).click();
+	await expect(page.getByTestId('import-report')).toBeVisible();
+
+	const e = await sampleCopy(page.request);
+	const client = await mcpClient(baseURL!, await createToken(page, 'SoA test'));
+	await call(client, 'select_requirements', {
+		engagement_id: e.id,
+		select: ['A.5.1', 'A.5.2', 'A.7.1', 'A.7.2'].map((r) => `${code}:${r}`)
+	});
+	await client.close();
+
+	await page.goto(`/e/${e.id}/setup/requirements`);
+	const panel = page.getByTestId('soa-panel');
+	await expect(panel).toContainText('Upload the auditee');
+	await panel.getByLabel('Statement of Applicability').setInputFiles({
+		name: 'soa.md',
+		mimeType: 'text/markdown',
+		buffer: Buffer.from(
+			'Control | Title | Applicable | Justification\nA.5.1 | Policies | Yes | Required\nA.5.2 | Roles | Yes | Required\nA.7.1 | Perimeters | No | Fully remote company, no offices\nA.8.1 | Devices | Yes | Laptops\n'
+		)
+	});
+	await panel.getByRole('button', { name: 'Upload SoA' }).click();
+	await expect(page.getByRole('status')).toHaveText('soa.md added. Check the scope against it with AI.');
+
+	await runAction(page, 'check_soa', 'Check scope against SoA');
+	await expect(panel).toContainText('2 conflicts to decide.');
+	await expect(panel.getByTestId('soa-A.7.1')).toContainText('Excluded in the SoA');
+	await expect(panel.getByTestId('soa-A.7.1')).toContainText('“Fully remote company, no offices”');
+	await expect(panel.getByTestId('soa-A.7.2')).toContainText('Not listed in the SoA');
+	await expect(panel.getByTestId('soa-not-in-scope')).toContainText(
+		'1 control applicable in the SoA but not in the audit scope'
+	);
+
+	await panel.getByLabel('Why keep A.7.1 in scope').fill('Test the exclusion: staff use a co-working space.');
+	await panel.getByTestId('soa-A.7.1').getByRole('button', { name: 'Keep in scope' }).click();
+	await expect(panel.getByTestId('soa-A.7.1')).toContainText('Kept in scope');
+	await expect(panel.getByTestId('soa-A.7.1')).toContainText(
+		'Kept: Test the exclusion: staff use a co-working space.'
+	);
+
+	page.once('dialog', (d) => d.accept());
+	await panel.getByRole('button', { name: 'Remove A.7.2 from scope' }).click();
+	await expect(page.getByRole('status')).toHaveText(
+		'Removed from the audit scope. It can be selected again below.'
+	);
+	await expect(panel).toContainText('Every conflict with the SoA is decided.');
+	await expect(panel.getByTestId('soa-A.7.2')).toHaveCount(0);
 });

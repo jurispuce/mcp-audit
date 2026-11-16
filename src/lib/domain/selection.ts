@@ -35,14 +35,27 @@ const byEngagement = (app: AppDatabase, row: Row) => engagementGuard(app, row.en
 export const engagementRequirementDefinition: EntityDefinition = registerEntity({
 	type: 'engagement_requirement',
 	table: 'engagement_requirement',
-	columns: ['engagement_id', 'requirement_id', 'pinned_version', 'scope_handling', 'criticality'],
+	columns: [
+		'engagement_id',
+		'requirement_id',
+		'pinned_version',
+		'scope_handling',
+		'criticality',
+		'soa_decision',
+		'soa_note'
+	],
 	fieldLabels: {
 		pinned_version: 'Pinned version',
 		scope_handling: 'Scope handling',
-		criticality: 'Criticality'
+		criticality: 'Criticality',
+		soa_decision: 'Statement of Applicability',
+		soa_note: 'Why kept in scope'
 	},
+	/** Keeping a requirement the SoA excludes is the auditor's decision (#81). */
+	humanOnly: ['soa_decision', 'soa_note'],
 	formatValue(column, value) {
 		if (column === 'scope_handling') return value === 'per_scope' ? 'Per scope' : 'One finding';
+		if (column === 'soa_decision') return value === 'keep' ? 'Kept in scope although excluded' : '';
 		if (column === 'criticality')
 			return value ? String(value).charAt(0).toUpperCase() + String(value).slice(1) : 'From risks';
 		if (column === 'deleted') return Number(value) === 1 ? 'Yes' : 'No';
@@ -68,6 +81,9 @@ export const engagementRequirementDefinition: EntityDefinition = registerEntity(
 				throw new ValidationError('Criticality is high, medium or low.');
 			out.criticality = c;
 		}
+		if ('soa_decision' in input) out.soa_decision = input.soa_decision === 'keep' ? 'keep' : null;
+		if ('soa_note' in input)
+			out.soa_note = input.soa_note == null ? null : String(input.soa_note).trim() || null;
 		return out;
 	},
 	label: (row) => `Selection of ${row.requirement_id}`
@@ -317,7 +333,8 @@ export function deselectRequirements(
 	app: AppDatabase,
 	actor: Actor,
 	engagementId: string,
-	requirementIds: string[]
+	requirementIds: string[],
+	note = 'Deselected'
 ): { removed: number } {
 	return app.sqlite.transaction(() => {
 		getEngagement(app, engagementId);
@@ -335,7 +352,7 @@ export function deselectRequirements(
 				engagementRequirementDefinition,
 				String(row.id),
 				Number(row.current_version),
-				'Deselected'
+				note
 			);
 			removed++;
 		}
