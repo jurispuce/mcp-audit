@@ -130,7 +130,7 @@ test('capture files, link them to evidence with sufficiency; the Inbox lists wha
 	await csv
 		.getByLabel('Planned evidence it shows')
 		.selectOption({ label: 'Leaver list for 2026 with account disable dates' });
-	await csv.getByLabel('Where (page, row, time)').fill('rows 2-41');
+	await csv.getByLabel('Where (section, page, row, time)').fill('rows 2-41');
 	await csv.getByLabel('Sufficiency').selectOption('partial');
 	await csv.getByRole('button', { name: 'Link', exact: true }).click();
 	await expect(csv.getByTestId('link')).toContainText('Partly supports');

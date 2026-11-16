@@ -37,8 +37,8 @@
 		</div>
 		<div class="au-row au-wrap">
 			<div class="au-field">
-				<label for="{p}-loc">Where (page, row, time)</label>
-				<input id="{p}-loc" name="locator" autocomplete="off" />
+				<label for="{p}-loc">Where (section, page, row, time)</label>
+				<input id="{p}-loc" name="locator" autocomplete="off" placeholder="Empty for the whole document" />
 			</div>
 			<div class="au-field">
 				<label for="{p}-suf">Sufficiency</label>
