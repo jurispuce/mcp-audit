@@ -166,6 +166,32 @@ describe('auditor notes (#53)', () => {
 		expect(suspectedIssues(app, e.id, req('b'))).toEqual([]);
 	});
 
+	it('an issue on planned evidence or on an internal rule counts for the requirements behind it, on every card', () => {
+		const item = leaverList();
+		const rule = addInternal(app, human, e.id, {
+			title: 'Backups tested monthly',
+			implements: [{ requirementId: req('b'), coverage: 'full' }]
+		});
+		const onEvidence = addNote(app, human, e.id, ev.id, {
+			type: 'issue',
+			text: 'Leaver list incomplete',
+			mentions: [{ type: 'evidence_item', id: item.id, label: item.text }]
+		}).note;
+		const onRule = addNote(app, human, e.id, ev.id, {
+			type: 'issue',
+			text: 'No restore test since March',
+			mentions: [{ type: 'internal_requirement', id: rule.id, label: rule.refCode }]
+		}).note;
+		expect(suspectedIssues(app, e.id, req('i')).map((n) => n.id)).toEqual([onEvidence.id]);
+		expect(suspectedIssues(app, e.id, req('b')).map((n) => n.id)).toEqual([onRule.id]);
+		expect(
+			Object.fromEntries(unitCards(app, e.id).map((c) => [c.refCode, c.suspectedIssues.map((n) => n.text)]))
+		).toEqual({
+			'Art. 21(2)(b)': ['No restore test since March'],
+			'Art. 21(2)(i)': ['Leaver list incomplete']
+		});
+	});
+
 	it('marks the event held', () => {
 		expect(setEventHeld(app, human, e.id, ev.id, true).status).toBe('held');
 		expect(setEventHeld(app, human, e.id, ev.id, false).status).toBe('planned');

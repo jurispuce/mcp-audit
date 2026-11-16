@@ -1,7 +1,7 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { engagementGuard, findingScaleOf, getEngagement, type FindingValue } from './engagements';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors';
-import { listLinks, suspectedIssues, type Note } from './execution';
+import { listLinks, suspectedIssueIndex, type Note } from './execution';
 import { requireHuman } from './guards';
 import { listInternal } from './internal';
 import { listEvidence, type EvidenceItem } from './planning';
@@ -230,6 +230,7 @@ export function unitCards(app: AppDatabase, engagementId: string): UnitCard[] {
 	const links = listLinks(app, e.id);
 	const internal = listInternal(app, e.id).filter((r) => r.status === 'confirmed');
 	const findings = new Map(listFindings(app, e.id).map((f) => [f.unitId, f]));
+	const issuesOf = suspectedIssueIndex(app, e.id);
 	return listAssessmentUnits(app, e.id).map((u) => {
 		const s = selected.get(u.requirementId)!;
 		const items = evidence.filter(
@@ -283,7 +284,7 @@ export function unitCards(app: AppDatabase, engagementId: string): UnitCard[] {
 					title: r.title,
 					coverage: r.implements.find((l) => l.other.id === u.requirementId)?.coverage ?? null
 				})),
-			suspectedIssues: suspectedIssues(app, e.id, u.requirementId).map((n) => ({
+			suspectedIssues: issuesOf(u.requirementId).map((n) => ({
 				id: n.id,
 				text: n.text,
 				at: n.at

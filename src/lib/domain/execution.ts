@@ -416,25 +416,37 @@ export function removeNote(app: AppDatabase, actor: Actor, engagementId: string,
  * Suspected issues for a requirement: issue notes that mention it, or mention planned evidence or an
  * internal requirement that belongs to it. Auditor only.
  */
+/**
+ * Open suspected issues per requirement, built once for the whole engagement: an issue note counts for a
+ * requirement when it mentions the requirement, evidence planned for it or an internal requirement that
+ * implements it. Callers that ask for many requirements (Findings cards) use this instead of
+ * `suspectedIssues`, which would rebuild the same lists for each one.
+ */
+export function suspectedIssueIndex(
+	app: AppDatabase,
+	engagementId: string
+): (requirementId: string) => Note[] {
+	const notes = listNotes(app, engagementId, { type: 'issue' });
+	if (notes.length === 0) return () => [];
+	const evidenceReqs = new Map(listEvidence(app, engagementId).map((x) => [x.id, x.requirementIds]));
+	const internalReqs = new Map(
+		listInternal(app, engagementId).map((r) => [r.id, r.implements.map((l) => l.other.id)])
+	);
+	const byRequirement = new Map<string, Note[]>();
+	for (const n of notes) {
+		const reqs = new Set<string>();
+		for (const m of n.mentions) {
+			if (m.type === 'requirement') reqs.add(m.id);
+			else if (m.type === 'evidence_item') for (const r of evidenceReqs.get(m.id) ?? []) reqs.add(r);
+			else if (m.type === 'internal_requirement') for (const r of internalReqs.get(m.id) ?? []) reqs.add(r);
+		}
+		for (const r of reqs) byRequirement.set(r, [...(byRequirement.get(r) ?? []), n]);
+	}
+	return (requirementId) => byRequirement.get(requirementId) ?? [];
+}
+
 export function suspectedIssues(app: AppDatabase, engagementId: string, requirementId: string): Note[] {
-	const evidence = new Set(
-		listEvidence(app, engagementId)
-			.filter((x) => x.requirementIds.includes(requirementId))
-			.map((x) => x.id)
-	);
-	const internal = new Set(
-		listInternal(app, engagementId)
-			.filter((r) => r.implements.some((l) => l.other.id === requirementId))
-			.map((r) => r.id)
-	);
-	return listNotes(app, engagementId, { type: 'issue' }).filter((n) =>
-		n.mentions.some(
-			(m) =>
-				(m.type === 'requirement' && m.id === requirementId) ||
-				(m.type === 'evidence_item' && evidence.has(m.id)) ||
-				(m.type === 'internal_requirement' && internal.has(m.id))
-		)
-	);
+	return suspectedIssueIndex(app, engagementId)(requirementId);
 }
 
 // ---- Event held

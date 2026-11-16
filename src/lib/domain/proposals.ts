@@ -2,7 +2,7 @@ import type { AppDatabase } from '#lib/db/client.ts';
 import { getEngagement } from './engagements';
 import { NotFoundError, ValidationError } from './errors';
 import { confirmLink, listLinks, removeLink } from './execution';
-import { acceptProposal, listFindings, rejectProposal, unitCards } from './findings';
+import { acceptProposal, listFindings, rejectProposal } from './findings';
 import { requireHuman } from './guards';
 import { acceptInternal, listInternal, rejectInternal } from './internal';
 import { acceptPerson, listPeople, rejectPerson } from './people';
@@ -14,6 +14,7 @@ import {
 	rejectEvent,
 	removeEvidence
 } from './planning';
+import { listAssessmentUnits } from './selection';
 import type { Actor } from './write';
 
 /**
@@ -111,7 +112,7 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 				path: '/setup/documents',
 				version: r.version
 			});
-	const events = listEvents(app, e.id);
+	const events = want('event') || want('evidence') ? listEvents(app, e.id) : [];
 	const eventTitle = new Map(events.map((ev) => [ev.id, ev.title]));
 	const draftedEvents = new Set(events.filter((ev) => ev.proposed).map((ev) => ev.id));
 	if (want('event'))
@@ -152,8 +153,10 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 		}
 	}
 	if (want('finding')) {
-		const units = new Map(unitCards(app, e.id).map((c) => [c.unitId, c]));
-		for (const f of listFindings(app, e.id).filter((f) => f.status === 'proposed')) {
+		const proposed = listFindings(app, e.id).filter((f) => f.status === 'proposed');
+		// Only the unit's reference and title are shown; full finding cards would be far too slow here.
+		const units = new Map(proposed.length ? listAssessmentUnits(app, e.id).map((u) => [u.id, u]) : []);
+		for (const f of proposed) {
 			const u = units.get(f.unitId);
 			out.push({
 				type: 'finding',

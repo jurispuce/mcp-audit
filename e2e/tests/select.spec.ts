@@ -200,3 +200,32 @@ test('select proposed evidence links on the event screen and accept them togethe
 		`${items.length - 1} evidence ${items.length - 1 === 1 ? 'link' : 'links'} proposed by AI`
 	);
 });
+
+test('when the server does not answer, Reject selected says so in the bar and keeps the screen', async ({
+	page,
+	baseURL
+}) => {
+	const e = await sampleCopy(page.request);
+	const client = await mcpClient(baseURL!, await createToken(page, 'Select timeout test'));
+	await call(client, 'upsert_internal_requirements', {
+		engagement_id: e.id,
+		requirements: [{ title: 'Rule one' }, { title: 'Rule two' }]
+	});
+	await client.close();
+
+	await page.goto(`/e/${e.id}/setup/documents`);
+	// As a proxy does when its own timeout runs out or it asks to sign in again.
+	await page.route('**/setup/documents?/rejectSelected', (r) => r.abort('timedout'));
+	await page
+		.getByRole('list', { name: 'Proposed internal requirements' })
+		.getByRole('checkbox')
+		.first()
+		.check();
+	page.once('dialog', (d) => d.accept());
+	await page.getByTestId('selection-bar').getByRole('button', { name: 'Reject selected' }).click();
+	await expect(page.getByTestId('selection-result')).toHaveText(
+		'The server did not answer. Reload the page to see what was reviewed, then try again.'
+	);
+	await expect(page.getByRole('list', { name: 'Proposed internal requirements' })).toContainText('Rule one');
+	await expect(page.getByTestId('selection-bar')).toContainText('1 of 2 selected');
+});

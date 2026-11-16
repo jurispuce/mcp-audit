@@ -43,6 +43,15 @@
 			if (rejecting && !confirm(`Reject ${n} ${word(n)}?`)) return cancel();
 			msg = null;
 			return async ({ result, update }) => {
+				if (result.type === 'error') {
+					// No answer (a timeout, or a proxy asking to sign in again): say so here instead of
+					// replacing the screen with an error page. Some items may have been reviewed already.
+					msg = {
+						ok: false,
+						text: 'The server did not answer. Reload the page to see what was reviewed, then try again.'
+					};
+					return;
+				}
 				await update({ reset: false });
 				if (result.type === 'success') {
 					selected = [];
