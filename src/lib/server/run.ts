@@ -8,9 +8,26 @@ import {
 	removeLink,
 	type Sufficiency
 } from '#lib/domain/execution.ts';
+import { bulkMessage, reviewProposalItems } from '#lib/domain/proposals.ts';
 import { appDatabase } from './db';
 import { loadConfig } from './config';
 import { formFailure, formValues, uiActor } from './http';
+
+/** Accept or reject the selected proposed evidence links, each through its own rules. */
+async function selectedLinks(
+	request: Request,
+	locals: App.Locals,
+	params: RequestEvent['params'],
+	verdict: 'accept' | 'reject'
+) {
+	const ids = (await request.formData()).getAll('ids').map(String);
+	try {
+		const r = reviewProposalItems(appDatabase(), uiActor(locals), String(params.e), 'link', ids, verdict);
+		return { success: bulkMessage(r, verdict) };
+	} catch (e) {
+		return formFailure(e);
+	}
+}
 
 /** Form actions for linking artifacts to planned evidence, shared by the event screen and the Inbox. */
 export const linkActions = {
@@ -50,6 +67,10 @@ export const linkActions = {
 			return formFailure(e);
 		}
 	},
+	acceptSelectedLinks: async ({ request, locals, params }: RequestEvent) =>
+		selectedLinks(request, locals, params, 'accept'),
+	rejectSelectedLinks: async ({ request, locals, params }: RequestEvent) =>
+		selectedLinks(request, locals, params, 'reject'),
 	acceptAllLinks: async ({ request, locals, params }: RequestEvent) => {
 		const data = await request.formData();
 		try {

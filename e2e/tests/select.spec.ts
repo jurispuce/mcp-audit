@@ -162,3 +162,41 @@ test('select drafted events and drafted evidence on Plan, Events and review them
 	await expect(page.getByTestId('evidence-Drafted evidence on an accepted event')).toHaveCount(0);
 	await expect(page).toHaveURL(new RegExp(`event=${e.events[0]!.id}`));
 });
+
+test('select proposed evidence links on the event screen and accept them together', async ({
+	page,
+	baseURL
+}) => {
+	const e = await sampleCopy(page.request);
+	const event = e.events[0]!;
+	const client = await mcpClient(baseURL!, await createToken(page, 'Select links on event'));
+	const status = await call(client, 'get_event_status', { engagement_id: e.id, event_id: event.id });
+	const docs = (await call(client, 'list_artifacts', { engagement_id: e.id })).artifacts;
+	const items = status.evidence.slice(0, 3) as { id: string }[];
+	await call(client, 'link_evidence', {
+		engagement_id: e.id,
+		links: items.map((x, i) => ({
+			artifact_id: docs[i % docs.length].id,
+			evidence_item_id: x.id,
+			locator: `p. ${i + 1}`,
+			sufficiency: 'supports'
+		}))
+	});
+	await client.close();
+
+	await page.goto(`/e/${e.id}/run/events/${event.id}`);
+	await expect(page.getByTestId('link-proposals')).toContainText(
+		`${items.length} evidence links proposed by AI`
+	);
+	const boxes = page.getByRole('checkbox', { name: /^Select link / });
+	await expect(page.getByTestId('proposed-link')).toHaveCount(items.length);
+	await expect(boxes).toHaveCount(items.length);
+	await boxes.nth(0).check();
+	const bar = page.getByTestId('selection-bar');
+	await expect(bar).toContainText(`1 of ${items.length} selected`);
+	await bar.getByRole('button', { name: 'Accept selected' }).click();
+	await expect(page.getByTestId('proposed-link')).toHaveCount(items.length - 1);
+	await expect(page.getByTestId('link-proposals')).toContainText(
+		`${items.length - 1} evidence ${items.length - 1 === 1 ? 'link' : 'links'} proposed by AI`
+	);
+});

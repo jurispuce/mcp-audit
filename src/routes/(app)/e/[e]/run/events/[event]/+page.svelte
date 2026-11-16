@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -38,6 +39,7 @@
 		async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) =>
 			update({ reset: false });
 	let promising = $state<string | null>(null);
+	let selectedLinks = $state<string[]>([]);
 </script>
 
 <svelte:head><title>{ev.title} · Run · mcp-audit</title></svelte:head>
@@ -83,6 +85,17 @@
 				<button class="au-btn au-btn--small au-btn--primary" type="submit">Accept all</button>
 			</form>
 		</div>
+		<SelectionBar
+			id="select-links"
+			all={proposed.map((l) => l.id)}
+			bind:selected={selectedLinks}
+			acceptAction="?/acceptSelectedLinks"
+			rejectAction="?/rejectSelectedLinks"
+			noun={['proposed link', 'proposed links']}
+		/>
+		{#if proposed.length > 1}
+			<p class="au-muted">Each proposed link is listed under its planned evidence below.</p>
+		{/if}
 	{/if}
 
 	<section class="au-section" aria-labelledby="evidence-title">
@@ -124,6 +137,47 @@
 						<span class="au-crit au-crit--{x.criticality}"
 							>{x.criticality.charAt(0).toUpperCase() + x.criticality.slice(1)} criticality</span
 						>
+						{#each links.filter((l) => l.status === 'proposed') as l (l.id)}
+							<span class="au-row au-wrap au-proposed-link" data-testid="proposed-link">
+								{#if proposed.length > 1}
+									<label class="au-check-row">
+										<input
+											type="checkbox"
+											form="select-links"
+											name="ids"
+											value={l.id}
+											bind:group={selectedLinks}
+											aria-label="Select link {l.artifactTitle} to {x.text}"
+										/>
+										Select
+									</label>
+								{/if}
+								<span class="au-badge au-badge--ai">Proposed</span>
+								<span
+									>{l.artifactTitle}{l.locator ? `, ${l.locator}` : ''} · {l.sufficiency === 'supports'
+										? 'supports'
+										: l.sufficiency === 'partial'
+											? 'partly supports'
+											: 'contradicts'}</span
+								>
+								<form method="POST" action="?/confirmLink" use:enhance={keep}>
+									<input type="hidden" name="id" value={l.id} /><button
+										class="au-btn au-btn--small au-btn--primary"
+										type="submit"
+										aria-label="Accept link {l.artifactTitle} to {x.text}">Accept</button
+									>
+								</form>
+								<form method="POST" action="?/removeLink" use:enhance={keep}>
+									<input type="hidden" name="id" value={l.id} />
+									<input type="hidden" name="proposed" value="true" />
+									<button
+										class="au-btn au-btn--small au-btn--ghost"
+										type="submit"
+										aria-label="Reject link {l.artifactTitle} to {x.text}">Reject</button
+									>
+								</form>
+							</span>
+						{/each}
 						{#if promising === x.id}
 							<form
 								method="POST"
