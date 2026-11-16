@@ -17,6 +17,8 @@
 		author?: string;
 		agent?: string | null;
 		at?: Date | string | number;
+		/** Shown under the body, for content richer than plain text (for example "Was → now"). */
+		details?: Snippet;
 		meta?: Snippet;
 		actions?: Snippet;
 		testid?: string;
@@ -32,6 +34,7 @@
 		author,
 		agent,
 		at,
+		details,
 		meta,
 		actions,
 		testid
@@ -74,6 +77,7 @@
 		</div>
 	</div>
 	{#if body}<p class="au-item__body">{body}</p>{/if}
+	{@render details?.()}
 	<div class="au-item__meta">
 		{#if version !== undefined}<span class="au-ref">v{version}</span>{/if}
 		{#if by}<span

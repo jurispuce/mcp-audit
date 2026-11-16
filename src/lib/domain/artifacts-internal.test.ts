@@ -252,6 +252,51 @@ describe('internal requirements and client isolation (#42)', () => {
 		]);
 	});
 
+	it('rejecting an AI change to an accepted requirement restores what was accepted, links included (#76)', () => {
+		const e = engagement();
+		const r = addInternal(app, human, e.id, {
+			title: 'Leavers disabled within a day',
+			quote: 'Accounts of leavers are disabled within one working day.',
+			section: '4.2',
+			implements: [{ requirementId: nis2('i').id, coverage: 'partial' }]
+		});
+		expect(r.previous).toBeNull();
+		// AI changes the wording and coverage and adds a link: all of it waits for review.
+		const changed = updateInternal(app, ai, e.id, r.id, r.version, {
+			title: 'Leavers disabled within a week',
+			quote: 'Accounts of leavers are disabled within five working days.'
+		});
+		setImplements(app, ai, e.id, r.id, { requirementId: nis2('i').id, coverage: 'full' });
+		setImplements(app, ai, e.id, r.id, { requirementId: nis2('b').id, coverage: 'partial' });
+		const proposed = getInternal(app, e.id, r.id);
+		expect(changed.status).toBe('proposed');
+		expect(proposed.previous).toEqual({
+			title: 'Leavers disabled within a day',
+			text: null,
+			quote: 'Accounts of leavers are disabled within one working day.',
+			section: '4.2'
+		});
+
+		rejectInternal(app, human, e.id, r.id);
+		const back = getInternal(app, e.id, r.id);
+		expect(back).toMatchObject({
+			status: 'confirmed',
+			title: 'Leavers disabled within a day',
+			quote: 'Accounts of leavers are disabled within one working day.',
+			previous: null
+		});
+		expect(back.implements.map((l) => [l.other.refCode, l.coverage, l.status])).toEqual([
+			['Art. 21(2)(i)', 'partial', 'confirmed']
+		]);
+		expect(back.version).toBeGreaterThan(proposed.version);
+		expect(getHistory(app, 'requirement', r.id)[0]).toMatchObject({ note: 'Change rejected' });
+
+		// A requirement that was never accepted is still removed.
+		const fresh = addInternal(app, ai, e.id, { title: 'Brand new proposal' });
+		rejectInternal(app, human, e.id, fresh.id);
+		expect(listInternal(app, e.id).map((x) => x.id)).toEqual([r.id]);
+	});
+
 	it('refuses reads, links and writes across auditees', () => {
 		const mine = engagement('Baltic Freight SIA');
 		const theirs = engagement('Other Client SIA', 'Other audit');

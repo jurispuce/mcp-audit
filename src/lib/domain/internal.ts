@@ -14,7 +14,7 @@ import {
 	sourceDefinition,
 	type LinkView
 } from './library';
-import { createEntity, deleteEntity, updateEntity, type Actor, type Row } from './write';
+import { createEntity, deleteEntity, revertEntity, updateEntity, type Actor, type Row } from './write';
 
 /**
  * Internal requirements: rules the auditee wrote for itself, extracted from its own documents
@@ -39,6 +39,8 @@ export interface InternalRequirement {
 	/** True when it comes from an earlier engagement of the same auditee. */
 	carriedOver: boolean;
 	implements: LinkView[];
+	/** For a proposed change to a requirement that was accepted before: what was accepted. */
+	previous: { title: string; text: string | null; quote: string | null; section: string | null } | null;
 	version: number;
 }
 
@@ -60,7 +62,39 @@ function toInternal(app: AppDatabase, r: Row, engagementId: string | null): Inte
 		engagementId: (r.source_engagement_id as string | null) ?? null,
 		carriedOver: !!engagementId && r.source_engagement_id !== engagementId,
 		implements: linksOf(app, String(r.id)).filter((l) => l.type === 'implements' && l.direction === 'out'),
+		previous: r.status === 'proposed' ? previousAccepted(app, String(r.id)) : null,
 		version: Number(r.current_version)
+	};
+}
+
+/** The last accepted version of a requirement, read from its revisions; null when it was never accepted. */
+function lastAcceptedRevision(
+	app: AppDatabase,
+	id: string,
+	entityType = 'requirement'
+): { version: number; snapshot: Row } | null {
+	const revisions = app.sqlite
+		.prepare(
+			'SELECT version, snapshot FROM revision WHERE entity_type = ? AND entity_id = ? ORDER BY version DESC'
+		)
+		.all(entityType, id) as { version: number; snapshot: string }[];
+	for (const r of revisions) {
+		const snapshot = JSON.parse(r.snapshot) as Row;
+		if (snapshot.status === 'confirmed' && Number(snapshot.deleted ?? 0) === 0)
+			return { version: r.version, snapshot };
+	}
+	return null;
+}
+
+function previousAccepted(app: AppDatabase, id: string): InternalRequirement['previous'] {
+	const last = lastAcceptedRevision(app, id);
+	if (!last) return null;
+	const s = last.snapshot;
+	return {
+		title: String(s.title),
+		text: (s.text as string | null) ?? null,
+		quote: (s.quote as string | null) ?? null,
+		section: (s.locator as string | null) ?? null
 	};
 }
 
@@ -284,20 +318,44 @@ export function acceptInternal(
 	return getInternal(app, engagementId, id);
 }
 
-export function rejectInternal(app: AppDatabase, actor: Actor, engagementId: string, id: string): void {
+/**
+ * Reject a proposal, or remove an accepted requirement. A proposed change to a requirement that was
+ * accepted before goes back to that accepted version (a new version; history stays), and implements
+ * links proposed with the change go with it. A requirement that was never accepted is removed.
+ */
+export function rejectInternal(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	id: string
+): 'restored' | 'removed' {
 	const r = getInternal(app, engagementId, id);
 	if (r.carriedOver)
 		throw new ValidationError(
 			'This requirement comes from an earlier engagement; switch carry-over off instead.'
 		);
-	deleteEntity(
-		app,
-		actor,
-		requirementDefinition,
-		id,
-		r.version,
-		r.status === 'proposed' ? 'Proposal rejected' : 'Removed'
-	);
+	const last = r.status === 'proposed' ? lastAcceptedRevision(app, id) : null;
+	return app.sqlite.transaction(() => {
+		if (!last) {
+			deleteEntity(
+				app,
+				actor,
+				requirementDefinition,
+				id,
+				r.version,
+				r.status === 'proposed' ? 'Proposal rejected' : 'Removed'
+			);
+			return 'removed' as const;
+		}
+		revertEntity(app, actor, requirementDefinition, id, r.version, last.version, 'Change rejected');
+		for (const l of r.implements.filter((x) => x.status === 'proposed')) {
+			const before = lastAcceptedRevision(app, l.id, 'requirement_link');
+			if (before)
+				revertEntity(app, actor, linkDefinition, l.id, l.version, before.version, 'Change rejected');
+			else deleteEntity(app, actor, linkDefinition, l.id, l.version, 'Rejected with the change');
+		}
+		return 'restored' as const;
+	})();
 }
 
 export function acceptAllInternal(app: AppDatabase, actor: Actor, engagementId: string): number {

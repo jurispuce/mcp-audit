@@ -104,6 +104,7 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 				id: r.id,
 				title: `${r.refCode} ${r.title}`,
 				detail: [
+					r.previous ? 'Changes an accepted requirement' : '',
 					`${r.sourceTitle}${r.section ? ` § ${r.section}` : ''}`,
 					r.implements.length ? `implements ${r.implements.map((l) => l.other.refCode).join(', ')}` : ''
 				]

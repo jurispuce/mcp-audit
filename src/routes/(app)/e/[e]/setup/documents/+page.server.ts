@@ -151,8 +151,13 @@ export const actions: Actions = {
 	reject: async ({ request, locals, params }) => {
 		const data = await request.formData();
 		try {
-			rejectInternal(appDatabase(), uiActor(locals), params.e, String(data.get('id')));
-			return { success: 'Internal requirement rejected.' };
+			const outcome = rejectInternal(appDatabase(), uiActor(locals), params.e, String(data.get('id')));
+			return {
+				success:
+					outcome === 'restored'
+						? 'Change rejected; the accepted version is back.'
+						: 'Internal requirement rejected.'
+			};
 		} catch (e) {
 			return formFailure(e);
 		}

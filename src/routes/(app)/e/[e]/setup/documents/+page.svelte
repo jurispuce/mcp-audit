@@ -376,6 +376,24 @@
 							.join(' · ') || null}
 						testid="internal-{r.refCode}"
 					>
+						{#snippet details()}
+							{#if r.previous}
+								{@const was = r.previous}
+								<p class="au-muted" data-testid="internal-was">
+									Changes an accepted requirement. Was:
+									{#if was.title !== r.title}<span class="au-diff-del">{was.title}</span>{/if}
+									{#if was.quote !== r.quote}<br /><span class="au-diff-del"
+											>{was.quote ? `“${was.quote}”` : '(no quote)'}</span
+										>
+										→ <span class="au-diff-ins">{r.quote ? `“${r.quote}”` : '(no quote)'}</span>{/if}
+									{#if was.section !== r.section}<br />§
+										<span class="au-diff-del">{was.section ?? '(none)'}</span>
+										→ <span class="au-diff-ins">{r.section ?? '(none)'}</span>{/if}
+									{#if was.text !== r.text}<br /><span class="au-diff-del">{was.text ?? '(no text)'}</span>
+										→ <span class="au-diff-ins">{r.text ?? '(no text)'}</span>{/if}
+								</p>
+							{/if}
+						{/snippet}
 						{#snippet actions()}
 							{#if proposed.length > 1}
 								<label class="au-check-row au-select">
