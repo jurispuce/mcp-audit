@@ -61,23 +61,43 @@ export function isProposalType(value: unknown): value is ProposalType {
 	return typeof value === 'string' && (PROPOSAL_TYPES as readonly string[]).includes(value);
 }
 
-/** The action or agent behind an item's latest AI write. */
-function sourceOf(app: AppDatabase, entityType: string, id: string): string {
-	const row = app.sqlite
-		.prepare(
-			`SELECT channel, author_agent, note FROM revision
-			  WHERE entity_type = ? AND entity_id = ? AND channel != 'ui' ORDER BY version DESC LIMIT 1`
-		)
-		.get(entityType, id) as { channel: string; author_agent: string | null; note: string | null } | undefined;
-	if (!row) return 'AI';
-	if (row.channel === 'ai') return row.note ?? `${row.author_agent ?? 'AI'} in the app`;
-	return `${row.author_agent ?? 'AI'} through MCP`;
+/** The action or agent behind each item's latest AI write, for many items of one type in one query. */
+function sourcesOf(app: AppDatabase, entityType: string, ids: string[]): Map<string, string> {
+	const out = new Map<string, string>();
+	for (let i = 0; i < ids.length; i += 500) {
+		const chunk = ids.slice(i, i + 500);
+		const rows = app.sqlite
+			.prepare(
+				`SELECT entity_id, channel, author_agent, note FROM revision
+				  WHERE entity_type = ? AND entity_id IN (${chunk.map(() => '?').join(',')}) AND channel != 'ui'
+				  ORDER BY version DESC`
+			)
+			.all(entityType, ...chunk) as {
+			entity_id: string;
+			channel: string;
+			author_agent: string | null;
+			note: string | null;
+		}[];
+		for (const row of rows) {
+			if (out.has(row.entity_id)) continue;
+			out.set(
+				row.entity_id,
+				row.channel === 'ai'
+					? (row.note ?? `${row.author_agent ?? 'AI'} in the app`)
+					: `${row.author_agent ?? 'AI'} through MCP`
+			);
+		}
+	}
+	return out;
 }
 
 export function listProposals(app: AppDatabase, engagementId: string, type?: ProposalType): ProposalItem[] {
 	const e = getEngagement(app, engagementId);
 	const want = (t: ProposalType) => !type || type === t;
 	const out: Omit<ProposalItem, 'source' | 'entityType'>[] = [];
+	// Internal requirements feed two types (proposed, and needs review): read them once.
+	let internalRows: ReturnType<typeof listInternal> | null = null;
+	const internal = () => (internalRows ??= listInternal(app, e.id));
 
 	if (want('role'))
 		for (const p of listPeople(app, e.auditeeId).filter((p) => p.status === 'proposed'))
@@ -114,7 +134,7 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 				version: r.version
 			});
 	if (want('internal'))
-		for (const r of listInternal(app, e.id).filter(
+		for (const r of internal().filter(
 			(r) => r.status === 'proposed' && !r.carriedOver && r.recheck !== 'needs_review'
 		))
 			out.push({
@@ -132,7 +152,7 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 				version: r.version
 			});
 	if (want('recheck'))
-		for (const r of listInternal(app, e.id).filter((r) => r.recheck === 'needs_review' && !r.carriedOver))
+		for (const r of internal().filter((r) => r.recheck === 'needs_review' && !r.carriedOver))
 			out.push({
 				type: 'recheck',
 				id: r.id,
@@ -202,10 +222,20 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 			});
 		}
 	}
+	const sources = new Map<string, Map<string, string>>();
+	for (const t of new Set(out.map((o) => ENTITY[o.type])))
+		sources.set(
+			t,
+			sourcesOf(
+				app,
+				t,
+				out.filter((o) => ENTITY[o.type] === t).map((o) => o.id)
+			)
+		);
 	return out.map((o) => ({
 		...o,
 		entityType: ENTITY[o.type],
-		source: sourceOf(app, ENTITY[o.type], o.id)
+		source: sources.get(ENTITY[o.type])?.get(o.id) ?? 'AI'
 	}));
 }
 

@@ -589,7 +589,15 @@ export interface LinkView {
 	by: string | null;
 }
 
-export function linksOf(app: AppDatabase, requirementId: string): LinkView[] {
+/**
+ * Links from and to a requirement. Pass one `cache` when listing many requirements: the requirements
+ * at the other end repeat (many internal rules implement the same article) and are read once.
+ */
+export function linksOf(
+	app: AppDatabase,
+	requirementId: string,
+	cache?: Map<string, ReturnType<typeof getRequirement>>
+): LinkView[] {
 	const rows = app.sqlite
 		.prepare(
 			'SELECT * FROM requirement_link WHERE deleted = 0 AND (from_id = ? OR to_id = ?) ORDER BY created_at'
@@ -607,10 +615,21 @@ export function linksOf(app: AppDatabase, requirementId: string): LinkView[] {
 			coverage: (l.coverage as string | null) ?? null,
 			note: (l.note as string | null) ?? null,
 			status: l.status === 'proposed' ? 'proposed' : 'confirmed',
-			other: getRequirement(app, String(direction === 'out' ? l.to_id : l.from_id)),
+			other: otherEnd(app, String(direction === 'out' ? l.to_id : l.from_id), cache),
 			by: latestAuthorship(app, 'requirement_link', String(l.id))?.by ?? null
 		};
 	});
+}
+
+function otherEnd(
+	app: AppDatabase,
+	id: string,
+	cache?: Map<string, ReturnType<typeof getRequirement>>
+): ReturnType<typeof getRequirement> {
+	if (!cache) return getRequirement(app, id);
+	let r = cache.get(id);
+	if (!r) cache.set(id, (r = getRequirement(app, id)));
+	return r;
 }
 
 export function addLink(

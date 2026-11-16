@@ -51,7 +51,12 @@ export interface InternalRequirement {
 
 const str = (v: unknown) => (v == null ? '' : String(v)).trim();
 
-function toInternal(app: AppDatabase, r: Row, engagementId: string | null): InternalRequirement {
+function toInternal(
+	app: AppDatabase,
+	r: Row,
+	engagementId: string | null,
+	cache?: Map<string, ReturnType<typeof getRequirement>>
+): InternalRequirement {
 	return {
 		id: String(r.id),
 		refCode: String(r.ref_code),
@@ -66,7 +71,9 @@ function toInternal(app: AppDatabase, r: Row, engagementId: string | null): Inte
 		artifactId: (r.artifact_id as string | null) ?? null,
 		engagementId: (r.source_engagement_id as string | null) ?? null,
 		carriedOver: !!engagementId && r.source_engagement_id !== engagementId,
-		implements: linksOf(app, String(r.id)).filter((l) => l.type === 'implements' && l.direction === 'out'),
+		implements: linksOf(app, String(r.id), cache).filter(
+			(l) => l.type === 'implements' && l.direction === 'out'
+		),
 		recheck: (r.recheck as InternalRequirement['recheck']) ?? null,
 		recheckPassage: (r.recheck_passage as string | null) ?? null,
 		previous: r.status === 'proposed' ? previousAccepted(app, String(r.id)) : null,
@@ -121,7 +128,8 @@ export function listInternal(app: AppDatabase, engagementId: string): InternalRe
 			 ORDER BY CAST(substr(r.ref_code, 5) AS INTEGER), r.ref_code`
 		)
 		.all(e.auditeeId, e.id, e.carryOverInternal ? 1 : 0) as Row[];
-	return rows.map((r) => toInternal(app, r, e.id));
+	const cache = new Map<string, ReturnType<typeof getRequirement>>();
+	return rows.map((r) => toInternal(app, r, e.id, cache));
 }
 
 /** Internal requirements from this auditee's other engagements: what carry-over would bring in. */
