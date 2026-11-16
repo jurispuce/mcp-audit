@@ -45,6 +45,14 @@ export const ACTION_TOOLS: Record<AiAction, string[]> = {
 		'search_requirements',
 		'get_requirement'
 	],
+	extract_risks: [
+		'get_engagement_overview',
+		'list_artifacts',
+		'get_artifact_text',
+		'upsert_risks',
+		'search_requirements',
+		'get_requirement'
+	],
 	draft_plan: [
 		'get_engagement_overview',
 		'get_coverage',
@@ -94,6 +102,10 @@ export function taskText(action: AiAction, ctx: JobContext): string {
 			return ctx.artifact_id
 				? `Extract the internal requirements from the document ${ctx.artifact_id}.${ctx.sections ? ` It is a new version; its internal requirements were already checked against it, and only these sections hold none yet: ${ctx.sections}. Extract from those sections only and leave the existing internal requirements as they are.` : ''} Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.`
 				: "Extract internal requirements from the auditee's documents that have not been analysed yet. Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.";
+		case 'extract_risks':
+			return ctx.artifact_id
+				? `Extract the risks from the auditee's risk register, document ${ctx.artifact_id}. Read all of it with get_artifact_text, then propose each risk with upsert_risks: origin auditee_register, the register's rating mapped to high, medium or low, its reference, owner and treatment in the description, and the engagement's selected requirements it affects where that is clear.`
+				: "Find the auditee's risk register among the documents (kind risk_register) and extract its risks: read it with get_artifact_text, then propose each risk with upsert_risks (origin auditee_register, the rating mapped to high, medium or low, its reference, owner and treatment in the description, and the selected requirements it affects where that is clear).";
 		case 'draft_plan':
 			return 'Draft the audit plan. Check coverage first, then propose events grouping the selected requirements (upsert_events) and the evidence to collect at each (upsert_evidence_items), so that every requirement is covered.';
 		case 'process_event':

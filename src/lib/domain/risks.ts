@@ -1,6 +1,7 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { engagementGuard, getEngagement, listScopes } from './engagements';
 import { NotFoundError, ValidationError } from './errors';
+import { requireHuman } from './guards';
 import { registerEntity } from './registry';
 import { listSelected, type Criticality } from './selection';
 import {
@@ -35,7 +36,16 @@ export function idList(v: unknown): string[] {
 export const riskDefinition: EntityDefinition = registerEntity({
 	type: 'risk',
 	table: 'risk',
-	columns: ['engagement_id', 'title', 'description', 'origin', 'level', 'requirement_ids', 'scope_ids'],
+	columns: [
+		'engagement_id',
+		'title',
+		'description',
+		'origin',
+		'level',
+		'requirement_ids',
+		'scope_ids',
+		'proposed'
+	],
 	detailColumns: ['title', 'level', 'origin', 'description'],
 	fieldLabels: {
 		title: 'Risk',
@@ -43,19 +53,24 @@ export const riskDefinition: EntityDefinition = registerEntity({
 		origin: 'Origin',
 		level: 'Level',
 		requirement_ids: 'Requirements',
-		scope_ids: 'Scopes'
+		scope_ids: 'Scopes',
+		proposed: 'Proposed'
 	},
 	formatValue(column, value) {
 		if (column === 'origin') return value === 'auditee_register' ? 'Auditee register' : 'Auditor view';
 		if (column === 'level') return String(value ?? '').replace(/^./, (c) => c.toUpperCase());
 		if (column === 'requirement_ids' || column === 'scope_ids') return `${idList(value).length}`;
-		if (column === 'deleted') return Number(value) === 1 ? 'Yes' : 'No';
+		if (column === 'deleted' || column === 'proposed') return Number(value) === 1 ? 'Yes' : 'No';
 		return value == null ? '' : String(value);
 	},
 	engagementOf: (app, row) => engagementGuard(app, row.engagement_id),
+	/** A risk sets how much evidence to plan: AI writes stay proposed until a person accepts them (#78). */
+	judgement: () => ({ column: 'proposed', proposed: 1 }),
 	parse(input, existing) {
 		const out: Row = {};
 		if (!existing) out.engagement_id = str(input.engagement_id);
+		if ('proposed' in input) out.proposed = input.proposed === true || Number(input.proposed) === 1 ? 1 : 0;
+		else if (!existing) out.proposed = 0;
 		if ('title' in input || !existing) {
 			const t = str(input.title);
 			if (!t) throw new ValidationError('Describe the risk.', { title: 'Required' });
@@ -105,6 +120,8 @@ export interface Risk {
 	level: (typeof RISK_LEVELS)[number];
 	requirementIds: string[];
 	scopeIds: string[];
+	/** Written by AI and not accepted yet: it sets no criticality. */
+	proposed: boolean;
 	version: number;
 }
 
@@ -117,6 +134,7 @@ function toRisk(r: Row): Risk {
 		level: r.level as Risk['level'],
 		requirementIds: idList(r.requirement_ids),
 		scopeIds: idList(r.scope_ids),
+		proposed: Number(r.proposed) === 1,
 		version: Number(r.current_version)
 	};
 }
@@ -160,7 +178,45 @@ export function updateRisk(
 export function removeRisk(app: AppDatabase, actor: Actor, id: string): void {
 	const row = readRow(app, riskDefinition, id);
 	if (!row || Number(row.deleted) === 1) throw new NotFoundError('Risk not found');
-	deleteEntity(app, actor, riskDefinition, id, Number(row.current_version), 'Risk removed');
+	deleteEntity(
+		app,
+		actor,
+		riskDefinition,
+		id,
+		Number(row.current_version),
+		Number(row.proposed) === 1 ? 'Proposal rejected' : 'Risk removed'
+	);
+}
+
+function riskOf(app: AppDatabase, engagementId: string, id: string): Row {
+	const row = readRow(app, riskDefinition, id);
+	if (!row || Number(row.deleted) === 1 || row.engagement_id !== engagementId)
+		throw new NotFoundError('Risk not found');
+	return row;
+}
+
+/** Accepting a proposed risk is a judgement: people only. From then on it sets criticality. */
+export function acceptRisk(app: AppDatabase, actor: Actor, engagementId: string, id: string): Risk {
+	requireHuman(actor, 'Accepting a proposed risk');
+	const row = riskOf(app, engagementId, id);
+	if (Number(row.proposed) !== 1) return toRisk(row);
+	return toRisk(
+		updateEntity(app, actor, riskDefinition, id, Number(row.current_version), { proposed: 0 }, 'Accepted').row
+	);
+}
+
+export function rejectRisk(app: AppDatabase, actor: Actor, engagementId: string, id: string): void {
+	riskOf(app, engagementId, id);
+	removeRisk(app, actor, id);
+}
+
+export function acceptAllRisks(app: AppDatabase, actor: Actor, engagementId: string): number {
+	requireHuman(actor, 'Accepting proposed risks');
+	return app.sqlite.transaction(() => {
+		const proposed = listRisks(app, engagementId).filter((r) => r.proposed);
+		for (const r of proposed) acceptRisk(app, actor, engagementId, r.id);
+		return proposed.length;
+	})();
 }
 
 /**
@@ -171,7 +227,8 @@ export function criticalityOf(
 	app: AppDatabase,
 	engagementId: string
 ): Map<string, { level: Criticality; from: 'override' | 'risk' | 'default'; risks: string[] }> {
-	const risks = listRisks(app, engagementId);
+	// A proposed risk sets nothing until a person accepts it.
+	const risks = listRisks(app, engagementId).filter((r) => !r.proposed);
 	const out = new Map<
 		string,
 		{ level: Criticality; from: 'override' | 'risk' | 'default'; risks: string[] }

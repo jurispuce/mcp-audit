@@ -13,6 +13,7 @@ import { addInternal, listInternal } from '#lib/domain/internal.ts';
 import { getItemHistory } from '#lib/domain/items.ts';
 import { importBuiltInSource } from '#lib/domain/library-import.ts';
 import { listPeople } from '#lib/domain/people.ts';
+import { acceptRisk } from '#lib/domain/risks.ts';
 import { listAssessmentUnits } from '#lib/domain/selection.ts';
 import { createFirstAdmin } from '#lib/domain/users.ts';
 import type { Actor } from '#lib/domain/write.ts';
@@ -144,7 +145,7 @@ describe('set-up tools (#43)', () => {
 		});
 	});
 
-	it('records risks against selected requirements, and criticality follows', async () => {
+	it('proposes risks against selected requirements; criticality follows once the auditor accepts (#78)', async () => {
 		await call('select_requirements', {
 			engagement_id: e.id,
 			select: ['nis2:Art. 21(2)(i)', 'nis2:Art. 21(2)(j)']
@@ -169,11 +170,14 @@ describe('set-up tools (#43)', () => {
 				})
 			).text
 		).toContain('selected');
-		const o = (await call('get_engagement_overview', { engagement_id: e.id })).data;
-		expect(o.requirements.find((r: { ref: string }) => r.ref === 'nis2:Art. 21(2)(i)')).toMatchObject({
-			criticality: 'high',
-			criticality_from: 'risk'
-		});
+		const ref = (o: { requirements: { ref: string }[] }) =>
+			o.requirements.find((r) => r.ref === 'nis2:Art. 21(2)(i)');
+		let o = (await call('get_engagement_overview', { engagement_id: e.id })).data;
+		expect(o.risks[0]).toMatchObject({ title: 'Leaver accounts stay active', proposed: true });
+		expect(ref(o)).toMatchObject({ criticality: 'medium', criticality_from: 'default' });
+		acceptRisk(app, human, e.id, res.data.risks[0].id);
+		o = (await call('get_engagement_overview', { engagement_id: e.id })).data;
+		expect(ref(o)).toMatchObject({ criticality: 'high', criticality_from: 'risk' });
 	});
 
 	it('refuses to work on an engagement where AI is switched off', async () => {

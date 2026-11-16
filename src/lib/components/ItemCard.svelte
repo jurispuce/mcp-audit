@@ -77,7 +77,7 @@
 		</div>
 	</div>
 	{#if body}<p class="au-item__body">{body}</p>{/if}
-	{@render details?.()}
+	{#if details}<div class="au-item__details">{@render details()}</div>{/if}
 	<div class="au-item__meta">
 		{#if version !== undefined}<span class="au-ref">v{version}</span>{/if}
 		{#if by}<span

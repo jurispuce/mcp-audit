@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { AppDatabase } from '#lib/db/client.ts';
+import { xlsxSheets } from './xlsx-text';
 import { indexText, removeFromIndex } from '#lib/db/fts.ts';
 import { engagementGuard, getEngagement } from './engagements';
 import { NotFoundError, ValidationError } from './errors';
@@ -204,7 +205,7 @@ export interface Extracted {
 
 const TEXT_TYPES = /\.(txt|md|markdown|csv|tsv|json|ya?ml|vtt|srt|log)$/i;
 
-/** Read the text of a PDF, DOCX or plain-text file. Never throws: a file that cannot be read gets status failed. */
+/** Read the text of a PDF, DOCX, XLSX or plain-text file. Never throws: a file that cannot be read gets status failed. */
 export async function extractText(bytes: Uint8Array, filename: string, mimeType = ''): Promise<Extracted> {
 	const name = filename.toLowerCase();
 	try {
@@ -222,6 +223,14 @@ export async function extractText(bytes: Uint8Array, filename: string, mimeType 
 			const mammoth = (await import('mammoth')).default;
 			const { value } = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
 			return { status: 'extracted', text: normalise(value), pageStarts: [0] };
+		}
+		if (
+			name.endsWith('.xlsx') ||
+			name.endsWith('.xlsm') ||
+			mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+		) {
+			// Each sheet is a page, so a locator names the sheet's position ("p. 2" is the second sheet).
+			return joinPages((await xlsxSheets(bytes)).map((sh) => sh.text));
 		}
 		if (TEXT_TYPES.test(name) || mimeType.startsWith('text/')) {
 			return {

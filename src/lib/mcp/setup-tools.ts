@@ -161,7 +161,8 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 						id: r.id,
 						title: r.title,
 						level: r.level,
-						requirements: r.requirementIds.length
+						requirements: r.requirementIds.length,
+						...(r.proposed ? { proposed: true } : {})
 					})),
 					documents: listArtifacts(app, e.id).map((a) => ({
 						id: a.id,
@@ -357,7 +358,7 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 		{
 			title: 'Create or update risks',
 			description:
-				'Add or update risks, matched by id, else by title. Each risk has a level (high, medium, low), an origin (auditee_register or auditor) and the selected requirements it affects; optional scopes by name or id. The highest linked level becomes the default criticality of a requirement.',
+				"Add or update risks, matched by id, else by title. Each risk has a level (high, medium, low), an origin (auditee_register for risks from the auditee's register, auditor for your own view) and the selected requirements it affects; optional scopes by name or id. Risks you write are proposed until the auditor accepts them; an accepted risk's level becomes the default criticality of the requirements it affects (the highest one wins).",
 			inputSchema: {
 				engagement_id: engagementId,
 				risks: z
@@ -397,7 +398,13 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 							const risk = existing
 								? updateRisk(app, actor, existing.id, existing.version, input)
 								: addRisk(app, actor, e.id, input);
-							return { id: risk.id, title: risk.title, level: risk.level, created: !existing };
+							return {
+								id: risk.id,
+								title: risk.title,
+								level: risk.level,
+								created: !existing,
+								...(risk.proposed ? { proposed: true } : {})
+							};
 						})
 					)()
 				};

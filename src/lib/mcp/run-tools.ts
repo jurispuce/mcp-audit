@@ -289,6 +289,7 @@ export function registerRunTools(
 					risks: listRisks(app, e.id)
 						.filter(
 							(r) =>
+								!r.proposed &&
 								r.requirementIds.includes(c.requirementId) &&
 								(!r.scopeIds.length || !c.scopeId || r.scopeIds.includes(c.scopeId))
 						)

@@ -395,7 +395,9 @@ export const risk = sqliteTable(
 		/** JSON array of library requirement ids. */
 		requirementIds: text('requirement_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
 		/** JSON array of scope ids; empty means all scopes. */
-		scopeIds: text('scope_ids', { mode: 'json' }).$type<string[]>().notNull().default([])
+		scopeIds: text('scope_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
+		/** 1 while a risk AI wrote waits for a person to accept it (#78). Proposed risks set no criticality. */
+		proposed: integer('proposed').notNull().default(0)
 	},
 	(t) => [index('risk_engagement').on(t.engagementId)]
 );

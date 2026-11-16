@@ -52,3 +52,59 @@ export async function makeDocx(paragraphs: string[]): Promise<Uint8Array> {
 	);
 	return zip.generateAsync({ type: 'uint8array' });
 }
+
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * A minimal .xlsx workbook: one entry per sheet, rows of cells. Strings go to the shared string table,
+ * numbers stay numbers, null leaves the cell empty (to test gaps).
+ */
+export async function makeXlsx(sheets: Record<string, (string | number | null)[][]>): Promise<Uint8Array> {
+	const zip = new JSZip();
+	const names = Object.keys(sheets);
+	zip.file(
+		'[Content_Types].xml',
+		`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${names.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>`
+	);
+	zip.file(
+		'_rels/.rels',
+		`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`
+	);
+	zip.file(
+		'xl/workbook.xml',
+		`<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((n, i) => `<sheet name="${esc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`
+	);
+	zip.file(
+		'xl/_rels/workbook.xml.rels',
+		`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${names.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>`
+	);
+	const strings: string[] = [];
+	const col = (i: number) => {
+		let s = '';
+		for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+		return s;
+	};
+	names.forEach((n, si) => {
+		const rows = sheets[n]!.map(
+			(cells, r) =>
+				`<row r="${r + 1}">${cells
+					.map((v, c) => {
+						if (v === null) return '';
+						const ref = `${col(c)}${r + 1}`;
+						if (typeof v === 'number') return `<c r="${ref}"><v>${v}</v></c>`;
+						strings.push(v);
+						return `<c r="${ref}" t="s"><v>${strings.length - 1}</v></c>`;
+					})
+					.join('')}</row>`
+		).join('');
+		zip.file(
+			`xl/worksheets/sheet${si + 1}.xml`,
+			`<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows}</sheetData></worksheet>`
+		);
+	});
+	zip.file(
+		'xl/sharedStrings.xml',
+		`<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strings.length}" uniqueCount="${strings.length}">${strings.map((s) => `<si><t xml:space="preserve">${esc(s)}</t></si>`).join('')}</sst>`
+	);
+	return zip.generateAsync({ type: 'uint8array' });
+}

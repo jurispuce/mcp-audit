@@ -10,6 +10,7 @@
 	const FILTERS = [
 		{ key: null, label: 'All' },
 		{ key: 'role', label: 'Roles' },
+		{ key: 'risk', label: 'Risks' },
 		{ key: 'internal', label: 'Internal requirements' },
 		{ key: 'recheck', label: 'Needs review' },
 		{ key: 'event', label: 'Events' },
@@ -19,6 +20,7 @@
 	] as const;
 	const TYPE_LABEL: Record<string, string> = {
 		role: 'Role',
+		risk: 'Risk',
 		internal: 'Internal requirement',
 		recheck: 'Needs review after a new version',
 		event: 'Drafted event',

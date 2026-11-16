@@ -166,6 +166,8 @@ body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
 .au-item__title a::after { content: ""; position: absolute; inset: 0; }
 .au-item { position: relative; }
 .au-item__actions { position: relative; z-index: 1; }
+/* Content under the body that may hold links or buttons: above the card's stretched title link. */
+.au-item__details { position: relative; z-index: 1; }
 
 /* Item sheet: right panel on desktop, full screen on a phone */
 .au-overlay { position: fixed; inset: 0; background: rgba(20, 24, 29, .4); z-index: 20; border: 0; padding: 0; cursor: default; }

@@ -15,6 +15,7 @@ import {
 	removeEvidence
 } from './planning';
 import { listAssessmentUnits } from './selection';
+import { acceptRisk, listRisks, rejectRisk } from './risks';
 import type { Actor } from './write';
 
 /**
@@ -23,29 +24,12 @@ import type { Actor } from './write';
  * through each item's own domain function, so the rules stay where they are.
  */
 
-export const PROPOSAL_TYPES = [
-	'role',
-	'internal',
-	'recheck',
-	'event',
-	'evidence',
-	'link',
-	'finding'
-] as const;
-export type ProposalType = (typeof PROPOSAL_TYPES)[number];
-
-export const PROPOSAL_LABELS: Record<ProposalType, [string, string]> = {
-	role: ['role', 'roles'],
-	internal: ['internal requirement', 'internal requirements'],
-	recheck: ['internal requirement to review', 'internal requirements to review'],
-	event: ['drafted event', 'drafted events'],
-	evidence: ['planned evidence item', 'planned evidence items'],
-	link: ['evidence link', 'evidence links'],
-	finding: ['finding', 'findings']
-};
+export { PROPOSAL_LABELS, PROPOSAL_TYPES, type ProposalType } from '../proposal-types';
+import { PROPOSAL_TYPES, type ProposalType } from '../proposal-types';
 
 const ENTITY: Record<ProposalType, string> = {
 	role: 'person',
+	risk: 'risk',
 	internal: 'requirement',
 	recheck: 'requirement',
 	event: 'event',
@@ -106,6 +90,24 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 					: null,
 				path: '/setup/auditee',
 				version: p.version
+			});
+	if (want('risk'))
+		for (const r of listRisks(app, e.id).filter((r) => r.proposed))
+			out.push({
+				type: 'risk',
+				id: r.id,
+				title: r.title,
+				detail: [
+					`${r.level.replace(/^./, (c) => c.toUpperCase())} level`,
+					r.origin === 'auditee_register' ? 'from the auditee register' : 'auditor view',
+					r.requirementIds.length
+						? `affects ${r.requirementIds.length} ${r.requirementIds.length === 1 ? 'requirement' : 'requirements'}`
+						: ''
+				]
+					.filter(Boolean)
+					.join(' · '),
+				path: '/setup/risks',
+				version: r.version
 			});
 	if (want('internal'))
 		for (const r of listInternal(app, e.id).filter(
@@ -222,6 +224,7 @@ export function proposalSummary(app: AppDatabase, engagementId: string): Proposa
 const WAITING: Record<ProposalType, string> = {
 	role: `SELECT 1 FROM person p JOIN engagement e ON e.auditee_id = p.auditee_id
 	        WHERE e.id = ? AND p.id = ? AND p.deleted = 0 AND p.status = 'proposed'`,
+	risk: `SELECT 1 FROM risk WHERE engagement_id = ? AND id = ? AND deleted = 0 AND proposed = 1`,
 	internal: `SELECT 1 FROM requirement r JOIN source s ON s.id = r.source_id
 	            WHERE s.engagement_id = ? AND r.id = ? AND r.deleted = 0 AND s.deleted = 0
 	              AND r.origin = 'internal' AND r.status = 'proposed' AND coalesce(r.recheck, '') <> 'needs_review'`,
@@ -256,6 +259,9 @@ export function acceptProposalItem(
 		case 'role':
 			acceptPerson(app, actor, id);
 			break;
+		case 'risk':
+			acceptRisk(app, actor, engagementId, id);
+			break;
 		case 'internal':
 			acceptInternal(app, actor, engagementId, id);
 			break;
@@ -288,6 +294,9 @@ export function rejectProposalItem(
 	switch (type) {
 		case 'role':
 			rejectPerson(app, actor, id);
+			break;
+		case 'risk':
+			rejectRisk(app, actor, engagementId, id);
 			break;
 		case 'internal':
 			rejectInternal(app, actor, engagementId, id);

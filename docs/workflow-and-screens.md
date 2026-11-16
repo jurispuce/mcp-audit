@@ -52,6 +52,7 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 ### Set-up, Documents
 - Upload one or many files at once with no metadata. Title and kind are edited in the list afterwards.
 - "Extract requirements" proposes internal requirements with document, section and the external requirement implemented; accept, reject, accept all.
+- Set-up, Risks: upload the auditee's risk register (PDF, Excel, Word, CSV or Markdown); "Extract risks" proposes its risks with level, description and affected requirements. Proposed risks set no criticality until accepted (#78).
 - Add an internal requirement by hand.
 - *Prototype only:* only file names are recorded; extraction is simulated.
 

@@ -25,7 +25,7 @@ Settings are environment variables, listed with defaults in `.env.example`. Back
 
 ## Connect the in-app AI to LiteLLM
 
-The AI buttons (Derive roles, Extract requirements, Draft plan, Process event materials, Propose findings, and the library's Extract requirements and Propose mapping) call models through a [LiteLLM](https://docs.litellm.ai/) proxy. These steps assume LiteLLM is already running; to run one next to the app instead, see `docs/deployment.md`, In-app AI.
+The AI buttons (Derive roles, Extract requirements, Extract risks, Draft plan, Process event materials, Propose findings, and the library's Extract requirements and Propose mapping) call models through a [LiteLLM](https://docs.litellm.ai/) proxy. These steps assume LiteLLM is already running; to run one next to the app instead, see `docs/deployment.md`, In-app AI.
 
 You need:
 

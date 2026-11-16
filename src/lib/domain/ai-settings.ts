@@ -21,6 +21,11 @@ export const AI_ACTIONS = {
 		skill: 'audit-document-analysis',
 		scope: 'engagement'
 	},
+	extract_risks: {
+		label: 'Extract risks',
+		skill: 'audit-engagement-setup',
+		scope: 'engagement'
+	},
 	draft_plan: { label: 'Draft plan', skill: 'audit-plan-builder', scope: 'engagement' },
 	process_event: {
 		label: 'Process event materials',

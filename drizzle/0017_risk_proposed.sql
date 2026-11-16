@@ -1,0 +1,1 @@
+ALTER TABLE `risk` ADD `proposed` integer DEFAULT 0 NOT NULL;

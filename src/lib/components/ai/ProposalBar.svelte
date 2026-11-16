@@ -8,7 +8,7 @@
 	 * list. Reads the engagement's proposal summary from the layout data, so it disappears when the last
 	 * proposal of its types is accepted or rejected.
 	 */
-	type Type = 'role' | 'internal' | 'event' | 'evidence' | 'link' | 'finding';
+	import { PROPOSAL_LABELS, type ProposalType as Type } from '#lib/proposal-types.ts';
 	interface Props {
 		types: Type[];
 		/** The screen's own Accept all control; without it the bar accepts through the review list. */
@@ -17,14 +17,7 @@
 	}
 	let { types, children, testid = 'proposal-bar' }: Props = $props();
 
-	const LABELS: Record<Type, [string, string]> = {
-		role: ['role', 'roles'],
-		internal: ['internal requirement', 'internal requirements'],
-		event: ['drafted event', 'drafted events'],
-		evidence: ['planned evidence item', 'planned evidence items'],
-		link: ['evidence link', 'evidence links'],
-		finding: ['finding', 'findings']
-	};
+	const LABELS = PROPOSAL_LABELS;
 
 	type Summary = { count: number; byType: Record<Type, { count: number; sources: string[] }> };
 	const summary = $derived(page.data.proposals as Summary | undefined);

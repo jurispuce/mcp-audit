@@ -134,7 +134,7 @@ All settings are environment variables in `.env`. Only the Compose ones (`BIND_A
 
 ## In-app AI (optional)
 
-The AI buttons (Derive roles, Extract requirements, Draft plan, Process event materials, Propose findings, and the library's Extract requirements and Propose mapping) reach models through a [LiteLLM](https://docs.litellm.ai/) gateway, so Claude, other providers and local models all work. Without a gateway the buttons stay disabled and say why; Claude Desktop or Claude Code through MCP works either way.
+The AI buttons (Derive roles, Extract requirements, Extract risks, Draft plan, Process event materials, Propose findings, and the library's Extract requirements and Propose mapping) reach models through a [LiteLLM](https://docs.litellm.ai/) gateway, so Claude, other providers and local models all work. Without a gateway the buttons stay disabled and say why; Claude Desktop or Claude Code through MCP works either way.
 
 1. Run a gateway. To run it next to the app, copy `litellm.config.example.yaml` to `litellm.config.yaml`, list your models in it, put the provider keys it names in `.env` (for example `ANTHROPIC_API_KEY`), and uncomment the `litellm` service in `docker-compose.yml`. Then `docker compose up -d`.
 2. Sign in as an admin and open **Settings, AI**:

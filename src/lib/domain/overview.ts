@@ -65,7 +65,7 @@ export function engagementOverview(app: AppDatabase, engagementId: string): Over
 			`SELECT count(*) AS n FROM person WHERE auditee_id = ? AND deleted = 0 AND status = 'proposed'`,
 			e.auditeeId
 		),
-		risks: n('SELECT count(*) AS n FROM risk WHERE engagement_id = ? AND deleted = 0', e.id),
+		risks: n('SELECT count(*) AS n FROM risk WHERE engagement_id = ? AND deleted = 0 AND proposed = 0', e.id),
 		documents: n('SELECT count(*) AS n FROM artifact WHERE engagement_id = ? AND deleted = 0', e.id),
 		internalConfirmed: 0,
 		internalProposed: 0

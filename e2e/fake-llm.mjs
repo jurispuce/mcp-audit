@@ -75,6 +75,35 @@ const SCRIPTS = {
 			];
 		}
 	],
+	extract_risks: [
+		({ ctx }) => [
+			toolCall('list_artifacts', { engagement_id: ctx.engagement_id }),
+			toolCall('get_engagement_overview', { engagement_id: ctx.engagement_id })
+		],
+		({ ctx, results }) => {
+			const docs = results[0]?.artifacts ?? [];
+			const doc = docs.find((d) => d.id === ctx.artifact_id) ?? docs.find((d) => d.kind === 'risk_register');
+			if (!doc) return null;
+			return [toolCall('get_artifact_text', { engagement_id: ctx.engagement_id, artifact_id: doc.id })];
+		},
+		({ ctx, results }) => {
+			const text = results.at(-1)?.text ?? '';
+			const selected = results[1]?.requirements ?? [];
+			// One risk per register line that starts with an id such as R-1.
+			const risks = [...text.matchAll(/^(R-\d+) \| ([^|]+) \| (\d+) \| (\d+)/gm)].map((m, i) => {
+				const score = Number(m[3]) * Number(m[4]);
+				return {
+					title: m[2].trim(),
+					level: score >= 15 ? 'high' : score >= 6 ? 'medium' : 'low',
+					origin: 'auditee_register',
+					description: `${m[1]}, likelihood ${m[3]} × impact ${m[4]}`,
+					requirements: i === 0 && selected[0] ? [selected[0].id] : []
+				};
+			});
+			if (!risks.length) return null;
+			return [toolCall('upsert_risks', { engagement_id: ctx.engagement_id, risks })];
+		}
+	],
 	draft_plan: [
 		({ ctx }) => [toolCall('get_coverage', { engagement_id: ctx.engagement_id })],
 		({ ctx }) => [

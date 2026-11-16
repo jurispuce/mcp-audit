@@ -147,6 +147,9 @@ function validContext(app: AppDatabase, action: AiAction, input: Record<string, 
 					.join(', ');
 			if (!ctx.sections) delete ctx.sections;
 			break;
+		case 'extract_risks':
+			if (str(input.artifact_id)) ctx.artifact_id = str(input.artifact_id);
+			break;
 		case 'propose_findings':
 			if (str(input.unit_id)) ctx.unit_id = str(input.unit_id);
 			break;

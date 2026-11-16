@@ -1,4 +1,4 @@
-import { makePdf } from '../../tests/fixtures/make-docs';
+import { makePdf, makeXlsx } from '../../tests/fixtures/make-docs';
 import { ADMIN, AUDITOR, expect, loginAs, sampleCopy, seed, test, unique } from '../helpers';
 
 /**
@@ -188,4 +188,46 @@ test('library: extract requirements from a document and propose a mapping, landi
 	await page.goto(`/library/mapping?from=${code}&to=nis2`);
 	await runAction(page, 'library_mapping', 'Propose mapping');
 	await expect(page.getByTestId('mapping-summary')).toContainText('1 proposed link waits');
+});
+
+test('Risks: upload the auditee register, extract its risks with AI, accept them together (#78)', async ({
+	page
+}) => {
+	const e = await sampleCopy(page.request);
+	await page.goto(`/e/${e.id}/setup/risks`);
+	await page.getByLabel('Upload the auditee’s risk register').setInputFiles({
+		name: 'register.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: Buffer.from(
+			await makeXlsx({
+				Register: [
+					['ID', 'Risk', 'Likelihood', 'Impact', 'Owner'],
+					['R-1', 'Ransomware encrypts file servers', 4, 5, 'Head of IT'],
+					['R-2', 'Supplier outage stops deliveries', 2, 3, 'COO']
+				]
+			})
+		)
+	});
+	await page.getByRole('button', { name: 'Upload register' }).click();
+	await expect(page.getByRole('status')).toHaveText(
+		'register.xlsx added. Extract its risks with AI, or add them by hand.'
+	);
+	await expect(page.getByTestId('register-register.xlsx')).toContainText('Text read');
+
+	await runAction(page, 'extract_risks', 'Extract risks');
+	await expect(page.getByTestId('proposal-bar')).toContainText('2 risks proposed from “Extract risks”');
+	const proposedList = page.getByRole('list', { name: 'Proposed risks' });
+	await expect(proposedList.getByTestId('risk-Ransomware encrypts file servers')).toContainText(
+		'Auditee register · High'
+	);
+	await expect(proposedList).toContainText('R-2, likelihood 2 × impact 3');
+
+	await page.getByTestId('selection-bar').getByRole('button', { name: 'Select all 2' }).click();
+	await page.getByTestId('selection-bar').getByRole('button', { name: 'Accept selected' }).click();
+	// With nothing left to review, the proposed section and its bar go away.
+	await expect(proposedList).toHaveCount(0);
+	await expect(page.getByTestId('risk-Ransomware encrypts file servers')).toContainText('High');
+	await expect(page.getByRole('list', { name: 'Risks', exact: true })).toContainText(
+		'Supplier outage stops deliveries'
+	);
 });

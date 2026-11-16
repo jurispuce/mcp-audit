@@ -25,8 +25,22 @@ Check which tools you have before you start.
 | 3. Select | `select_requirements` with `select` and `deselect` lists of `"<source>:<reference>"`; each is pinned at the library's current version |
 | 4. Scopes | `upsert_scopes` with `mode` and the scopes; then `set_scope_handling` per requirement (`common` or `per_scope`). The result reports the number of assessment units: tell the auditor. Dropping a scope that has units needs the auditor's yes, then `confirm_units_lost: true` |
 | 5. Roles | `upsert_people`: role required, name, unit and email optional. They arrive as proposed for the auditor to accept on Set-up, Auditee |
-| 6. Risks | `upsert_risks` with level, origin (`auditee_register` or `auditor`) and the selected requirements each affects; the highest linked level becomes the requirement's default criticality |
+| 6. Risks | `upsert_risks` with level, origin (`auditee_register` or `auditor`) and the selected requirements each affects. Risks you write are proposed; once the auditor accepts one, the highest linked level becomes the requirement's default criticality |
+| 6a. Risk register | When the auditee's register is a document (`list_artifacts`, kind `risk_register`, or the one you were given): read all of it with `get_artifact_text`, then propose each risk with `upsert_risks`. See "Extracting a risk register" below |
 | 7. Hand over | `get_engagement_overview` again, and summarise its phases and the open points |
+
+#### Extracting a risk register
+
+A register can be a spreadsheet (each sheet is a page, each row a line with cells separated by `|`), a PDF, a Word file, CSV or Markdown.
+
+- **One risk per register entry.** Ignore headings, totals, the scale legend and closed or accepted-and-retired entries; say in your summary what you skipped.
+- **Title.** A short statement of the risk in the register's own language: the threat and what it affects.
+- **Level.** Map the register's rating to high, medium or low. Use the register's own scale (its legend, or its likelihood × impact matrix) where it has one: the top third of the scale is high, the bottom third low. With a residual and an inherent rating, use the residual one. Without any rating, use medium and say so in the description.
+- **Origin.** `auditee_register`.
+- **Description.** Keep what the auditor will want to trace back: the register's reference or row, the owner, the rating as written, and the treatment or controls.
+- **Requirements.** Link each risk to the engagement's selected requirements it clearly affects (`get_engagement_overview` lists them; `search_requirements` helps). Leave the list empty when it is not clear; the auditor links them on Set-up, Risks.
+- **Scopes.** Only when the register names a site or unit that matches a scope.
+- Send risks in batches of up to 100. Everything you write is proposed until the auditor accepts it.
 
 If a tool answers `forbidden` because AI is switched off for the engagement, stop and tell the auditor; only they can switch it on (Home, engagement details). If it answers `stale_write`, read again and redo the change on top. Everything you write shows in the app as "Claude on behalf of <auditor>"; judgement writes land as proposed for the auditor to accept.
 
