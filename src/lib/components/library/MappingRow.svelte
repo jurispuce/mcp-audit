@@ -21,8 +21,11 @@
 	interface Props {
 		row: { id: string; refCode: string; title: string; status: string; links: Link[] };
 		target: { code: string; title: string };
+		/** The SelectionBar form proposed links are selected into, when several wait. */
+		selectForm?: string | null;
+		selected?: string[];
 	}
-	let { row, target }: Props = $props();
+	let { row, target, selectForm = null, selected = $bindable([]) }: Props = $props();
 	let editing = $state<string | null>(null);
 	/** Links whose two requirements are open side by side. */
 	let comparing = $state<Record<string, boolean>>({});
@@ -59,6 +62,10 @@
 	const act = (name: string) => `${page.url.search ? `${page.url.search}&` : '?'}/${name}`;
 	const mapped = $derived(row.links.some((l) => l.status === 'confirmed'));
 	const relationOf = (l: Link) => `${l.label}${l.coverage ? `, ${l.coverage} coverage` : ''}`;
+	/** Each row is its own component, so the shared selection is updated item by item (bind:group would only see this row). */
+	function toggle(id: string, on: boolean) {
+		selected = on ? [...selected.filter((x) => x !== id), id] : selected.filter((x) => x !== id);
+	}
 </script>
 
 <li class="au-item" class:au-item--gap={!row.links.length} data-testid="map-{row.refCode}">
@@ -117,6 +124,20 @@
 					</form>
 				{:else}
 					<span class="au-row au-wrap">
+						{#if selectForm && l.status === 'proposed'}
+							<label class="au-check-row">
+								<input
+									type="checkbox"
+									form={selectForm}
+									name="ids"
+									value={l.id}
+									checked={selected.includes(l.id)}
+									onchange={(ev) => toggle(l.id, (ev.currentTarget as HTMLInputElement).checked)}
+									aria-label="Select link {row.refCode} to {l.target.refCode}"
+								/>
+								Select
+							</label>
+						{/if}
 						<button
 							class="au-btn au-btn--small"
 							type="button"

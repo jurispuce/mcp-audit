@@ -1,5 +1,13 @@
 import { addLink, getSourceByCode, listSources } from '#lib/domain/library.ts';
-import { acceptAllLinks, acceptLink, editLink, mappingOf, rejectLink } from '#lib/domain/library-review.ts';
+import {
+	acceptAllLinks,
+	acceptLink,
+	editLink,
+	mappingOf,
+	rejectLink,
+	reviewLinks
+} from '#lib/domain/library-review.ts';
+import { bulkMessage } from '#lib/domain/proposals.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -28,7 +36,18 @@ export const load: PageServerLoad = ({ url }) => {
 	};
 };
 
+async function selectedLinks(request: Request, locals: App.Locals, verdict: 'accept' | 'reject') {
+	const ids = (await request.formData()).getAll('ids').map(String);
+	try {
+		return { success: bulkMessage(reviewLinks(appDatabase(), uiActor(locals), ids, verdict), verdict) };
+	} catch (e) {
+		return formFailure(e);
+	}
+}
+
 export const actions: Actions = {
+	acceptSelected: async ({ request, locals }) => selectedLinks(request, locals, 'accept'),
+	rejectSelected: async ({ request, locals }) => selectedLinks(request, locals, 'reject'),
 	accept: async ({ request, locals }) => {
 		try {
 			acceptLink(appDatabase(), uiActor(locals), String((await request.formData()).get('id')));

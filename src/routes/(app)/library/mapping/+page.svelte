@@ -3,6 +3,7 @@
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import MappingRow from '#lib/components/library/MappingRow.svelte';
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 
 	let { data, form } = $props();
 	const m = $derived(data.mapping);
@@ -12,6 +13,15 @@
 			: ''
 	);
 	let copied = $state(false);
+	let selectedLinks = $state<string[]>([]);
+	const proposedLinks = $derived(
+		(m?.rows ?? []).flatMap((r) => r.links.filter((l) => l.status === 'proposed').map((l) => l.id))
+	);
+	/** Form actions keep the chosen sources in the URL, so the page reloads on the same mapping. */
+	const act = (name: string) =>
+		m
+			? `?from=${encodeURIComponent(m.from.code)}&to=${encodeURIComponent(m.to.code)}${data.onlyOpen ? '&open=1' : ''}&/${name}`
+			: `?/${name}`;
 </script>
 
 <svelte:head><title>Mapping · Library · mcp-audit</title></svelte:head>
@@ -108,9 +118,22 @@
 				}}>{copied ? 'Copied' : 'Copy prompt'}</button
 			>
 		</details>
+		<SelectionBar
+			id="select-links"
+			all={proposedLinks}
+			bind:selected={selectedLinks}
+			acceptAction={act('acceptSelected')}
+			rejectAction={act('rejectSelected')}
+			noun={['proposed link', 'proposed links']}
+		/>
 		<ul class="au-list" aria-label="Requirements of {m.from.title}">
 			{#each m.rows as row (row.id)}
-				<MappingRow {row} target={{ code: m.to.code, title: m.to.title }} />
+				<MappingRow
+					{row}
+					target={{ code: m.to.code, title: m.to.title }}
+					selectForm={proposedLinks.length > 1 ? 'select-links' : null}
+					bind:selected={selectedLinks}
+				/>
 			{/each}
 		</ul>
 	</section>

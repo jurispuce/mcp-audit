@@ -438,3 +438,34 @@ export function reviewRequirements(
 	}
 	return result;
 }
+
+/**
+ * Accept or reject several proposed links at once (Library, Mapping), each in its own transaction. A
+ * link that is no longer proposed (reviewed meanwhile) is skipped and reported, not undone.
+ */
+export function reviewLinks(
+	app: AppDatabase,
+	actor: Actor,
+	ids: string[],
+	verdict: 'accept' | 'reject'
+): { done: number; skipped: { id: string; reason: string }[] } {
+	requireHuman(actor, 'Reviewing proposed links');
+	const unique = [...new Set(ids.filter(Boolean))];
+	if (unique.length === 0) throw new ValidationError('Select at least one link.');
+	const result = { done: 0, skipped: [] as { id: string; reason: string }[] };
+	for (const id of unique) {
+		try {
+			app.sqlite.transaction(() => {
+				const row = linkRow(app, id);
+				if (row.status !== 'proposed') throw new ValidationError('Already reviewed.');
+				if (verdict === 'accept') acceptLink(app, actor, id);
+				else rejectLink(app, actor, id);
+			})();
+			result.done++;
+		} catch (e) {
+			if (!(e instanceof Error) || !('code' in e)) throw e;
+			result.skipped.push({ id, reason: e.message });
+		}
+	}
+	return result;
+}

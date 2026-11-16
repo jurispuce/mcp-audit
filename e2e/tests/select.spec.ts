@@ -57,3 +57,72 @@ test('select several proposals and accept or reject them together (roles, intern
 	await expect(page.getByRole('list', { name: 'Proposals' }).getByRole('article')).toHaveCount(1);
 	await expect(page.getByRole('list', { name: 'Proposals' })).toContainText('Drafted event Y');
 });
+
+test('select proposed mapping links and accept them together (Library, Mapping)', async ({
+	page,
+	baseURL
+}) => {
+	const code = `sel${Date.now().toString(36)}`;
+	const client = await mcpClient(baseURL!, await createToken(page, 'Select links'));
+	await call(client, 'upsert_sources', { sources: [{ code, title: `Selection law ${code}`, type: 'law' }] });
+	await call(client, 'upsert_requirements', {
+		source: code,
+		requirements: [
+			{ ref: '1', title: 'Risk' },
+			{ ref: '2', title: 'Access' },
+			{ ref: '3', title: 'Incidents' }
+		]
+	});
+	await call(client, 'link_requirements', {
+		links: [
+			{ from: `${code}:1`, to: 'nis2:Art. 21(2)(a)', type: 'details', note: 'Risk analysis' },
+			{ from: `${code}:2`, to: 'nis2:Art. 21(2)(i)', type: 'details', note: 'Access control' },
+			{ from: `${code}:3`, to: 'nis2:Art. 21(2)(b)', type: 'details', note: 'Incident handling' }
+		]
+	});
+	await client.close();
+
+	await page.goto(`/library/mapping?from=${code}&to=nis2`);
+	await expect(page.getByTestId('mapping-summary')).toContainText('3 proposed links wait');
+	await page.getByLabel('Select link 1 to Art. 21(2)(a)').check();
+	await page.getByLabel('Select link 2 to Art. 21(2)(i)').check();
+	const bar = page.getByTestId('selection-bar');
+	await expect(bar).toContainText('2 of 3 selected');
+	await bar.getByRole('button', { name: 'Accept selected' }).click();
+	await expect(page.getByTestId('mapping-summary')).toHaveText(
+		`2 of 3 requirements mapped to nis2, 1 proposed link waits`
+	);
+	// The URL keeps the chosen sources, and the remaining link is still proposed.
+	await expect(page).toHaveURL(new RegExp(`from=${code}&to=nis2`));
+	await expect(page.getByTestId('map-3').getByTestId('maplink')).toHaveAttribute('data-state', 'proposed');
+});
+
+test('select requirements of an import across rows and accept them together (Library, Review)', async ({
+	page,
+	baseURL
+}) => {
+	const code = `rev${Date.now().toString(36)}`;
+	const client = await mcpClient(baseURL!, await createToken(page, 'Select review'));
+	await call(client, 'upsert_sources', { sources: [{ code, title: `Review law ${code}`, type: 'law' }] });
+	await call(client, 'upsert_requirements', {
+		source: code,
+		requirements: [
+			{ ref: '1', title: 'One' },
+			{ ref: '2', title: 'Two' },
+			{ ref: '3', title: 'Three' }
+		]
+	});
+	await client.close();
+
+	await page.goto('/library/review');
+	const card = page.getByTestId(`import-${code}`);
+	if ((await card.locator('details').getAttribute('open')) === null)
+		await card.getByText('Preview and edit the requirements').click();
+	await card.getByLabel('Select 1', { exact: true }).check();
+	await card.getByLabel('Select 3', { exact: true }).check();
+	const bar = card.getByTestId('selection-bar');
+	await expect(bar).toContainText('2 of 3 selected');
+	await bar.getByRole('button', { name: 'Accept selected' }).click();
+	await expect(card).toContainText('3 requirements, 1 still proposed');
+	await expect(card.getByTestId('proposed-2')).toHaveAttribute('data-state', 'proposed');
+});

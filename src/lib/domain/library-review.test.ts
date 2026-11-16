@@ -30,6 +30,7 @@ import {
 	rejectLink,
 	rejectRequirement,
 	rejectSource,
+	reviewLinks,
 	reviewRequirements
 } from './library-review';
 import { selectRequirements } from './selection';
@@ -235,5 +236,22 @@ describe('mapping with review (#71)', () => {
 		const child = findRequirement(app, src.id, '5.1')!.id;
 		expect(reviewRequirements(app, human, [child], 'reject').done).toBe(1);
 		expect(() => reviewRequirements(app, ai, ids, 'accept')).toThrow();
+	});
+
+	it('reviews a selection of proposed links together; one no longer proposed is skipped', () => {
+		const src = aiImport();
+		const links = (['5', '5.1', '6'] as const).map(
+			(ref, k) =>
+				createEntity(app, ai, linkDefinition, {
+					from_id: findRequirement(app, src.id, ref)!.id,
+					to_id: nis2(['a', 'b', 'c'][k]!).id,
+					type: 'details'
+				}).row.id as string
+		);
+		expect(reviewLinks(app, human, [links[0]!, links[1]!], 'accept')).toEqual({ done: 2, skipped: [] });
+		const again = reviewLinks(app, human, [links[0]!, links[2]!], 'reject');
+		expect(again.done).toBe(1);
+		expect(again.skipped).toEqual([{ id: links[0], reason: 'Already reviewed.' }]);
+		expect(() => reviewLinks(app, ai, [links[1]!], 'reject')).toThrow();
 	});
 });

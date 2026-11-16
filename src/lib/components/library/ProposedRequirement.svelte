@@ -45,6 +45,10 @@
 			if (result.type === 'success') editing = false;
 		};
 	const p = $derived(`pr-${r.id.slice(0, 8)}`);
+	/** Each row is its own component, so the shared selection is updated item by item (bind:group would only see this row). */
+	function toggle(id: string, on: boolean) {
+		selected = on ? [...selected.filter((x) => x !== id), id] : selected.filter((x) => x !== id);
+	}
 </script>
 
 <li
@@ -132,7 +136,8 @@
 							form={selectForm}
 							name="ids"
 							value={r.id}
-							bind:group={selected}
+							checked={selected.includes(r.id)}
+							onchange={(ev) => toggle(r.id, (ev.currentTarget as HTMLInputElement).checked)}
 							aria-label="Select {r.refCode}"
 						/>
 						Select
