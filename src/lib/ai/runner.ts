@@ -46,6 +46,12 @@ export const ACTION_TOOLS: Record<AiAction, string[]> = {
 		'search_requirements',
 		'get_requirement'
 	],
+	recheck_internal: [
+		'compare_with_new_version',
+		'get_artifact_text',
+		'list_internal_requirements',
+		'propose_recheck'
+	],
 	extract_risks: [
 		'get_engagement_overview',
 		'list_artifacts',
@@ -118,6 +124,8 @@ export function taskText(
 			return ctx.artifact_id
 				? `Extract the internal requirements from the document ${ctx.artifact_id}.${ctx.sections ? ` It is a new version; its internal requirements were already checked against it, and only these sections hold none yet: ${ctx.sections}. Extract from those sections only and leave the existing internal requirements as they are.` : ''} Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.`
 				: "Extract internal requirements from the auditee's documents that have not been analysed yet. Propose them with upsert_internal_requirements (pass artifact_id) and map each to the engagement's selected requirements it implements, where that is clear.";
+		case 'recheck_internal':
+			return `Recheck the internal requirements that need review after a new version of their document${ctx.artifact_id ? ` (the new version is document ${ctx.artifact_id}; pass it as artifact_id)` : ''}. Call compare_with_new_version, then decide for each requirement: the rule is still there in other words (propose an update with propose_recheck: a quote copied exactly from the new version, and a new title or text if the rule changed), or the new version no longer has it (propose removing it). Give each a reason citing the new version. Do not add new requirements here.`;
 		case 'extract_risks': {
 			const register = ctx.artifact_id
 				? `Extract the risks from the auditee's risk register, document ${ctx.artifact_id}. Read all of it with get_artifact_text, then propose each risk with upsert_risks: origin auditee_register, the register's rating mapped to high, medium or low, its reference, owner and treatment in the description, and the engagement's selected requirements it affects where that is clear.`

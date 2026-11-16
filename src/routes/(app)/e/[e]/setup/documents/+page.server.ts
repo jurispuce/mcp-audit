@@ -8,20 +8,24 @@ import {
 	uploadArtifacts
 } from '#lib/domain/artifacts.ts';
 import {
+	carriedOverDocuments,
 	recheckMessage,
 	sectionsWithoutRequirements,
-	uploadNewVersion
+	uploadNewVersion,
+	versionsNeedingReview
 } from '#lib/domain/document-versions.ts';
 import { updateEngagement } from '#lib/domain/engagements.ts';
 import { ValidationError } from '#lib/domain/errors.ts';
 import {
 	acceptAllInternal,
 	acceptInternal,
+	acceptRecheckProposal,
 	addInternal,
 	carryOverCandidates,
 	keepInternal,
 	listInternal,
 	rejectInternal,
+	rejectRecheckProposal,
 	removeAfterRecheck
 } from '#lib/domain/internal.ts';
 import { listSelected } from '#lib/domain/selection.ts';
@@ -38,6 +42,10 @@ export const load: PageServerLoad = ({ params }) => {
 		documents: listArtifacts(app, params.e),
 		internal: listInternal(app, params.e),
 		carryOver: carryOverCandidates(app, params.e).length,
+		// Documents of earlier engagements whose rules are carried over: they can get a new version here.
+		carried: carriedOverDocuments(app, params.e),
+		// "3 internal requirements need review after a new version of X" (#76).
+		toReview: versionsNeedingReview(app, params.e),
 		openSections: Object.fromEntries(
 			[...sectionsWithoutRequirements(app, params.e)].map(([id, hs]) => [
 				id,
@@ -216,6 +224,44 @@ export const actions: Actions = {
 		try {
 			removeAfterRecheck(appDatabase(), uiActor(locals), params.e, String(data.get('id')));
 			return { success: 'Internal requirement removed.' };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	acceptRecheck: async ({ request, locals, params }) => {
+		const data = await request.formData();
+		try {
+			const outcome = acceptRecheckProposal(appDatabase(), uiActor(locals), params.e, String(data.get('id')));
+			return {
+				success: outcome === 'removed' ? 'Internal requirement removed.' : 'Update accepted.'
+			};
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	rejectRecheck: async ({ request, locals, params }) => {
+		const data = await request.formData();
+		try {
+			rejectRecheckProposal(appDatabase(), uiActor(locals), params.e, String(data.get('id')));
+			return { success: 'Proposal rejected; the requirement still needs review.' };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	acceptRecheckSelected: async ({ request, locals, params }) => {
+		const ids = (await request.formData()).getAll('ids').map(String);
+		try {
+			const r = reviewProposalItems(appDatabase(), uiActor(locals), params.e, 'recheck', ids, 'accept');
+			return { success: bulkMessage(r, 'accept') };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	rejectRecheckSelected: async ({ request, locals, params }) => {
+		const ids = (await request.formData()).getAll('ids').map(String);
+		try {
+			const r = reviewProposalItems(appDatabase(), uiActor(locals), params.e, 'recheck', ids, 'reject');
+			return { success: bulkMessage(r, 'reject') };
 		} catch (e) {
 			return formFailure(e);
 		}

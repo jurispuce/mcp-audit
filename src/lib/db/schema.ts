@@ -177,7 +177,14 @@ export const requirement = sqliteTable(
 		 */
 		recheck: text('recheck', { enum: ['unchanged', 'needs_review'] }),
 		/** For `needs_review`: the passage of the new text closest to the old quote. */
-		recheckPassage: text('recheck_passage')
+		recheckPassage: text('recheck_passage'),
+		/**
+		 * For `needs_review`: what AI proposes after comparing with the new version (`update`, with the
+		 * proposed wording in the row, or `remove`), until the auditor accepts or rejects it.
+		 */
+		recheckProposal: text('recheck_proposal', { enum: ['update', 'remove'] }),
+		/** Why AI proposes it, citing the new version. */
+		recheckReason: text('recheck_reason')
 	},
 	(t) => [
 		uniqueIndex('requirement_source_ref').on(t.sourceId, t.refCode),

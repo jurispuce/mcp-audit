@@ -66,6 +66,7 @@ describe('MCP endpoint (#30)', () => {
 		expect(tools.map((t) => t.name).sort()).toEqual(
 			[
 				'add_comment',
+				'compare_with_new_version',
 				'get_artifact_text',
 				'get_assessment_unit',
 				'get_coverage',
@@ -86,6 +87,7 @@ describe('MCP endpoint (#30)', () => {
 				'list_library_documents',
 				'list_library_proposals',
 				'propose_finding',
+				'propose_recheck',
 				'record_soa',
 				'register_artifact',
 				'render_audit_plan',

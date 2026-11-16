@@ -21,6 +21,11 @@ export const AI_ACTIONS = {
 		skill: 'audit-document-analysis',
 		scope: 'engagement'
 	},
+	recheck_internal: {
+		label: 'Recheck against new version',
+		skill: 'audit-document-analysis',
+		scope: 'engagement'
+	},
 	extract_risks: {
 		label: 'Extract risks',
 		skill: 'audit-engagement-setup',

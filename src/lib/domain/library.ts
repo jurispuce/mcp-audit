@@ -148,7 +148,9 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		'quote',
 		'position',
 		'recheck',
-		'recheck_passage'
+		'recheck_passage',
+		'recheck_proposal',
+		'recheck_reason'
 	],
 	detailColumns: ['ref_code', 'title', 'text', 'language', 'locator', 'status'],
 	fieldLabels: {
@@ -164,7 +166,9 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		quote: 'Quote',
 		position: 'Position',
 		recheck: 'Recheck',
-		recheck_passage: 'Closest passage in the new version'
+		recheck_passage: 'Closest passage in the new version',
+		recheck_proposal: 'Proposed after the new version',
+		recheck_reason: 'Why'
 	},
 	formatValue(column, value) {
 		if (column === 'language') return String(value ?? '').toUpperCase();
@@ -217,6 +221,13 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 			out.recheck = v;
 		}
 		if ('recheck_passage' in input) out.recheck_passage = optional(input.recheck_passage);
+		if ('recheck_proposal' in input) {
+			const v = optional(input.recheck_proposal);
+			if (v && v !== 'update' && v !== 'remove')
+				throw new ValidationError('A recheck proposal is update or remove.');
+			out.recheck_proposal = v;
+		}
+		if ('recheck_reason' in input) out.recheck_reason = optional(input.recheck_reason);
 		return out;
 	},
 	afterWrite(app, _actor, row) {

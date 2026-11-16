@@ -17,7 +17,14 @@
 	const result = $derived((form ?? null) as Result | null);
 	const e = $derived(data.engagement);
 	const kindLabel = $derived(new Map(data.kinds));
-	const needsReview = $derived(data.internal.filter((r) => r.recheck === 'needs_review'));
+	const needsReview = $derived(
+		data.internal.filter((r) => r.recheck === 'needs_review' && !r.recheckProposal)
+	);
+	// AI's proposals after a new version: an update or a removal, for the auditor to accept or reject.
+	const recheckProposals = $derived(
+		data.internal.filter((r) => r.recheck === 'needs_review' && r.recheckProposal)
+	);
+	let selectedRecheck = $state<string[]>([]);
 	const proposed = $derived(
 		data.internal.filter((r) => r.status === 'proposed' && r.recheck !== 'needs_review')
 	);
@@ -73,7 +80,58 @@
 
 <svelte:head><title>Documents · Set-up · mcp-audit</title></svelte:head>
 
+{#snippet newVersionForm(id: string, name: string)}
+	<form
+		method="POST"
+		action="?/newVersion"
+		enctype="multipart/form-data"
+		class="au-form au-grow"
+		use:enhance={() => {
+			uploading = true;
+			return after();
+		}}
+	>
+		<input type="hidden" name="id" value={id} />
+		<div class="au-field">
+			<label for="newver-{id}">New version of {name}</label>
+			<input id="newver-{id}" name="file" type="file" required />
+			<span class="au-muted">The current file stays, with its evidence links, marked as replaced.</span>
+		</div>
+		{#if failed('newVersion', id)}<p class="au-field__error">
+				{failed('newVersion', id)?.message}
+			</p>{/if}
+		<div class="au-row">
+			<button class="au-btn au-btn--primary au-btn--small" type="submit" disabled={uploading}
+				>{uploading ? 'Uploading…' : 'Upload new version'}</button
+			>
+			<button class="au-btn au-btn--ghost au-btn--small" type="button" onclick={() => (newVersionOf = null)}
+				>Cancel</button
+			>
+		</div>
+	</form>
+{/snippet}
+
 <FormMessage form={result} />
+
+{#each data.toReview as v (v.artifactId)}
+	<div class="au-alert au-alert--warn au-stack" role="status" data-testid="review-banner">
+		<p>
+			{v.count} internal {v.count === 1 ? 'requirement needs' : 'requirements need'} review after a new version
+			of {v.previousName ?? v.name}{v.proposals
+				? `; ${v.proposals} ${v.proposals === 1 ? 'proposal waits' : 'proposals wait'} for you`
+				: ''}.
+			<a href="#needs-review">Review them</a>
+		</p>
+		<AiAction
+			action="recheck_internal"
+			label="Recheck against new version"
+			context={{ artifact_id: v.artifactId }}
+			hint={v.count > v.proposals
+				? 'Compares each with the new version and proposes an update or a removal, for you to accept or reject.'
+				: 'Every one has a proposal below; running it again replaces them.'}
+		/>
+	</div>
+{/each}
 
 <section class="au-section" aria-labelledby="docs-title">
 	<h2 class="au-section__title" id="docs-title">Documents</h2>
@@ -241,38 +299,7 @@
 								</div>
 							</form>
 						{:else if newVersionOf === d.id || failed('newVersion', d.id)}
-							<form
-								method="POST"
-								action="?/newVersion"
-								enctype="multipart/form-data"
-								class="au-form au-grow"
-								use:enhance={() => {
-									uploading = true;
-									return after();
-								}}
-							>
-								<input type="hidden" name="id" value={d.id} />
-								<div class="au-field">
-									<label for="newver-{d.id}">New version of {d.displayName}</label>
-									<input id="newver-{d.id}" name="file" type="file" required />
-									<span class="au-muted"
-										>The current file stays, with its evidence links, marked as replaced.</span
-									>
-								</div>
-								{#if failed('newVersion', d.id)}<p class="au-field__error">
-										{failed('newVersion', d.id)?.message}
-									</p>{/if}
-								<div class="au-row">
-									<button class="au-btn au-btn--primary au-btn--small" type="submit" disabled={uploading}
-										>{uploading ? 'Uploading…' : 'Upload new version'}</button
-									>
-									<button
-										class="au-btn au-btn--ghost au-btn--small"
-										type="button"
-										onclick={() => (newVersionOf = null)}>Cancel</button
-									>
-								</div>
-							</form>
+							{@render newVersionForm(d.id, d.displayName)}
 						{:else}
 							<button
 								class="au-btn au-btn--small"
@@ -310,6 +337,41 @@
 			</li>
 		{/each}
 	</ul>
+
+	{#if data.carried.length}
+		<h3 class="au-section__title">From earlier engagements</h3>
+		<p class="au-muted">
+			Documents whose internal requirements are carried over. When the auditee sends a new version, upload it
+			here: the requirements are copied to this engagement and checked against it, and the earlier engagement
+			keeps its records.
+		</p>
+		<ul class="au-list" aria-label="Documents from earlier engagements">
+			{#each data.carried as d (d.id)}
+				<li>
+					<ItemCard
+						ref="{d.engagementName} · {d.requirements} internal {d.requirements === 1
+							? 'requirement'
+							: 'requirements'} carried over"
+						title={d.name}
+						testid="carried-{d.name}"
+					>
+						{#snippet actions()}
+							{#if newVersionOf === d.id || failed('newVersion', d.id)}
+								{@render newVersionForm(d.id, d.name)}
+							{:else}
+								<button
+									class="au-btn au-btn--small"
+									type="button"
+									onclick={() => (newVersionOf = d.id)}
+									aria-label="Upload new version of {d.name}">Upload new version</button
+								>
+							{/if}
+						{/snippet}
+					</ItemCard>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 </section>
 
 <section class="au-section" aria-labelledby="internal-title">
@@ -428,6 +490,95 @@
 				>
 			</div>
 		</form>
+	{/if}
+
+	<span id="needs-review"></span>
+	{#if recheckProposals.length}
+		<h3 class="au-section__title">Proposed after a new version ({recheckProposals.length})</h3>
+		<p class="au-muted">
+			AI compared these with the new version of their document. Accept to take the update or remove the
+			requirement; reject to decide yourself below.
+		</p>
+		<SelectionBar
+			id="select-recheck"
+			all={recheckProposals.map((r) => r.id)}
+			bind:selected={selectedRecheck}
+			acceptAction="?/acceptRecheckSelected"
+			rejectAction="?/rejectRecheckSelected"
+			noun={['proposal', 'proposals']}
+		/>
+		<ul class="au-list" aria-label="Proposals after a new version">
+			{#each recheckProposals as r (r.id)}
+				{@const was = r.previous}
+				<li>
+					<ItemCard
+						state="proposed"
+						badge={r.recheckProposal === 'remove'
+							? { label: 'Remove', tone: 'danger' }
+							: { label: 'Update', tone: 'ai' }}
+						ref="{r.refCode} · {r.sourceTitle}{r.section ? ` § ${r.section}` : ''}"
+						title={r.title}
+						href="?item=requirement:{r.id}"
+						version={r.version}
+						testid="recheck-{r.refCode}"
+					>
+						{#snippet details()}
+							<p class="au-muted" data-testid="recheck-proposal">
+								{#if r.recheckProposal === 'remove'}
+									Proposed: remove it.{#if r.quote}
+										Old quote: <span class="au-diff-del">“{r.quote}”</span>{/if}
+								{:else if was}
+									Proposed update.
+									{#if was.title !== r.title}<br /><span class="au-diff-del">{was.title}</span> →
+										<span class="au-diff-ins">{r.title}</span>{/if}
+									{#if was.quote !== r.quote}<br /><span class="au-diff-del"
+											>{was.quote ? `“${was.quote}”` : '(no quote)'}</span
+										>
+										→ <span class="au-diff-ins">{r.quote ? `“${r.quote}”` : '(no quote)'}</span>{/if}
+									{#if was.section !== r.section}<br />§
+										<span class="au-diff-del">{was.section ?? '(none)'}</span>
+										→ <span class="au-diff-ins">{r.section ?? '(none)'}</span>{/if}
+									{#if was.text !== r.text}<br /><span class="au-diff-del">{was.text ?? '(no text)'}</span>
+										→ <span class="au-diff-ins">{r.text ?? '(no text)'}</span>{/if}
+								{:else}
+									Proposed update{r.quote ? `: “${r.quote}”` : ''}.
+								{/if}
+								{#if r.recheckReason}<br />Why: {r.recheckReason}{/if}
+							</p>
+						{/snippet}
+						{#snippet actions()}
+							{#if recheckProposals.length > 1}
+								<label class="au-check-row au-select">
+									<input
+										type="checkbox"
+										form="select-recheck"
+										name="ids"
+										value={r.id}
+										bind:group={selectedRecheck}
+										aria-label="Select the proposal for {r.refCode}"
+									/>
+									Select
+								</label>
+							{/if}
+							<form method="POST" action="?/acceptRecheck" use:enhance={after}>
+								<input type="hidden" name="id" value={r.id} /><button
+									class="au-btn au-btn--small au-btn--primary"
+									type="submit"
+									aria-label="Accept the proposal for {r.refCode}">Accept</button
+								>
+							</form>
+							<form method="POST" action="?/rejectRecheck" use:enhance={after}>
+								<input type="hidden" name="id" value={r.id} /><button
+									class="au-btn au-btn--small au-btn--ghost"
+									type="submit"
+									aria-label="Reject the proposal for {r.refCode}">Reject</button
+								>
+							</form>
+						{/snippet}
+					</ItemCard>
+				</li>
+			{/each}
+		</ul>
 	{/if}
 
 	{#if needsReview.length}

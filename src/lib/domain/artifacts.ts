@@ -337,6 +337,7 @@ const ART_SELECT = `SELECT a.*, length(t.text) AS text_length, n.id AS replaced_
 	       coalesce(n.title, n.filename) AS replaced_by_name
 	  FROM artifact a LEFT JOIN artifact_text t ON t.artifact_id = a.id
 	  LEFT JOIN artifact n ON n.id = (SELECT x.id FROM artifact x WHERE x.supersedes_id = a.id AND x.deleted = 0
+	                                     AND x.engagement_id = a.engagement_id
 	                                   ORDER BY x.created_at DESC LIMIT 1)`;
 
 export function listArtifacts(
@@ -522,8 +523,10 @@ export async function uploadArtifacts(
 }
 
 /**
- * The document a new version will replace: a received document of this engagement with a file, not
- * replaced already. The new file must differ from every document in the engagement.
+ * The document a new version will replace: a received document with a file, not replaced already.
+ * It is a document of this engagement, or one of an earlier engagement of the same auditee whose
+ * internal requirements are carried over here (#76). The new file must differ from every document in
+ * the engagement.
  */
 export function assertReplaceable(
 	app: AppDatabase,
@@ -531,12 +534,19 @@ export function assertReplaceable(
 	oldId: string,
 	newHash?: string
 ): Artifact {
-	const old = getEngagementArtifact(app, engagementId, oldId);
+	const old =
+		carriedOverArtifact(app, engagementId, oldId) ?? getEngagementArtifact(app, engagementId, oldId);
 	if (old.state !== 'received' || !old.fileHash)
 		throw new ValidationError('Only a received document with a file can get a new version.');
-	if (old.replacedBy)
+	const newer = app.sqlite
+		.prepare(
+			`SELECT id FROM artifact WHERE supersedes_id = ? AND deleted = 0
+			  ORDER BY engagement_id = ? DESC, created_at DESC LIMIT 1`
+		)
+		.get(old.id, engagementId) as { id: string } | undefined;
+	if (newer)
 		throw new ValidationError(
-			`${old.displayName} was already replaced by ${old.replacedBy.displayName}; upload the new version there.`
+			`${old.displayName} was already replaced by ${getArtifact(app, newer.id).displayName}; upload the new version there.`
 		);
 	if (newHash) {
 		if (newHash === old.fileHash)
@@ -550,6 +560,28 @@ export function assertReplaceable(
 			);
 	}
 	return old;
+}
+
+/**
+ * A document of another engagement of the same auditee, when this engagement carries over the internal
+ * requirements taken from it; otherwise null.
+ */
+export function carriedOverArtifact(
+	app: AppDatabase,
+	engagementId: string,
+	artifactId: string
+): Artifact | null {
+	const row = app.sqlite
+		.prepare(
+			`SELECT a.id FROM artifact a
+			   JOIN source s ON s.artifact_id = a.id AND s.deleted = 0 AND s.type = 'internal'
+			   JOIN engagement here ON here.id = ?
+			  WHERE a.id = ? AND a.deleted = 0 AND a.engagement_id <> here.id
+			    AND here.carry_over_internal = 1 AND s.auditee_id = here.auditee_id
+			  LIMIT 1`
+		)
+		.get(engagementId, artifactId) as { id: string } | undefined;
+	return row ? getArtifact(app, row.id) : null;
 }
 
 /** A document named in an interview but not received yet: no file, state mentioned. */

@@ -1,5 +1,6 @@
 import type { AppDatabase } from '#lib/db/client.ts';
 import { getEngagement, listScopes, type Engagement } from './engagements';
+import { OWN_OR_CARRIED } from './internal';
 
 /**
  * The eight-phase checklist on Home (docs/workflow-and-screens.md). Phases are guidance, not gates:
@@ -74,7 +75,7 @@ export function engagementOverview(app: AppDatabase, engagementId: string): Over
 		.prepare(
 			`SELECT r.status, count(*) AS n FROM requirement r JOIN source s ON s.id = r.source_id
 			  WHERE r.deleted = 0 AND s.deleted = 0 AND r.origin = 'internal' AND s.auditee_id = ?
-			    AND (s.engagement_id = ? OR ?) GROUP BY r.status`
+			    AND ${OWN_OR_CARRIED} GROUP BY r.status`
 		)
 		.all(e.auditeeId, e.id, e.carryOverInternal ? 1 : 0) as { status: string; n: number }[];
 	for (const row of internal) {

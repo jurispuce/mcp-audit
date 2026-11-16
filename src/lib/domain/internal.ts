@@ -44,6 +44,9 @@ export interface InternalRequirement {
 	recheck: 'unchanged' | 'needs_review' | null;
 	/** For needs_review: the passage of the new text closest to the quote. */
 	recheckPassage: string | null;
+	/** For needs_review: what AI proposes after comparing with the new version, and why. */
+	recheckProposal: 'update' | 'remove' | null;
+	recheckReason: string | null;
 	/** For a proposed change to a requirement that was accepted before: what was accepted. */
 	previous: { title: string; text: string | null; quote: string | null; section: string | null } | null;
 	version: number;
@@ -76,6 +79,8 @@ function toInternal(
 		),
 		recheck: (r.recheck as InternalRequirement['recheck']) ?? null,
 		recheckPassage: (r.recheck_passage as string | null) ?? null,
+		recheckProposal: (r.recheck_proposal as InternalRequirement['recheckProposal']) ?? null,
+		recheckReason: (r.recheck_reason as string | null) ?? null,
 		previous: r.status === 'proposed' ? previousAccepted(app, String(r.id)) : null,
 		version: Number(r.current_version)
 	};
@@ -112,9 +117,26 @@ function previousAccepted(app: AppDatabase, id: string): InternalRequirement['pr
 	};
 }
 
+/**
+ * Carried over: reviewed (not waiting for review after a new version), and the source's document has
+ * no newer version in another engagement (that engagement copied its rules).
+ */
+const NEWEST = `coalesce(r.recheck, '') <> 'needs_review' AND NOT EXISTS (
+	  SELECT 1 FROM artifact x JOIN engagement xe ON xe.id = x.engagement_id
+	   WHERE x.supersedes_id = s.artifact_id AND x.deleted = 0 AND xe.deleted = 0
+	     AND x.engagement_id IS NOT s.engagement_id)`;
+
 const INT_SELECT = `SELECT r.*, s.title AS source_title, s.artifact_id, s.engagement_id AS source_engagement_id
 	FROM requirement r JOIN source s ON s.id = r.source_id
 	WHERE r.deleted = 0 AND s.deleted = 0 AND r.origin = 'internal'`;
+
+/**
+ * SQL for the rows an engagement works with (parameters: engagement id, carry-over 1 or 0): its own,
+ * and with carry-over the accepted, reviewed ones of the auditee's other engagements, taken from the
+ * newest version of each document. Where a later engagement received a new version of the document, its
+ * copies are the ones carried over (#76).
+ */
+export const OWN_OR_CARRIED = `(s.engagement_id = ? OR (? AND r.status = 'confirmed' AND ${NEWEST}))`;
 
 /**
  * The internal requirements an engagement works with: those extracted in it, plus, when carry-over
@@ -124,7 +146,7 @@ export function listInternal(app: AppDatabase, engagementId: string): InternalRe
 	const e = getEngagement(app, engagementId);
 	const rows = app.sqlite
 		.prepare(
-			`${INT_SELECT} AND s.auditee_id = ? AND (s.engagement_id = ? OR ?)
+			`${INT_SELECT} AND s.auditee_id = ? AND ${OWN_OR_CARRIED}
 			 ORDER BY CAST(substr(r.ref_code, 5) AS INTEGER), r.ref_code`
 		)
 		.all(e.auditeeId, e.id, e.carryOverInternal ? 1 : 0) as Row[];
@@ -137,7 +159,8 @@ export function carryOverCandidates(app: AppDatabase, engagementId: string): Int
 	const e = getEngagement(app, engagementId);
 	const rows = app.sqlite
 		.prepare(
-			`${INT_SELECT} AND s.auditee_id = ? AND (s.engagement_id IS NULL OR s.engagement_id <> ?) AND r.status = 'confirmed'`
+			`${INT_SELECT} AND s.auditee_id = ? AND (s.engagement_id IS NULL OR s.engagement_id <> ?)
+			   AND r.status = 'confirmed' AND ${NEWEST}`
 		)
 		.all(e.auditeeId, e.id) as Row[];
 	return rows.map((r) => toInternal(app, r, e.id));
@@ -163,7 +186,12 @@ export function getInternal(app: AppDatabase, engagementId: string, id: string):
 }
 
 /** The internal source for one auditee document in this engagement, created on first use. */
-function internalSource(app: AppDatabase, actor: Actor, e: Engagement, artifactId: string | null): string {
+export function internalSource(
+	app: AppDatabase,
+	actor: Actor,
+	e: Engagement,
+	artifactId: string | null
+): string {
 	const existing = app.sqlite
 		.prepare(
 			`SELECT id FROM source WHERE deleted = 0 AND auditee_id = ? AND engagement_id = ? AND artifact_id IS ?`
@@ -387,6 +415,7 @@ export function keepInternal(
 	requireHuman(actor, 'Keeping an internal requirement after a new version');
 	const r = getInternal(app, engagementId, id);
 	if (r.recheck !== 'needs_review') throw new ValidationError('This requirement does not need review.');
+	if (r.recheckProposal) throw new ValidationError(`Accept or reject the proposal for ${r.refCode} first.`);
 	if (options.useNewPassage && !r.recheckPassage)
 		throw new ValidationError('No close passage was found in the new version; edit the quote instead.');
 	// With the new passage as its quote, the section is where that passage sits in the new text.
@@ -408,6 +437,8 @@ export function keepInternal(
 		{
 			recheck: null,
 			recheck_passage: null,
+			recheck_proposal: null,
+			recheck_reason: null,
 			status: 'confirmed',
 			...(options.useNewPassage ? { quote: r.recheckPassage } : {}),
 			...(section ? { locator: section } : {})
@@ -422,6 +453,129 @@ export function removeAfterRecheck(app: AppDatabase, actor: Actor, engagementId:
 	const r = getInternal(app, engagementId, id);
 	if (r.recheck !== 'needs_review') throw new ValidationError('This requirement does not need review.');
 	deleteEntity(app, actor, requirementDefinition, id, r.version, 'Removed: not in the new version');
+}
+
+/**
+ * AI's verdict on a requirement that needs review after a new version (#76): an update (new wording,
+ * quote and section from the new text) or a removal, with the reason. Stored as a proposal on the
+ * requirement; the auditor accepts or rejects it. A quote must be found in the new version.
+ */
+export function proposeRecheck(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	id: string,
+	input: {
+		action: 'update' | 'remove';
+		reason: string;
+		title?: string;
+		text?: string | null;
+		quote?: string | null;
+		section?: string | null;
+	}
+): InternalRequirement {
+	const r = getInternal(app, engagementId, id);
+	if (r.carriedOver)
+		throw new ValidationError(`${r.refCode} comes from an earlier engagement; it is not rechecked here.`);
+	if (r.recheck !== 'needs_review')
+		throw new ValidationError(`${r.refCode} does not need review after a new version.`);
+	const reason = str(input.reason);
+	if (!reason) throw new ValidationError('Say why, citing the new version.', { reason: 'Required' });
+	const patch: Row = { status: 'proposed', recheck_proposal: input.action, recheck_reason: reason };
+	if (input.action === 'update') {
+		const text = r.artifactId
+			? ((
+					app.sqlite.prepare('SELECT text FROM artifact_text WHERE artifact_id = ?').get(r.artifactId) as
+						{ text: string } | undefined
+				)?.text ?? '')
+			: '';
+		if (input.title !== undefined) patch.title = input.title;
+		if (input.text !== undefined) patch.text = input.text;
+		if (input.quote) {
+			const at = findQuote(text, input.quote);
+			if (!at)
+				throw new ValidationError(
+					`The quote for ${r.refCode} is not in the new version; quote its words exactly.`
+				);
+			patch.quote = input.quote;
+			patch.locator = input.section || movedSection(r.section, sectionAt(text, at.start)) || r.section;
+		} else if (input.section !== undefined) patch.locator = input.section;
+		if (!('title' in patch || 'text' in patch || 'quote' in patch || 'locator' in patch))
+			throw new ValidationError(`Give the new wording, quote or section for ${r.refCode}.`);
+	}
+	updateEntity(app, actor, requirementDefinition, id, r.version, patch);
+	return getInternal(app, engagementId, id);
+}
+
+/** Accept AI's recheck proposal: the update becomes the accepted requirement, or the removal is made. */
+export function acceptRecheckProposal(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	id: string
+): 'updated' | 'removed' {
+	requireHuman(actor, 'Accepting a recheck proposal');
+	const r = getInternal(app, engagementId, id);
+	if (!r.recheckProposal) throw new ValidationError(`There is no proposal for ${r.refCode}.`);
+	return app.sqlite.transaction(() => {
+		if (r.recheckProposal === 'remove') {
+			deleteEntity(
+				app,
+				actor,
+				requirementDefinition,
+				id,
+				r.version,
+				`Removed after the new version: ${r.recheckReason ?? ''}`.trim()
+			);
+			return 'removed' as const;
+		}
+		updateEntity(
+			app,
+			actor,
+			requirementDefinition,
+			id,
+			r.version,
+			{
+				status: 'confirmed',
+				recheck: null,
+				recheck_passage: null,
+				recheck_proposal: null,
+				recheck_reason: null
+			},
+			'Update after the new version accepted'
+		);
+		return 'updated' as const;
+	})();
+}
+
+/** Reject AI's recheck proposal: the requirement goes back to how it was, still needing review. */
+export function rejectRecheckProposal(
+	app: AppDatabase,
+	actor: Actor,
+	engagementId: string,
+	id: string
+): void {
+	requireHuman(actor, 'Rejecting a recheck proposal');
+	const r = getInternal(app, engagementId, id);
+	if (!r.recheckProposal) throw new ValidationError(`There is no proposal for ${r.refCode}.`);
+	const before = (
+		app.sqlite
+			.prepare(
+				`SELECT version, snapshot FROM revision WHERE entity_type = 'requirement' AND entity_id = ? AND version < ?
+				  ORDER BY version DESC`
+			)
+			.all(id, r.version) as { version: number; snapshot: string }[]
+	).find((x) => !(JSON.parse(x.snapshot) as Row).recheck_proposal);
+	if (!before) throw new ValidationError(`${r.refCode} has no version from before the proposal.`);
+	revertEntity(
+		app,
+		actor,
+		requirementDefinition,
+		id,
+		r.version,
+		before.version,
+		'Proposal rejected; needs review'
+	);
 }
 
 export function acceptAllInternal(app: AppDatabase, actor: Actor, engagementId: string): number {

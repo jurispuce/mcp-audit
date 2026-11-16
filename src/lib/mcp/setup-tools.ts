@@ -9,7 +9,7 @@ import {
 	listArtifacts,
 	registerTextArtifact
 } from '#lib/domain/artifacts.ts';
-import { registerNewTextVersion } from '#lib/domain/document-versions.ts';
+import { recheckComparison, registerNewTextVersion } from '#lib/domain/document-versions.ts';
 import { capacity } from '#lib/domain/plan-inputs.ts';
 import { recordSoa, soaCheck } from '#lib/domain/soa.ts';
 import { getEngagement, listEngagements, listScopes, type Engagement } from '#lib/domain/engagements.ts';
@@ -19,6 +19,7 @@ import {
 	addInternal,
 	getInternal,
 	listInternal,
+	proposeRecheck,
 	setImplements,
 	updateInternal
 } from '#lib/domain/internal.ts';
@@ -497,7 +498,9 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 				replaces: z
 					.string()
 					.optional()
-					.describe('Id of the document (from list_artifacts) this text is a new version of.')
+					.describe(
+						'Id of the document this text is a new version of: from list_artifacts, or, for a document of an earlier engagement whose internal requirements are carried over, the document id list_internal_requirements gives.'
+					)
 			}
 		},
 		({ engagement_id, title, text, mentioned, kind, language, received_from, filename, replaces }) =>
@@ -533,6 +536,99 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 							filename: filename ?? null
 						});
 				return { id: a.id, title: a.displayName, state: a.state, text: a.textStatus };
+			})
+	);
+
+	// ---- Recheck after a new version (#76)
+
+	server.registerTool(
+		'compare_with_new_version',
+		{
+			title: 'Compare internal requirements with the new version',
+			description:
+				"The internal requirements that need review after a new version of their document: each one's old quote with the text around it in the previous version, and the closest passage of the new version with the text around it. Use it to decide, for each, whether the rule changed (propose an update with a quote from the new text) or is gone (propose removing it), with propose_recheck.",
+			inputSchema: {
+				engagement_id: engagementId,
+				artifact_id: z.string().optional().describe('Only the requirements of this new version.')
+			},
+			annotations: { readOnlyHint: true }
+		},
+		({ engagement_id, artifact_id }) =>
+			run(() => ({
+				requirements: recheckComparison(app, engagement(engagement_id).id, {
+					artifactId: artifact_id
+				}).map((r) => ({
+					id: r.id,
+					ref: r.ref,
+					title: r.title,
+					text: r.text,
+					old_quote: r.quote,
+					section: r.section,
+					document: r.document,
+					previous_document: r.previousDocument,
+					previous_context: r.previousContext,
+					closest_passage: r.closestPassage,
+					closest_section: r.closestSection,
+					new_context: r.newContext,
+					proposal: r.proposal
+				}))
+			}))
+	);
+
+	server.registerTool(
+		'propose_recheck',
+		{
+			title: 'Propose the outcome of a recheck',
+			description:
+				'For internal requirements that need review after a new version: propose an update (new title or text, and a quote copied exactly from the new version; the section follows the quote) or removal, each with a reason citing the new version. Stored as a proposal the auditor accepts or rejects. A quote not found in the new version is refused.',
+			inputSchema: {
+				engagement_id: engagementId,
+				items: z
+					.array(
+						z.object({
+							ref: z.string().describe('INT-n from compare_with_new_version.'),
+							action: z.enum(['update', 'remove']),
+							reason: z.string().min(1).describe('Why, citing the new version (section, words).'),
+							title: z.string().optional(),
+							text: z.string().nullable().optional(),
+							quote: z.string().optional().describe('Exact words from the new version.'),
+							section: z.string().optional()
+						})
+					)
+					.min(1)
+					.max(100)
+			}
+		},
+		({ engagement_id, items }) =>
+			run(() => {
+				const e = engagement(engagement_id);
+				const own = new Map(
+					listInternal(app, e.id)
+						.filter((r) => !r.carriedOver)
+						.map((r) => [r.refCode, r.id])
+				);
+				// One by one, so a refused item does not undo the others; refusals come back to correct.
+				return {
+					results: items.map((it) => {
+						const id = own.get(it.ref);
+						if (!id) return { ref: it.ref, ok: false, error: `No internal requirement ${it.ref} here.` };
+						try {
+							const r = proposeRecheck(app, actor, e.id, id, {
+								action: it.action,
+								reason: it.reason,
+								...(it.title !== undefined ? { title: it.title } : {}),
+								...(it.text !== undefined ? { text: it.text } : {}),
+								...(it.quote !== undefined ? { quote: it.quote } : {}),
+								...(it.section !== undefined ? { section: it.section } : {})
+							});
+							return { ref: r.refCode, ok: true, proposal: r.recheckProposal, section: r.section };
+						} catch (err) {
+							if (err instanceof ValidationError || err instanceof NotFoundError)
+								return { ref: it.ref, ok: false, error: err.message };
+							throw err;
+						}
+					})
+				};
 			})
 	);
 

@@ -52,6 +52,8 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 ### Set-up, Documents
 - Upload one or many files at once with no metadata. Title and kind are edited in the list afterwards.
 - "Extract requirements" proposes internal requirements with document, section and the external requirement implemented; accept, reject, accept all.
+- After a new version of a document (#76), a banner says how many internal requirements need review after it. **Recheck against new version** has AI compare each with the new text and propose an update (with a quote from the new version) or a removal, with the reason; the auditor accepts or rejects each, alone or selected together. Rejecting leaves it to the auditor: keep, use the new passage, or remove.
+- Documents of earlier engagements whose internal requirements are carried over are listed under **From earlier engagements**, with **Upload new version**: the requirements are copied into this engagement under the same INT codes and checked against the new text; the earlier engagement keeps its records, and carry-over from then on takes the newest version. Only accepted, reviewed requirements are carried over.
 - Set-up, Requirements, for ISO/IEC 27001 and 27701 audits: upload the Statement of Applicability; "Check scope against SoA" records its lines and flags selected controls it excludes or does not list. The auditor keeps each in scope with a reason, or removes it (#81).
 - Set-up, Risks: upload the auditee's risk register (PDF, Excel, Word, CSV or Markdown); "Extract risks" proposes its risks with level, description and affected requirements. Proposed risks set no criticality until accepted (#78).
 - Add an internal requirement by hand.

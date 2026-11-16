@@ -293,3 +293,74 @@ test('ISO 27001: upload the SoA, check the scope against it with AI, keep or rem
 	await expect(panel).toContainText('Every conflict with the SoA is decided.');
 	await expect(panel.getByTestId('soa-A.7.2')).toHaveCount(0);
 });
+
+test('Recheck against new version proposes an update or a removal; the auditor accepts or rejects each (#76)', async ({
+	page,
+	baseURL
+}) => {
+	const e = await sampleCopy(page.request);
+	const file = (name: string, text: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
+	await page.goto(`/e/${e.id}/setup/documents`);
+	await page
+		.getByLabel('Upload documents')
+		.setInputFiles(
+			file('mfa-v1.txt', '1 Access\n1.1 MFA\nAdmins use MFA.\n1.2 Tokens\nHardware tokens are issued.\n')
+		);
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByText('1 document added.')).toBeVisible();
+	const client = await mcpClient(baseURL!, await createToken(page, 'Recheck rules'));
+	const { artifacts } = (await call(client, 'list_artifacts', { engagement_id: e.id })) as {
+		artifacts: { id: string; title: string }[];
+	};
+	const v1 = artifacts.find((a) => a.title === 'mfa-v1.txt')!;
+	await call(client, 'upsert_internal_requirements', {
+		engagement_id: e.id,
+		artifact_id: v1.id,
+		requirements: [
+			{ title: 'Admins use MFA', quote: 'Admins use MFA.', section: '1.1' },
+			{ title: 'Hardware tokens', quote: 'Hardware tokens are issued.', section: '1.2' }
+		]
+	});
+	await client.close();
+	await page.goto(`/e/${e.id}/setup/documents`);
+	await page.getByRole('button', { name: 'Accept all' }).first().click();
+	await expect(page.getByText('2 proposed internal requirements accepted.')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Upload new version of mfa-v1.txt' }).click();
+	await page
+		.getByLabel('New version of mfa-v1.txt')
+		.setInputFiles(file('mfa-v2.txt', '2 Access\n2.1 MFA\nAll users and admins use MFA for every system.\n'));
+	await page.getByRole('button', { name: 'Upload new version', exact: true }).click();
+	await expect(page.getByTestId('review-banner')).toContainText(
+		'2 internal requirements need review after a new version of mfa-v1.txt.'
+	);
+
+	await runAction(page, 'recheck_internal', 'Recheck against new version');
+	await page.reload();
+	await expect(page.getByTestId('review-banner')).toContainText('2 proposals wait for you');
+	const proposals = page.getByRole('list', { name: 'Proposals after a new version' });
+	await expect(proposals.getByRole('article')).toHaveCount(2);
+	const mfa = proposals.getByRole('article').filter({ hasText: 'Admins use MFA' });
+	// The scripted model proposes the closest passage as the new quote; the section follows it.
+	await expect(mfa.getByTestId('recheck-proposal')).toContainText(
+		'“Admins use MFA.” → “admins use MFA” § 1.1 → 2.1'
+	);
+	await expect(mfa.getByTestId('recheck-proposal')).toContainText(
+		'Why: Reworded in the new version, section 2.1.'
+	);
+	const ref = (await mfa.locator('.au-ref').first().textContent())!.split(' ')[0]!;
+	await mfa.getByRole('button', { name: `Accept the proposal for ${ref}` }).click();
+	await expect(page.getByText('Update accepted.')).toBeVisible();
+	await expect(page.getByRole('list', { name: 'Internal requirements', exact: true })).toContainText(
+		'mfa-v2.txt § 2.1'
+	);
+
+	const tokens = proposals.getByRole('article').filter({ hasText: 'Hardware tokens' });
+	const ref2 = (await tokens.locator('.au-ref').first().textContent())!.split(' ')[0]!;
+	await tokens.getByRole('button', { name: `Reject the proposal for ${ref2}` }).click();
+	await expect(page.getByText('Proposal rejected; the requirement still needs review.')).toBeVisible();
+	await expect(
+		page.getByRole('list', { name: 'Internal requirements to review' }).getByRole('article')
+	).toContainText(['Hardware tokens']);
+	await expect(page.getByTestId('review-banner')).toContainText('1 internal requirement needs review');
+});

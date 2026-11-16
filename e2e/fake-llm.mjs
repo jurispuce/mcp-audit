@@ -104,6 +104,27 @@ const SCRIPTS = {
 			return [toolCall('upsert_risks', { engagement_id: ctx.engagement_id, risks })];
 		}
 	],
+	recheck_internal: [
+		({ ctx }) => [
+			toolCall('compare_with_new_version', {
+				engagement_id: ctx.engagement_id,
+				...(ctx.artifact_id ? { artifact_id: ctx.artifact_id } : {})
+			})
+		],
+		({ ctx, results }) => {
+			const items = (results[0]?.requirements ?? []).map((r) =>
+				r.closest_passage
+					? {
+							ref: r.ref,
+							action: 'update',
+							quote: r.closest_passage,
+							reason: `Reworded in the new version${r.closest_section ? `, section ${r.closest_section}` : ''}.`
+						}
+					: { ref: r.ref, action: 'remove', reason: 'The new version no longer has this rule.' }
+			);
+			return items.length ? [toolCall('propose_recheck', { engagement_id: ctx.engagement_id, items })] : null;
+		}
+	],
 	check_soa: [
 		({ ctx }) => [
 			toolCall('list_artifacts', { engagement_id: ctx.engagement_id }),

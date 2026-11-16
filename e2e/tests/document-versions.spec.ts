@@ -1,4 +1,4 @@
-import { ADMIN, expect, loginAs, sampleCopy, seed, test } from '../helpers';
+import { ADMIN, createEngagement, expect, loginAs, sampleCopy, seed, test, unique } from '../helpers';
 import { call, createToken, mcpClient } from '../mcp-helpers';
 
 /** #76: internal requirements when the auditee's documents change. */
@@ -146,4 +146,67 @@ test('a new version rechecks the internal requirements: unchanged ones move, the
 		accepted.getByTestId(/^internal-/).filter({ hasText: 'Minimum password length' })
 	).toContainText('pw-v2.txt § 5.1');
 	await expect(accepted).toContainText('“Passwords have at least 14 characters”');
+});
+
+test('a banner names the new version with requirements to review; carry-over takes the newest version', async ({
+	page
+}) => {
+	const file = (name: string, text: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
+	const auditee = unique('Carry client');
+	// The first engagement: a policy with one accepted rule.
+	await createEngagement(page, unique('Audit 2026'), auditee);
+	const first = page.url();
+	await page.goto(`${first}/setup/documents`);
+	await page
+		.getByLabel('Upload documents')
+		.setInputFiles(file('backup-v1.txt', '2 Backups\n2.1 Daily\nBackups run every night.\n'));
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByText('1 document added.')).toBeVisible();
+	await page.getByRole('button', { name: 'Add internal requirement' }).click();
+	await page.getByLabel('Requirement', { exact: true }).fill('Nightly backups');
+	await page.getByLabel('Quote in the original language (optional)').fill('Backups run every night.');
+	await page.getByLabel('Document', { exact: true }).selectOption({ label: 'backup-v1.txt' });
+	await page.getByLabel('Section (optional)').fill('2.1');
+	await page.getByRole('button', { name: 'Add internal requirement' }).click();
+	await expect(page.getByText('Internal requirement added.')).toBeVisible();
+
+	// The next engagement with the same auditee carries the rule over, then gets the new version.
+	await createEngagement(page, unique('Audit 2027'), auditee);
+	await page.goto(`${page.url()}/setup/documents`);
+	await page.getByTestId('carry-over').getByRole('button', { name: 'Carry them over' }).click();
+	await expect(page.getByRole('list', { name: 'Internal requirements', exact: true })).toContainText(
+		'carried over'
+	);
+	const carried = page.getByTestId('carried-backup-v1.txt');
+	await expect(carried).toContainText('1 internal requirement carried over');
+	await carried.getByRole('button', { name: 'Upload new version of backup-v1.txt' }).click();
+	await page
+		.getByLabel('New version of backup-v1.txt')
+		.setInputFiles(
+			file('backup-v2.txt', '3 Backups\n3.1 Daily\nBackups run every night and are tested monthly.\n')
+		);
+	await page.getByRole('button', { name: 'Upload new version', exact: true }).click();
+	await expect(
+		page.getByText(
+			'backup-v2.txt added as the new version. Internal requirements checked against it: 1 needs review.'
+		)
+	).toBeVisible();
+	await expect(page.getByTestId('carried-backup-v1.txt')).toHaveCount(0);
+	await expect(page.getByTestId('review-banner')).toContainText(
+		'1 internal requirement needs review after a new version of backup-v1.txt.'
+	);
+	const review = page.getByRole('list', { name: 'Internal requirements to review' });
+	const card = review.getByRole('article').filter({ hasText: 'Nightly backups' });
+	await expect(card).toContainText('backup-v2.txt');
+	await card.getByRole('button', { name: /^Use the new passage for / }).click();
+	await expect(page.getByTestId('review-banner')).toHaveCount(0);
+	const own = page.getByRole('list', { name: 'Internal requirements', exact: true });
+	await expect(own).toContainText('backup-v2.txt § 3.1');
+	await expect(own).not.toContainText('carried over');
+
+	// The first engagement keeps its own record of the old version.
+	await page.goto(`${first}/setup/documents`);
+	const before = page.getByRole('list', { name: 'Internal requirements', exact: true });
+	await expect(before).toContainText('backup-v1.txt § 2.1');
+	await expect(page.getByTestId('document-backup-v1.txt')).not.toContainText('Replaced by');
 });

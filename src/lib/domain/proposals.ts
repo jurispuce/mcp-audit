@@ -4,7 +4,16 @@ import { NotFoundError, ValidationError } from './errors';
 import { confirmLink, listLinks, removeLink } from './execution';
 import { acceptProposal, listFindings, rejectProposal } from './findings';
 import { requireHuman } from './guards';
-import { acceptInternal, keepInternal, listInternal, rejectInternal, removeAfterRecheck } from './internal';
+import {
+	acceptInternal,
+	acceptRecheckProposal,
+	getInternal,
+	keepInternal,
+	listInternal,
+	rejectInternal,
+	rejectRecheckProposal,
+	removeAfterRecheck
+} from './internal';
 import { acceptPerson, listPeople, rejectPerson } from './people';
 import {
 	acceptEvent,
@@ -161,10 +170,18 @@ export function listProposals(app: AppDatabase, engagementId: string, type?: Pro
 				type: 'recheck',
 				id: r.id,
 				title: `${r.refCode} ${r.title}`,
-				detail: [
-					r.quote ? `Quote not found in ${r.sourceTitle}` : `No quote to check against ${r.sourceTitle}`,
-					r.recheckPassage ? `closest: “${r.recheckPassage.slice(0, 160)}”` : ''
-				]
+				detail: (r.recheckProposal
+					? [
+							r.recheckProposal === 'remove'
+								? 'Proposed: remove it'
+								: `Proposed: update it${r.quote ? ` to “${r.quote.slice(0, 160)}”` : ''}${r.section ? ` § ${r.section}` : ''}`,
+							r.recheckReason ?? ''
+						]
+					: [
+							r.quote ? `Quote not found in ${r.sourceTitle}` : `No quote to check against ${r.sourceTitle}`,
+							r.recheckPassage ? `closest: “${r.recheckPassage.slice(0, 160)}”` : ''
+						]
+				)
 					.filter(Boolean)
 					.join(' · '),
 				path: '/setup/documents',
@@ -304,7 +321,10 @@ export function acceptProposalItem(
 			acceptInternal(app, actor, engagementId, id);
 			break;
 		case 'recheck':
-			keepInternal(app, actor, engagementId, id);
+			// With AI's proposal, accept it; without, keep the requirement as it is.
+			if (getInternal(app, engagementId, id).recheckProposal)
+				acceptRecheckProposal(app, actor, engagementId, id);
+			else keepInternal(app, actor, engagementId, id);
 			break;
 		case 'event':
 			acceptEvent(app, actor, engagementId, id);
@@ -340,7 +360,10 @@ export function rejectProposalItem(
 			rejectInternal(app, actor, engagementId, id);
 			break;
 		case 'recheck':
-			removeAfterRecheck(app, actor, engagementId, id);
+			// With AI's proposal, reject it (the requirement still needs review); without, remove it.
+			if (getInternal(app, engagementId, id).recheckProposal)
+				rejectRecheckProposal(app, actor, engagementId, id);
+			else removeAfterRecheck(app, actor, engagementId, id);
 			break;
 		case 'event':
 			rejectEvent(app, actor, engagementId, id);
