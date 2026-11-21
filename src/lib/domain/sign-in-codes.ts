@@ -81,7 +81,8 @@ export function requestSignInCode(
 	recordFailure(app, keys[1]!, POLICIES.codeAddress, now);
 
 	const user = app.sqlite
-		.prepare('SELECT id, name FROM "user" WHERE email = ? AND active = 1 AND deleted = 0')
+		// Someone invited who has not joined yet (#90) gets in by their invitation link only.
+		.prepare('SELECT id, name FROM "user" WHERE email = ? AND active = 1 AND deleted = 0 AND invited = 0')
 		.get(address) as { id: string; name: string } | undefined;
 	const token = randomBytes(32).toString('base64url');
 	const code = String(randomInt(0, 1_000_000)).padStart(6, '0');

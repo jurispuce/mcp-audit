@@ -183,6 +183,13 @@
       "when": 1795278531276,
       "tag": "0025_sign_in_code",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1795288453362,
+      "tag": "0026_invitations",
+      "breakpoints": true
     }
   ]
 }

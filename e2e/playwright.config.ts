@@ -3,13 +3,17 @@ import path from 'node:path';
 
 /**
  * End-to-end tests run against a real server with a fresh data directory.
- *   Locally:  npm run build && npm run e2e         (starts `node build` twice: normal and first-start)
- *   In CI:    E2E_BASE_URL=http://127.0.0.1:3000 E2E_FIRST_START_URL=http://127.0.0.1:3001 npm run e2e
+ *   Locally:  npm run build && npm run e2e         (starts `node build` three times: normal,
+ *             first-start, and one with SIGN_IN_METHOD=passkey)
+ *   In CI:    E2E_BASE_URL=http://127.0.0.1:3000 E2E_FIRST_START_URL=http://127.0.0.1:3001
+ *             E2E_PASSKEY_MODE_URL=http://localhost:3003 npm run e2e
  *             against the Docker containers, each started with TEST_SEED_ENABLED=true.
  */
 const external = process.env.E2E_BASE_URL;
 const firstStart = process.env.E2E_FIRST_START_URL ?? (external ? undefined : 'http://127.0.0.1:4174');
 const baseURL = external ?? 'http://127.0.0.1:4173';
+/** An instance without passwords (#89, #90). Reached as localhost, where browsers allow passkeys. */
+const passkeyMode = process.env.E2E_PASSKEY_MODE_URL ?? (external ? undefined : 'http://localhost:4175');
 
 /** The scripted mail server (e2e/fake-smtp.mjs): the app sends to it, tests read what arrived. */
 const MAIL_ENV = {
@@ -44,7 +48,7 @@ export default defineConfig({
 		{
 			name: 'desktop',
 			use: { ...devices['Desktop Chrome'] },
-			testIgnore: [/first-start/, /\.phone\.spec\.ts$/]
+			testIgnore: [/first-start/, /\.phone\.spec\.ts$/, /\.passkey-mode\.spec\.ts$/]
 		},
 		{ name: 'phone', use: { ...devices['Pixel 7'] }, testMatch: /\.phone\.spec\.ts$/ },
 		...(firstStart
@@ -55,11 +59,26 @@ export default defineConfig({
 						testMatch: /first-start/
 					}
 				]
+			: []),
+		...(passkeyMode
+			? [
+					{
+						name: 'passkey-mode',
+						use: { ...devices['Desktop Chrome'], baseURL: passkeyMode },
+						testMatch: /\.passkey-mode\.spec\.ts$/
+					}
+				]
 			: [])
 	],
 	webServer: [
 		// Only the main instance has email set up; the first-start one shows the app without it.
-		...(external ? [] : [server('main', 4173, MAIL_ENV), server('first-start', 4174)]),
+		...(external
+			? []
+			: [
+					server('main', 4173, MAIL_ENV),
+					server('first-start', 4174),
+					server('passkey-mode', 4175, { ...MAIL_ENV, SIGN_IN_METHOD: 'passkey' })
+				]),
 		// With E2E_MAIL_URL set, the mail server is already running where the app can reach it.
 		...(process.env.E2E_MAIL_URL
 			? []

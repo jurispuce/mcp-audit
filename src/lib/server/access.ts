@@ -15,6 +15,9 @@ const PUBLIC_PATHS = [
 	/^\/oauth\/(token|register|revoke)\/?$/,
 	// Signing in with a passkey (#87): nobody is signed in yet when the browser asks.
 	/^\/api\/passkeys\/sign-in\/(options|verify)\/?$/,
+	// Joining by an invitation link (#90): the link is the key.
+	/^\/join\/?$/,
+	/^\/api\/passkeys\/join\/(options|verify)\/?$/,
 	/^\/_app\//
 ];
 

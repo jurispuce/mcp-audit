@@ -37,6 +37,17 @@ export async function addPasskey(name: string): Promise<{ id: string; name: stri
 	return post('/api/passkeys/register/verify', { response, name });
 }
 
+/** Join by invitation (#90): make a passkey for the invited person. Resolves to where to go next. */
+export async function joinWithPasskey(token: string, name: string): Promise<string> {
+	if (!passkeysSupported()) throw new Error(NOT_SUPPORTED);
+	const optionsJSON = await post<Parameters<typeof startRegistration>[0]['optionsJSON']>(
+		'/api/passkeys/join/options',
+		{ token }
+	);
+	const response = await startRegistration({ optionsJSON });
+	return (await post<{ redirect: string }>('/api/passkeys/join/verify', { token, response, name })).redirect;
+}
+
 /** What went wrong, in words. The browser reports a cancelled or timed-out prompt as "not allowed". */
 export function passkeyProblem(e: unknown, doing: 'sign-in' | 'add'): string {
 	const err = e as { name?: string; code?: string; message?: string };

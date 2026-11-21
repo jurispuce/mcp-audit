@@ -27,6 +27,8 @@ export interface User {
 	welcomed: boolean;
 	/** How many passkeys the person has (#87). */
 	passkeys: number;
+	/** Invited by email and not joined yet (#90). */
+	invited: boolean;
 	version: number;
 	createdAt: Date;
 	updatedAt: Date;
@@ -43,6 +45,7 @@ export function toUser(row: Row): User {
 		active: Number(row.active) === 1,
 		welcomed: Number(row.welcomed) === 1,
 		passkeys: Number(row.passkeys ?? 0),
+		invited: Number(row.invited ?? 0) === 1,
 		version: Number(row.current_version),
 		createdAt: new Date(Number(row.created_at)),
 		updatedAt: new Date(Number(row.updated_at))
@@ -75,7 +78,7 @@ function activeAdminCount(app: AppDatabase): number {
 export const userDefinition: EntityDefinition = registerEntity({
 	type: 'user',
 	table: 'user',
-	columns: ['name', 'email', 'role', 'active', 'welcomed', 'passkeys'],
+	columns: ['name', 'email', 'role', 'active', 'welcomed', 'passkeys', 'invited'],
 	fieldLabels: {
 		name: 'Name',
 		email: 'Email',
@@ -83,11 +86,12 @@ export const userDefinition: EntityDefinition = registerEntity({
 		active: 'Active',
 		welcomed: 'Welcome seen',
 		passkeys: 'Passkeys',
+		invited: 'Invitation open',
 		deleted: 'Deleted'
 	},
 	formatValue(column, value) {
 		if (column === 'role') return value === 'admin' ? 'Admin' : 'Auditor';
-		if (column === 'active' || column === 'deleted' || column === 'welcomed')
+		if (column === 'active' || column === 'deleted' || column === 'welcomed' || column === 'invited')
 			return Number(value) === 1 ? 'Yes' : 'No';
 		return value == null ? '' : String(value);
 	},
@@ -120,6 +124,9 @@ export const userDefinition: EntityDefinition = registerEntity({
 		else if (!existing) out.welcomed = 0;
 		if ('passkeys' in input) out.passkeys = Math.max(0, Math.trunc(Number(input.passkeys) || 0));
 		else if (!existing) out.passkeys = 0;
+		if ('invited' in input)
+			out.invited = input.invited === true || input.invited === 1 || input.invited === 'true' ? 1 : 0;
+		else if (!existing) out.invited = 0;
 		if (Object.keys(fields).length) throw new ValidationError('Check the highlighted fields.', fields);
 		return out;
 	},
@@ -269,6 +276,8 @@ export async function resetPassword(
 ): Promise<{ temporaryPassword: string }> {
 	requireAdmin(app, actor);
 	const user = getUser(app, id);
+	// An invited person joins by their link; a password handed over would leave the invitation open.
+	if (user.invited) throw new ValidationError('They have not joined yet. Send the invitation again instead.');
 	const temporaryPassword = generateTemporaryPassword();
 	await setPassword(app, id, temporaryPassword, true);
 	revokeSessions(app, id);

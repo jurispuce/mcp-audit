@@ -182,6 +182,19 @@ People can add a passkey on **Settings → Account** and then sign in with the d
 - Only the public half of a passkey is stored. Adding and removing one shows in the person's history by name, without key material.
 - Wrong or unknown passkeys count towards the same lock-outs as wrong passwords (docs/public-endpoint.md). Deactivating a person makes their passkeys unusable until they are reactivated.
 
+## Invitations by email
+
+Where email is set up (above), an admin adds people on **Settings → Users → Invite user**: name, email and role. Nobody passes a password on.
+
+- The person gets an email that names the instance and who invited them, with a link that works **once, for 7 days**. Opening the link uses nothing up (mail scanners open links); joining does.
+- On the join page they **create a passkey** and are signed in, where the address can have passkeys (https with a host name). On an instance with passwords they can set a password of their own instead; this is the only choice at an address without passkeys.
+- Until they join they are listed as **Invited** and cannot sign in any other way: no sign-in code is sent to them and no password can be reset for them. **Send invitation again** makes the earlier link useless; **Withdraw invitation** kills the link and deactivates the person, and a new invitation brings them back.
+- A link that was used, has expired, was replaced or withdrawn says which, and whom to ask. Correcting an invited person's email kills the link that went to the wrong mailbox; send the invitation again.
+- Only the hash of a link is stored. The person's history shows who invited them and when they joined.
+- If the mail server refuses the invitation, the admin is told why at once; the person stays listed as invited, to be sent the invitation again.
+
+Without email settings, **Add user** with a one-time password shown on screen stays the way to add people.
+
 ## Sign-in codes by email
 
 Where email is set up (above), the sign-in page offers **Email me a sign-in code**: the way in for a device without a passkey, and the way back after a lost one.

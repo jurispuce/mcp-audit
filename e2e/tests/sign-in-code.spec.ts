@@ -1,24 +1,21 @@
-import type { BrowserContext, Page } from '@playwright/test';
-import { ADMIN, addUser, expect, loginAs, mailTo, seed, signIn, test, unique, waitForMail } from '../helpers';
+import type { Page } from '@playwright/test';
+import {
+	ADMIN,
+	addUser,
+	expect,
+	loginAs,
+	mailTo,
+	seed,
+	signIn,
+	test,
+	unique,
+	virtualAuthenticator,
+	waitForMail
+} from '../helpers';
 
 /** #88: sign-in with a one-time code by email, against the scripted mail server. */
 const local = (baseURL: string) => baseURL.replace('127.0.0.1', 'localhost');
 const codeIn = (text: string) => /^\s{4}(\d{6})$/m.exec(text)![1]!;
-
-async function virtualAuthenticator(context: BrowserContext, page: Page) {
-	const cdp = await context.newCDPSession(page);
-	await cdp.send('WebAuthn.enable');
-	await cdp.send('WebAuthn.addVirtualAuthenticator', {
-		options: {
-			protocol: 'ctap2',
-			transport: 'internal',
-			hasResidentKey: true,
-			hasUserVerification: true,
-			isUserVerified: true,
-			automaticPresenceSimulation: true
-		}
-	});
-}
 
 async function askForCode(page: Page, base: string, email: string) {
 	await page.goto(`${base}/login`);

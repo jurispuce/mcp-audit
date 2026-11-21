@@ -50,7 +50,9 @@ const WRITERS: Record<string, string[]> = {
 	// Passkey public keys and one-time WebAuthn challenges (#87): credentials, like password hashes.
 	'src/lib/domain/passkeys.ts': ['passkey', 'webauthn_challenge'],
 	// One-time sign-in codes sent by email (#88), stored as hashes.
-	'src/lib/domain/sign-in-codes.ts': ['sign_in_code']
+	'src/lib/domain/sign-in-codes.ts': ['sign_in_code'],
+	// Invitation links sent by email (#90), stored as hashes.
+	'src/lib/domain/invitations.ts': ['invitation']
 };
 
 const SQL_WRITE =

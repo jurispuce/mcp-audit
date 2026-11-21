@@ -1,4 +1,11 @@
-import { expect, test as base, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import {
+	expect,
+	test as base,
+	type APIRequestContext,
+	type Browser,
+	type BrowserContext,
+	type Page
+} from '@playwright/test';
 
 /**
  * Playwright's test, with page.goto waiting until the page has hydrated: buttons that only open a
@@ -130,6 +137,36 @@ export async function waitForMail(
 		)
 		.toBe(true);
 	return found!;
+}
+
+/** A software authenticator in the browser, so a test can make and use passkeys. */
+export async function virtualAuthenticator(context: BrowserContext, page: Page) {
+	const cdp = await context.newCDPSession(page);
+	await cdp.send('WebAuthn.enable');
+	await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: {
+			protocol: 'ctap2',
+			transport: 'internal',
+			hasResidentKey: true,
+			hasUserVerification: true,
+			isUserVerified: true,
+			automaticPresenceSimulation: true
+		}
+	});
+}
+
+/** The invitation link in an email (#90). */
+export const joinLink = (mail: TestMail) => /(https?:\/\/\S+\/join\?t=[\w-]+)/.exec(mail.text)![1]!;
+
+/** An admin invites a person on Settings, Users; resolves to the email that went out. */
+export async function invite(page: Page, origin: string, name: string, email: string): Promise<TestMail> {
+	await page.goto(`${origin}/settings/users`);
+	await page.getByRole('button', { name: 'Invite user' }).click();
+	await page.getByLabel('Name').fill(name);
+	await page.getByLabel('Email').fill(email);
+	await page.getByRole('button', { name: 'Send invitation', exact: true }).click();
+	await expect(page.getByRole('status')).toContainText(`Invitation sent to ${email}`);
+	return waitForMail(page.request, email, 'invitation');
 }
 
 /**

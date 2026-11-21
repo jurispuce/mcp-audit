@@ -61,7 +61,12 @@ export const user = sqliteTable(
 		 * How many passkeys the person has (#87). The passkeys themselves are credentials and live
 		 * outside the snapshots; this count is what puts "Passkey added" in the person's history.
 		 */
-		passkeys: integer('passkeys').notNull().default(0)
+		passkeys: integer('passkeys').notNull().default(0),
+		/**
+		 * Invited by email and not joined yet (#90). Such a person cannot sign in any other way; with
+		 * `active` off, the invitation was withdrawn.
+		 */
+		invited: integer('invited', { mode: 'boolean' }).notNull().default(false)
 	},
 	(t) => [uniqueIndex('user_email').on(t.email)]
 );
@@ -761,6 +766,30 @@ export const signInCode = sqliteTable('sign_in_code', {
 	createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 	expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
 });
+
+/**
+ * Invitation links sent by email (#90). The id is the SHA-256 of the link's token; the token is
+ * never stored. A person has at most one open invitation: sending again replaces the earlier one.
+ * Rows are kept after use so a dead link can say what happened to it. Access infrastructure like
+ * sessions: not versioned (the person's history carries "Invited" and "Joined"). Written only by
+ * src/lib/domain/invitations.ts.
+ */
+export const invitation = sqliteTable(
+	'invitation',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		/** The address it was sent to; a link stops working when the person's email is changed. */
+		email: text('email').notNull(),
+		invitedBy: text('invited_by').notNull(),
+		state: text('state', { enum: ['open', 'used', 'withdrawn', 'replaced'] }).notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
+	},
+	(t) => [index('invitation_user').on(t.userId)]
+);
 
 /**
  * What the instance tried to send by email (#86): when, to whom, which kind, and whether the mail
