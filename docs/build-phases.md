@@ -1,6 +1,6 @@
 # Build phases
 
-Seven phases, one GitHub milestone each. Issues are in `issues/`, numbered in build order. MCP arrives in phase 3 so AI help starts early; the in-app buttons come last.
+Eight phases, one GitHub milestone each. Issues are in `issues/`, numbered in build order. MCP arrives in phase 3 so AI help starts early; the in-app buttons come last.
 
 | # | Milestone | Usable result |
 | --- | --- | --- |
@@ -11,6 +11,7 @@ Seven phases, one GitHub milestone each. Issues are in `issues/`, numbered in bu
 | 5 | Planning | An agreed audit plan with coverage and planned evidence |
 | 6 | Execution and conclusion | Events run on a phone, evidence linked, findings approved, reports exported |
 | 7 | In-app AI | The five AI buttons, running through LiteLLM |
+| 8 | External tenants | An isolated, pre-set instance per external audit firm; passkey sign-in with email recovery; an AI budget per tenant |
 
 Run one real, small engagement after phase 6 before starting phase 7.
 
