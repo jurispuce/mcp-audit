@@ -105,6 +105,13 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 - Mapping: choose the source to map and the existing source to map it to; each requirement shows its links to the target with type, coverage and the reason; accept, edit or reject each, accept all, or map by hand. A summary counts mapped requirements.
 - *Milestone 7:* "Extract requirements" and "Propose mapping" buttons run the same flow inside the app.
 
+### Guide (outside engagements, #84)
+- **Audit steps** (`/guide`): the audit as five steps (Set up, The auditee's own rules, Plan, Run, Conclude) over the eight phases, each an expandable card with what you do, what AI can do, what you decide and when it is done; a "Before you start" card for the instance. Opened from an engagement (`?e=`), each step shows that engagement's progress from the phase checklist, the first open step is expanded, and buttons open its screens.
+- **Connect your AI** (`/guide/connect`): this instance's MCP address with Copy, a note when the address is not https, and steps for one assistant at a time: Claude (custom connector), ChatGPT (custom MCP server, marked not yet verified), Claude Code and Claude Desktop on a private network. Then: check the connection, load the skills, reuse transcripts, what an assistant can never do.
+- **Download guide** returns the same guide as one self-contained HTML file with the instance's address, for people without an account. In it the reader can change the address and tick off steps (kept in their browser). `node scripts/build-guide.mjs` writes the same page without an instance.
+- **First-time welcome:** a person who has not dismissed it sees a welcome card on the engagements screen and on an engagement's Home, with the five steps, **Open the guide**, **Connect Claude or ChatGPT** and **Hide this welcome**; any of the three dismisses it for that person (`user.welcomed`, versioned). The guide page can show it again.
+- All of it comes from `src/lib/guide/content.ts`.
+
 ### Item sheet
 - Details, Comments, History for any record. History lists versions with author, time, channel and changed fields, and offers revert on every version except the current one.
 

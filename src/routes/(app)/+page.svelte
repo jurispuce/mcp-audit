@@ -4,6 +4,7 @@
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ItemCard from '#lib/components/ItemCard.svelte';
 	import LanguageSelect from '#lib/components/LanguageSelect.svelte';
+	import WelcomeCard from '#lib/components/guide/WelcomeCard.svelte';
 
 	let { data, form } = $props();
 	type Result = { message?: string; fields?: Record<string, string>; values?: Record<string, string> };
@@ -26,6 +27,8 @@
 			>
 		{/if}
 	</header>
+
+	<WelcomeCard />
 
 	{#if data.atLabel && data.engagements.length}
 		<p class="au-muted">Choose an engagement to open its {data.atLabel}.</p>
@@ -114,5 +117,6 @@
 	<nav class="au-phone-only au-list" aria-label="More">
 		<a class="au-btn" href="/library">Library</a>
 		<a class="au-btn" href="/settings">Settings</a>
+		<a class="au-btn" href="/guide">Guide</a>
 	</nav>
 </section>

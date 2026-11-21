@@ -41,7 +41,9 @@ test('every route from design/navigation.md exists', async ({ page }) => {
 	}
 });
 
-test('the rail shows the five destinations in audit order, then Library and Settings', async ({ page }) => {
+test('the rail shows the five destinations in audit order, then Library, Settings and Guide', async ({
+	page
+}) => {
 	await page.goto(`/e/${e}/setup/risks`);
 	const rail = page.locator('nav.au-rail');
 	await expect(rail).toBeVisible();
@@ -53,6 +55,7 @@ test('the rail shows the five destinations in audit order, then Library and Sett
 		'Findings',
 		'Library',
 		'Settings',
+		'Guide',
 		'Sign out'
 	]);
 	await expect(rail.getByRole('link', { name: 'Set-up' })).toHaveAttribute('aria-current', 'page');

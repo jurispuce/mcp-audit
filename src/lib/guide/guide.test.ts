@@ -1,0 +1,119 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+	AFTER,
+	CLIENTS,
+	PREPARE,
+	STEPS,
+	connectorReady,
+	desktopConfig,
+	fill,
+	rich,
+	stepProgress
+} from './content.ts';
+import { ADDRESS_PLACEHOLDER, GUIDE_TITLE, guideDocument, guideFragment } from './standalone.ts';
+
+const ROUTES = path.resolve(import.meta.dirname, '../../routes/(app)');
+const routeExists = (href: string) =>
+	existsSync(path.join(ROUTES, href.replace(/^\//, ''), '+page.svelte')) ||
+	existsSync(path.join(ROUTES, href.replace(/^\//, ''), '+page.server.ts'));
+
+describe('guide content (#84)', () => {
+	it('is five steps that cover the eight phases once each, and every screen is a real route', () => {
+		expect(STEPS.map((s) => s.number)).toEqual([1, 2, 3, 4, 5]);
+		expect(STEPS.flatMap((s) => s.phases).sort()).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+		for (const s of STEPS) {
+			expect(s.you.length, s.key).toBeGreaterThan(0);
+			expect(s.ai.length, s.key).toBeGreaterThan(0);
+			for (const screen of s.screens) expect(routeExists(`/e/[e]${screen.path}`), screen.path).toBe(true);
+		}
+		for (const link of [...PREPARE.items, ...AFTER].flatMap((x) => (x.link ? [x.link.href] : [])))
+			expect(routeExists(link), link).toBe(true);
+	});
+
+	it('names the buttons as the app does', async () => {
+		// Each **bold** span that names an AI action must be that action's label.
+		const { AI_ACTIONS } = await import('#lib/domain/ai-settings.ts');
+		const labels = new Set(Object.values(AI_ACTIONS).map((a) => a.label as string));
+		const named = STEPS.flatMap((s) => s.ai)
+			.flatMap((line) => rich(line))
+			.filter((p) => p.bold)
+			.map((p) => p.text);
+		expect(named.length).toBeGreaterThan(5);
+		for (const n of named) expect(labels.has(n) || n === 'Propose findings', n).toBe(true);
+	});
+
+	it("takes each step's state from the phases: done, then the first open one, then to do", () => {
+		const phases = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
+			number: n,
+			title: `P${n}`,
+			fact: '',
+			done: n <= 5
+		}));
+		const p = stepProgress(phases);
+		expect(STEPS.map((s) => p.get(s.key)!.state)).toEqual(['done', 'done', 'current', 'todo', 'todo']);
+		expect(p.get('setup')!.facts.map((f) => f.title)).toEqual(['P1', 'P2', 'P3', 'P4']);
+		// One phase of a step open: the step is not done.
+		phases[2]!.done = false;
+		expect(stepProgress(phases).get('setup')!.state).toBe('current');
+		expect(stepProgress(phases).get('rules')!.state).toBe('done');
+	});
+
+	it('fills the address into commands; the desktop bridge allows http only for an http address', () => {
+		const code = CLIENTS.find((c) => c.key === 'claude-code')!.steps[1]!.code!;
+		expect(fill(code, 'https://audit.example.com/mcp')).toBe(
+			'claude mcp add --transport http mcp-audit https://audit.example.com/mcp --header "Authorization: Bearer mcpa_yourtoken"'
+		);
+		expect(desktopConfig('http://audit.lan:3000/mcp')).toContain('--allow-http');
+		expect(desktopConfig('https://audit.example.com/mcp')).not.toContain('--allow-http');
+		expect(connectorReady('https://audit.example.com/mcp')).toBe(true);
+		expect(connectorReady('http://audit.lan:3000/mcp')).toBe(false);
+	});
+
+	it('marks the ChatGPT steps as not verified, and only those', () => {
+		expect(CLIENTS.map((c) => c.key)).toEqual(['claude', 'chatgpt', 'claude-code', 'claude-desktop']);
+		expect(CLIENTS.filter((c) => c.unverified).map((c) => c.key)).toEqual(['chatgpt']);
+		expect(CLIENTS.find((c) => c.key === 'chatgpt')!.unverified).toContain('Not yet verified with ChatGPT');
+	});
+});
+
+describe('standalone guide (#84)', () => {
+	const html = guideDocument({ mcpUrl: 'https://audit.example.com/mcp', version: '1.2.3' });
+
+	it('is one self-contained file with every step and assistant, and the instance address', () => {
+		expect(html.startsWith('<!doctype html>')).toBe(true);
+		expect(html).toContain(`<title>${GUIDE_TITLE}</title>`);
+		for (const s of STEPS) expect(html).toContain(`id="step-${s.key}"`);
+		for (const c of CLIENTS) expect(html).toContain(`id="client-${c.key}"`);
+		expect(html).toContain('value="https://audit.example.com/mcp"');
+		expect(html).toContain('claude mcp add --transport http mcp-audit https://audit.example.com/mcp');
+		expect(html).toContain('Not yet verified with ChatGPT');
+		expect(html).toContain('Made from mcp-audit 1.2.3.');
+		// Nothing is loaded from the network.
+		expect(html).not.toMatch(/<(?:script|link|img)[^>]+(?:src|href)=/);
+		expect(html).not.toContain('**');
+	});
+
+	it('without an address shows a placeholder, and as a fragment has no document skeleton', () => {
+		const f = guideFragment({ webFonts: true });
+		expect(f).not.toContain('<!doctype');
+		expect(f).not.toContain('<body');
+		expect(f.startsWith(`<title>${GUIDE_TITLE}</title>`)).toBe(true);
+		expect(f).toContain(ADDRESS_PLACEHOLDER);
+		expect(f).toContain('fonts.googleapis.com');
+		expect(f).toContain('id="mcp-note" role="status" hidden');
+		// A private http address: the note about connectors is shown.
+		expect(guideDocument({ mcpUrl: 'http://audit.lan:3000/mcp' })).toContain('id="mcp-note" role="status">');
+	});
+
+	it('escapes what it is given', () => {
+		const x = guideDocument({ mcpUrl: 'https://x.example/mcp"><script>alert(1)</script>' });
+		expect(x).not.toContain('<script>alert(1)');
+	});
+
+	it('carries a script that parses', () => {
+		const js = /<script>([\s\S]*)<\/script>/.exec(html)![1]!;
+		expect(() => new Function(js)).not.toThrow();
+	});
+});

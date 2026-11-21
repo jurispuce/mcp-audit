@@ -4,7 +4,7 @@ import { setPassword } from './auth';
 import { ForbiddenError } from './errors';
 import { builtInSources, importBuiltInSource } from './library-import';
 import { getSourceByCode } from './library';
-import { countUsers, createFirstAdmin, createUser, listUsers, type User } from './users';
+import { countUsers, createFirstAdmin, createUser, listUsers, setWelcomed, type User } from './users';
 import { createEngagement, listEngagements, listScopes, getEngagement, type Engagement } from './engagements';
 import { findRequirement } from './library';
 import { addPerson } from './people';
@@ -54,6 +54,11 @@ export async function seedTestData(
 			const { user } = await createUser(app, actor, spec);
 			await setPassword(app, user.id, SEED_PASSWORD, false);
 		}
+	}
+	// Seeded people are not first-timers: the welcome (#84) is for a person's real first sign-in.
+	for (const spec of Object.values(SEED_USERS)) {
+		const u = byEmail().get(spec.email);
+		if (u && !u.welcomed) setWelcomed(app, { userId: u.id, channel: 'ui' }, true);
 	}
 	users = byEmail();
 

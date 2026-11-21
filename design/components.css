@@ -345,3 +345,34 @@ details.au-item > summary { cursor: pointer; min-height: var(--touch-target); di
 .au-skill-edit--compare > * { flex: 1 1 22rem; }
 .au-mono { font-family: var(--font-mono); font-size: 13px; line-height: 18px; width: 100%; }
 
+
+/* Guide (#84): steps as expandable cards, the welcome, text to copy. */
+.au-guide-intro { font: 400 17px/26px var(--font-sans); max-width: 68ch; }
+.au-guide-rules { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
+.au-guide-rules li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4); border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius-sm); }
+.au-guide-choose { display: flex; flex-direction: column; gap: var(--space-2); }
+.au-guide-step > summary { gap: var(--space-3); list-style: none; }
+.au-guide-step > summary::-webkit-details-marker { display: none; }
+.au-guide-step > summary::after { content: '+'; margin-left: auto; font: 400 22px/1 var(--font-sans); color: var(--ink-muted); }
+.au-guide-step[open] > summary::after { content: '−'; }
+.au-guide-step > summary .au-badge { flex: none; }
+.au-guide-step__head { display: flex; flex-direction: column; min-width: 0; font-weight: 400; }
+.au-guide-step__head strong { font: 600 17px/24px var(--font-sans); }
+.au-guide-num { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-full); background: var(--accent); color: var(--accent-ink); font: 600 15px/1 var(--font-sans); }
+.au-guide-num--done { background: var(--ok); }
+.au-guide-num--plain { background: var(--surface-sunken); color: var(--ink-muted); }
+.au-guide-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
+.au-guide-cols section { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.au-guide-label { font: 600 12px/18px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-right: var(--space-2); }
+.au-guide-label--ai { color: var(--ai); }
+.au-guide-list { margin: 0; padding-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2); }
+.au-guide-list--steps { gap: var(--space-3); }
+.au-guide-list--steps li { min-width: 0; }
+.au-guide-facts { list-style: none; margin: 0; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); background: var(--surface-sunken); border-radius: var(--radius-md); }
+.au-guide-facts li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.au-welcome { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: var(--accent-soft); }
+.au-welcome__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.au-welcome__steps li { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; }
+.au-welcome__steps .au-guide-num { width: 24px; height: 24px; font-size: 13px; }
+.au-copybox { display: flex; align-items: flex-start; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-sunken); }
+.au-copybox__text { flex: 1; min-width: 0; margin: 0; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 13px/20px var(--font-mono); align-self: center; }

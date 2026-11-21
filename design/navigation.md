@@ -6,7 +6,7 @@ The app has five destinations inside an engagement, in the order the audit runs:
 
 | Level | What | Where it shows |
 | --- | --- | --- |
-| 0 | Engagements list, Library, Settings | Engagement switcher; rail footer on desktop |
+| 0 | Engagements list, Library, Settings, Guide | Engagement switcher; rail footer on desktop; the engagements screen's More list on a phone |
 | 1 | Five destinations of the open engagement | Rail on desktop, bottom bar on a phone |
 | 2 | Tabs inside a destination | Tab row under the screen title |
 | Item | Any record, opened as an ItemSheet | Right-hand panel on desktop, full screen on a phone |
@@ -38,6 +38,9 @@ Copy these as the route table. `:e` is the engagement id.
 /library/mapping               Map one source to another; review proposed links, map by hand
 /library/import                Library documents, import with Claude, YAML import
 /settings                      Account, Users and AI (admins), Access tokens
+/guide                         Audit steps; ?e=<engagement> shows its progress and opens its screens
+/guide/connect                 Connect your AI: Claude, ChatGPT, Claude Code, Claude Desktop
+/guide/download                The guide as one self-contained HTML file
 /e/:e                          Home (phase checklist)
 /e/:e/setup/requirements       Selection, scope handling per requirement
 /e/:e/setup/scopes

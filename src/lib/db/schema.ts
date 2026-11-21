@@ -54,7 +54,9 @@ export const user = sqliteTable(
 		name: text('name').notNull(),
 		email: text('email').notNull(),
 		role: text('role', { enum: ['admin', 'auditor'] }).notNull(),
-		active: integer('active', { mode: 'boolean' }).notNull().default(true)
+		active: integer('active', { mode: 'boolean' }).notNull().default(true),
+		/** The first-time welcome was dismissed (#84); set by the person themselves. */
+		welcomed: integer('welcomed', { mode: 'boolean' }).notNull().default(false)
 	},
 	(t) => [uniqueIndex('user_email').on(t.email)]
 );

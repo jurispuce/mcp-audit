@@ -4,6 +4,7 @@
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import LanguageSelect from '#lib/components/LanguageSelect.svelte';
 	import StaleNotice from '#lib/components/StaleNotice.svelte';
+	import WelcomeCard from '#lib/components/guide/WelcomeCard.svelte';
 
 	let { data, form } = $props();
 	type Result = {
@@ -59,6 +60,8 @@
 		<h1 class="au-screen__title">{e.name}</h1>
 	</header>
 
+	<WelcomeCard />
+
 	<section class="au-section" aria-labelledby="phases-title">
 		<div class="au-row au-between">
 			<h2 class="au-section__title" id="phases-title">Phases</h2>
@@ -86,11 +89,16 @@
 				</li>
 			{/each}
 		</ol>
-		{#if o.current}
-			<a class="au-btn au-btn--primary" href="{base}{o.current.href}" data-testid="continue"
-				>Continue: {o.current.next}</a
+		<div class="au-row">
+			{#if o.current}
+				<a class="au-btn au-btn--primary au-grow" href="{base}{o.current.href}" data-testid="continue"
+					>Continue: {o.current.next}</a
+				>
+			{/if}
+			<a class="au-btn au-btn--ghost" href="/guide?e={e.id}" data-testid="guide-link"
+				>See what to do in each step</a
 			>
-		{/if}
+		</div>
 	</section>
 
 	<section class="au-section" aria-labelledby="details-title">

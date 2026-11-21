@@ -23,6 +23,8 @@ export interface User {
 	email: string;
 	role: UserRole;
 	active: boolean;
+	/** The first-time welcome was dismissed (#84). */
+	welcomed: boolean;
 	version: number;
 	createdAt: Date;
 	updatedAt: Date;
@@ -37,6 +39,7 @@ export function toUser(row: Row): User {
 		email: String(row.email),
 		role: row.role as UserRole,
 		active: Number(row.active) === 1,
+		welcomed: Number(row.welcomed) === 1,
 		version: Number(row.current_version),
 		createdAt: new Date(Number(row.created_at)),
 		updatedAt: new Date(Number(row.updated_at))
@@ -69,11 +72,19 @@ function activeAdminCount(app: AppDatabase): number {
 export const userDefinition: EntityDefinition = registerEntity({
 	type: 'user',
 	table: 'user',
-	columns: ['name', 'email', 'role', 'active'],
-	fieldLabels: { name: 'Name', email: 'Email', role: 'Role', active: 'Active', deleted: 'Deleted' },
+	columns: ['name', 'email', 'role', 'active', 'welcomed'],
+	fieldLabels: {
+		name: 'Name',
+		email: 'Email',
+		role: 'Role',
+		active: 'Active',
+		welcomed: 'Welcome seen',
+		deleted: 'Deleted'
+	},
 	formatValue(column, value) {
 		if (column === 'role') return value === 'admin' ? 'Admin' : 'Auditor';
-		if (column === 'active' || column === 'deleted') return Number(value) === 1 ? 'Yes' : 'No';
+		if (column === 'active' || column === 'deleted' || column === 'welcomed')
+			return Number(value) === 1 ? 'Yes' : 'No';
 		return value == null ? '' : String(value);
 	},
 	parse(input, existing) {
@@ -100,15 +111,22 @@ export const userDefinition: EntityDefinition = registerEntity({
 		if ('active' in input)
 			out.active = input.active === true || input.active === 1 || input.active === 'true' ? 1 : 0;
 		else if (!existing) out.active = 1;
+		if ('welcomed' in input)
+			out.welcomed = input.welcomed === true || input.welcomed === 1 || input.welcomed === 'true' ? 1 : 0;
+		else if (!existing) out.welcomed = 0;
 		if (Object.keys(fields).length) throw new ValidationError('Check the highlighted fields.', fields);
 		return out;
 	},
 	authorize(app, actor, op, existing) {
 		if (op.op === 'delete') throw new ForbiddenError('Users are deactivated, not deleted.');
+		if (op.op === 'update' && 'welcomed' in op.data && existing?.id !== actor.userId)
+			throw new ForbiddenError("The welcome is each person's own to dismiss.");
 		if (isAdmin(app, actor)) return;
-		// Anyone may change their own name and email; nothing else.
+		// Anyone may change their own name and email, and dismiss their own welcome; nothing else.
 		const self = existing && existing.id === actor.userId;
-		const ownFields = op.op === 'update' && Object.keys(op.data).every((k) => k === 'name' || k === 'email');
+		const ownFields =
+			op.op === 'update' &&
+			Object.keys(op.data).every((k) => k === 'name' || k === 'email' || k === 'welcomed');
 		if (self && ownFields) return;
 		throw new ForbiddenError('Only an admin can change other users, roles or access.');
 	},
@@ -194,6 +212,26 @@ export function updateUser(
 	data: Partial<{ name: string; email: string; role: UserRole }>
 ): User {
 	return toUser(updateEntity(app, actor, userDefinition, id, baseVersion, data).row);
+}
+
+/**
+ * Dismiss the first-time welcome, or bring it back (#84). Each person does this for themselves; the
+ * choice follows them to every device.
+ */
+export function setWelcomed(app: AppDatabase, actor: Actor, welcomed: boolean): User {
+	const me = getUser(app, actor.userId);
+	if (me.welcomed === welcomed) return me;
+	return toUser(
+		updateEntity(
+			app,
+			actor,
+			userDefinition,
+			me.id,
+			me.version,
+			{ welcomed },
+			welcomed ? 'Welcome dismissed' : 'Welcome shown again'
+		).row
+	);
 }
 
 /** Deactivate or reactivate a user. Deactivating ends their sessions and revokes their tokens. */

@@ -72,6 +72,24 @@ This needs the app on a public https address (`docs/public-endpoint.md`): Anthro
 
 The connection lasts until you disconnect it in Settings, Access tokens, Connected apps, or an admin deactivates your account. Mobile uses the connectors added on the web.
 
+## 3c. ChatGPT as a custom MCP server
+
+Not yet verified with ChatGPT: these steps follow OpenAI's documentation of November 2026 ([Connecting custom MCP servers in ChatGPT](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt), [Add custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server)), and menu names may differ on your account. Like a Claude custom connector, it needs the app on a public https address, and you sign in instead of using a token.
+
+1. In ChatGPT: Plugins, the plus button, **Add custom MCP server**. On an older account: Settings, Connectors, Advanced, **Developer mode**, then create a connector.
+2. Name it "mcp-audit", enter `https://<your host>/mcp` and choose **OAuth** as the authentication. Leave client ID and secret empty: ChatGPT registers itself (`/oauth/register`).
+3. Accept the risk notice and create it. A window opens on mcp-audit: sign in if asked and choose **Allow access**.
+4. Install it, start a new chat and type `@mcp-audit`.
+
+What to know:
+
+- OpenAI limits who can add a custom MCP server. On Business, only admins and owners; on Enterprise and Edu, an admin grants "Create plugins with MCPs"; on personal plans, tools that change data may not be available.
+- ChatGPT asks you to confirm each action that changes data. Read-only tools are marked as such by mcp-audit.
+- The audit skills are packaged as Agent Skills for Claude. In ChatGPT, download a skill on Settings, Skills and paste its `SKILL.md` into a project's instructions.
+- Everything it writes is versioned as the app's registered name on behalf of you, and the connection is listed under Settings, Access tokens, Connected apps, where you can disconnect it.
+
+The same steps are in the app under **Guide, Connect your AI**, with your instance's address filled in.
+
 ## 4. Load the audit skills
 
 The audit skills tell Claude how to run each step with the mcp-audit tools: set up the engagement and risk list, analyse documents, find roles, build the plan, debrief events, review assurance and curate the library. They ask before they draft (for example the fieldwork time before a plan) and may research online.

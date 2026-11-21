@@ -23,8 +23,12 @@
 			? 'library'
 			: page.url.pathname.startsWith('/settings')
 				? 'settings'
-				: null
+				: page.url.pathname.startsWith('/guide')
+					? 'guide'
+					: null
 	);
+	// The guide keeps the engagement, so its steps show that engagement's progress.
+	const guideHref = $derived(engagement ? `/guide?e=${engagement.id}` : '/guide');
 </script>
 
 <a class="au-visually-hidden" href="#main">Skip to content</a>
@@ -67,6 +71,9 @@
 		</a>
 		<a class="au-nav" href="/settings" aria-current={outside === 'settings' ? 'page' : undefined}>
 			<Icon name="settings" />Settings
+		</a>
+		<a class="au-nav" href={guideHref} aria-current={outside === 'guide' ? 'page' : undefined}>
+			<Icon name="guide" />Guide
 		</a>
 		<div class="au-rail__foot">
 			<span class="au-muted">Signed in as {user.name}</span>
