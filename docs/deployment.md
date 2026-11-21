@@ -116,21 +116,23 @@ Work done since the upgrade is in the replaced data, which restore keeps in `pre
 
 All settings are environment variables in `.env`. Only the Compose ones (`BIND_ADDRESS`, `HOST_PORT`, `MCP_AUDIT_TAG`) are read by Docker; the rest reach the app.
 
-| Variable                                                              | Default           | Purpose                                                                                                                                                     |
-| --------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BIND_ADDRESS`                                                        | `127.0.0.1`       | Host address the port is published on. Use a LAN or VPN address to share.                                                                                   |
-| `HOST_PORT`                                                           | `3000`            | Port on the host.                                                                                                                                           |
-| `MCP_AUDIT_TAG`                                                       | `main`            | Image tag to run.                                                                                                                                           |
-| `ORIGIN`                                                              | empty             | Fixed public URL, for example `https://audit.example.lan`. Empty accepts any host; the protocol then comes from `X-Forwarded-Proto` and is http without it. |
-| `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH`       | empty             | Headers to trust behind a reverse proxy; `docker-compose.public.yml` sets them (docs/public-endpoint.md).                                                   |
-| `BODY_SIZE_LIMIT`                                                     | `100M`            | Largest request body, for uploading several documents at once. One file may be at most 50 MB.                                                               |
-| `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_ADMIN_NAME` | empty             | Create the first admin at first start instead of using `/setup`.                                                                                            |
-| `BACKUP_PASSPHRASE`                                                   | empty             | Required for backup and restore. At least 12 characters.                                                                                                    |
-| `LITELLM_BASE_URL`, `LITELLM_API_KEY`                                 | empty             | Default AI gateway address and key for the in-app AI actions. Settings, AI overrides them. See "In-app AI" below.                                           |
-| `TZ`                                                                  | `Europe/Riga`     | Time zone for logs and report dates.                                                                                                                        |
-| `TEST_SEED_ENABLED`                                                   | `false`           | Test environments only: seed data and a password-free test login. Never in production.                                                                      |
-| `DATA_DIR`                                                            | `/data`           | Where the database and files live inside the container. Leave as is.                                                                                        |
-| `HOST`, `PORT`                                                        | `0.0.0.0`, `3000` | Address and port inside the container. Leave as is.                                                                                                         |
+| Variable                                                                           | Default           | Purpose                                                                                                                                                     |
+| ---------------------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BIND_ADDRESS`                                                                     | `127.0.0.1`       | Host address the port is published on. Use a LAN or VPN address to share.                                                                                   |
+| `HOST_PORT`                                                                        | `3000`            | Port on the host.                                                                                                                                           |
+| `MCP_AUDIT_TAG`                                                                    | `main`            | Image tag to run.                                                                                                                                           |
+| `ORIGIN`                                                                           | empty             | Fixed public URL, for example `https://audit.example.lan`. Empty accepts any host; the protocol then comes from `X-Forwarded-Proto` and is http without it. |
+| `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH`                    | empty             | Headers to trust behind a reverse proxy; `docker-compose.public.yml` sets them (docs/public-endpoint.md).                                                   |
+| `BODY_SIZE_LIMIT`                                                                  | `100M`            | Largest request body, for uploading several documents at once. One file may be at most 50 MB.                                                               |
+| `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_ADMIN_NAME`              | empty             | Create the first admin at first start instead of using `/setup`.                                                                                            |
+| `BACKUP_PASSPHRASE`                                                                | empty             | Required for backup and restore. At least 12 characters.                                                                                                    |
+| `LITELLM_BASE_URL`, `LITELLM_API_KEY`                                              | empty             | Default AI gateway address and key for the in-app AI actions. Settings, AI overrides them. See "In-app AI" below.                                           |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | empty             | Mail server for invitations, sign-in codes and security notices. `SMTP_HOST` and `SMTP_FROM` switch email on. See "Email" below.                            |
+| `INSTANCE_NAME`                                                                    | `mcp-audit`       | What this instance is called in emails, so a person with two instances can tell them apart.                                                                 |
+| `TZ`                                                                               | `Europe/Riga`     | Time zone for logs and report dates.                                                                                                                        |
+| `TEST_SEED_ENABLED`                                                                | `false`           | Test environments only: seed data and a password-free test login. Never in production.                                                                      |
+| `DATA_DIR`                                                                         | `/data`           | Where the database and files live inside the container. Leave as is.                                                                                        |
+| `HOST`, `PORT`                                                                     | `0.0.0.0`, `3000` | Address and port inside the container. Leave as is.                                                                                                         |
 
 ## In-app AI (optional)
 
@@ -144,6 +146,32 @@ The AI buttons (Derive roles, Extract requirements, Extract risks, Draft plan, P
 3. Per engagement, on Home, **Edit details**: "AI may work on this engagement" switches AI off entirely; "Model for in-app AI" limits the engagement to one checked model, for example a local one for confidential material.
 
 What a button does: the server sends the matching skill's instructions and a fixed set of the app's MCP tools to the model, and runs each tool call it returns through the same domain rules as an MCP client. Everything is written as "<model> on behalf of <you>" and stored as proposed; review it on the screen's proposal bar or on the engagement's Proposals list. Progress shows under the button, which can be cancelled; a failure says what went wrong. The documents a button reads are sent to the model provider behind the gateway, so choose the model per engagement accordingly.
+
+## Email (optional)
+
+The instance can send email: invitations, sign-in codes and security notices use it. Without these settings the app works as before, and whatever needs email says that it is off.
+
+1. Get an SMTP account from a mail service, with a sender address on a domain you control.
+2. In `.env`:
+
+   ```
+   SMTP_HOST=smtp.example.com
+   SMTP_PORT=587
+   SMTP_USER=your-smtp-user
+   SMTP_PASSWORD=your-smtp-password
+   SMTP_FROM=mcp-audit <audit@example.com>
+   INSTANCE_NAME=Our audit team
+   ```
+
+   - Port 587 upgrades the connection with STARTTLS; a user name and password are never sent without encryption. For port 465 (encrypted from the start) set `SMTP_PORT=465`.
+   - `SMTP_FROM` is the sender people see. Use an address the mail service lets you send from.
+   - Set `ORIGIN` too: links in emails are built from it.
+
+3. Restart (`docker compose up -d`), then in the app: **Settings → Email → Send test email**. It goes to your own address and says what the mail server answered if it fails. The password is read from the environment only; it is never stored in the database or shown.
+
+For mail to arrive in the inbox and not in spam, the sender's domain needs two DNS records, which the mail service gives you: **SPF** (which servers may send for the domain) and **DKIM** (a signature the service adds). A **DMARC** record on top tells receivers what to do with mail that fails both.
+
+The instance sends at most 10 emails an hour to one address and 300 an hour in total. Settings → Email lists the most recent sends: to whom and whether the mail server took them, never the text.
 
 ## Health
 

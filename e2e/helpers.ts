@@ -93,3 +93,41 @@ export async function postForm(page: Page, path: string, form: Record<string, st
 		.origin;
 	return page.request.post(path, { form, headers: { origin } });
 }
+
+export interface TestMail {
+	to: string;
+	from: string;
+	subject: string;
+	text: string;
+	html: string;
+	kind: string | null;
+}
+
+const MAIL_URL = process.env.E2E_MAIL_URL ?? 'http://127.0.0.1:2526';
+
+/** The emails the app sent to an address, newest last (read from e2e/fake-smtp.mjs). */
+export async function mailTo(request: APIRequestContext, address: string): Promise<TestMail[]> {
+	const res = await request.get(`${MAIL_URL}/messages?to=${encodeURIComponent(address.toLowerCase())}`);
+	expect(res.ok(), await res.text()).toBeTruthy();
+	return (await res.json()) as TestMail[];
+}
+
+/** Wait for the next email of a kind to an address. */
+export async function waitForMail(
+	request: APIRequestContext,
+	address: string,
+	kind: string,
+	after = 0
+): Promise<TestMail> {
+	let found: TestMail | undefined;
+	await expect
+		.poll(
+			async () => {
+				found = (await mailTo(request, address)).filter((m) => m.kind === kind)[after];
+				return !!found;
+			},
+			{ message: `a ${kind} email to ${address}`, timeout: 10_000 }
+		)
+		.toBe(true);
+	return found!;
+}

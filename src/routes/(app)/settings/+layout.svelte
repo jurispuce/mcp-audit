@@ -8,7 +8,8 @@
 		...(data.user.role === 'admin'
 			? [
 					{ href: resolve('/(app)/settings/users'), label: 'Users' },
-					{ href: resolve('/(app)/settings/ai'), label: 'AI' }
+					{ href: resolve('/(app)/settings/ai'), label: 'AI' },
+					{ href: resolve('/(app)/settings/email'), label: 'Email' }
 				]
 			: []),
 		{ href: resolve('/(app)/settings/skills'), label: 'Skills' },

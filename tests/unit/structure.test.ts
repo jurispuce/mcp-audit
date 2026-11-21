@@ -44,7 +44,9 @@ const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/ai-settings.ts': ['app_setting'],
 	'src/lib/domain/jobs.ts': ['ai_job'],
 	'src/lib/domain/throttle.ts': ['auth_throttle'],
-	'src/lib/domain/oauth.ts': ['oauth_client', 'oauth_code', 'oauth_token']
+	'src/lib/domain/oauth.ts': ['oauth_client', 'oauth_code', 'oauth_token'],
+	// What was sent by email and whether the mail server took it (#86); never message text.
+	'src/lib/domain/email.ts': ['email_log']
 };
 
 const SQL_WRITE =

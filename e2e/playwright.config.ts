@@ -11,6 +11,13 @@ const external = process.env.E2E_BASE_URL;
 const firstStart = process.env.E2E_FIRST_START_URL ?? (external ? undefined : 'http://127.0.0.1:4174');
 const baseURL = external ?? 'http://127.0.0.1:4173';
 
+/** The scripted mail server (e2e/fake-smtp.mjs): the app sends to it, tests read what arrived. */
+const MAIL_ENV = {
+	SMTP_HOST: '127.0.0.1',
+	SMTP_PORT: '2525',
+	SMTP_FROM: 'mcp-audit tests <audit@example.test>'
+};
+
 function server(name: string, port: number, extraEnv: Record<string, string> = {}) {
 	return {
 		command: `node e2e/serve.mjs ${name}`,
@@ -51,7 +58,21 @@ export default defineConfig({
 			: [])
 	],
 	webServer: [
-		...(external ? [] : [server('main', 4173), server('first-start', 4174)]),
+		// Only the main instance has email set up; the first-start one shows the app without it.
+		...(external ? [] : [server('main', 4173, MAIL_ENV), server('first-start', 4174)]),
+		// With E2E_MAIL_URL set, the mail server is already running where the app can reach it.
+		...(process.env.E2E_MAIL_URL
+			? []
+			: [
+					{
+						command: 'node e2e/fake-smtp.mjs',
+						cwd: path.resolve(import.meta.dirname, '..'),
+						url: 'http://127.0.0.1:2526/messages',
+						reuseExistingServer: true,
+						timeout: 20_000,
+						env: { SMTP_PORT: '2525', HTTP_PORT: '2526' }
+					}
+				]),
 		// The scripted stand-in for a LiteLLM gateway that in-app AI tests point the app at. With
 		// E2E_LLM_URL set, it is already running where the app can reach it (CI starts it for the containers).
 		...(process.env.E2E_LLM_URL

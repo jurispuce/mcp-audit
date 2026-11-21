@@ -29,7 +29,11 @@ export const POLICIES = {
 	/** Per client address on the OAuth token endpoint: 30 failed exchanges in 15 minutes. */
 	oauth: { max: 30, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE },
 	/** Per client address: 20 OAuth client registrations an hour (every registration counts). */
-	register: { max: 20, windowMs: 60 * MINUTE, lockMs: 60 * MINUTE }
+	register: { max: 20, windowMs: 60 * MINUTE, lockMs: 60 * MINUTE },
+	/** Per recipient: 10 emails an hour (every email counts), so nobody's mailbox can be flooded. */
+	emailRecipient: { max: 10, windowMs: 60 * MINUTE, lockMs: 60 * MINUTE },
+	/** For the whole instance: 300 emails an hour. */
+	emailInstance: { max: 300, windowMs: 60 * MINUTE, lockMs: 60 * MINUTE }
 } satisfies Record<string, ThrottlePolicy>;
 
 interface Row {

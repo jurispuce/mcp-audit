@@ -697,6 +697,24 @@ export const authThrottle = sqliteTable('auth_throttle', {
 });
 
 /**
+ * What the instance tried to send by email (#86): when, to whom, which kind, and whether the mail
+ * server took it. No message text, links or codes. Infrastructure like sessions: not versioned.
+ * Written only by src/lib/domain/email.ts, which keeps the newest few hundred rows.
+ */
+export const emailLog = sqliteTable(
+	'email_log',
+	{
+		id: text('id').primaryKey(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		kind: text('kind').notNull(),
+		recipient: text('recipient').notNull(),
+		status: text('status', { enum: ['sent', 'failed'] }).notNull(),
+		error: text('error')
+	},
+	(t) => [index('email_log_created').on(t.createdAt)]
+);
+
+/**
  * OAuth 2.0 for /mcp (#75): clients registered dynamically (RFC 7591), one-time authorization codes,
  * and tokens. Access infrastructure like sessions and personal tokens: not versioned, secrets stored
  * only as SHA-256 hashes. Written only by src/lib/domain/oauth.ts.
