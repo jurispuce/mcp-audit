@@ -113,7 +113,7 @@ export function signInCodeEmail(
 	]);
 }
 
-export type SecurityEvent = 'passkey_added' | 'passkey_removed' | 'code_sign_in';
+export type SecurityEvent = 'passkey_added' | 'passkey_removed' | 'code_sign_in' | 'shut_out_by_admin';
 
 const SECURITY: Record<
 	SecurityEvent,
@@ -128,6 +128,12 @@ const SECURITY: Record<
 		subject: 'A passkey was removed from your account',
 		heading: 'A passkey was removed',
 		what: (d) => `The passkey${d ? ` named “${d}”` : ''} was removed from your account.`
+	},
+	shut_out_by_admin: {
+		subject: 'An admin ended your sessions and removed your passkeys',
+		heading: 'Your sessions were ended',
+		what: () =>
+			'An admin ended your sessions and removed your passkeys, for example because a device was lost. Sign in with a code sent to this address and add a new passkey.'
 	},
 	code_sign_in: {
 		subject: 'Someone signed in with a code sent to this address',

@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { changeOwnPassword } from '#lib/domain/account.ts';
 import { ValidationError } from '#lib/domain/errors.ts';
 import { listPasskeys, passkeysPossible, removePasskey, renamePasskey } from '#lib/domain/passkeys.ts';
+import { sendSecurityNotice } from '#lib/domain/security-notices.ts';
 import { getUser, updateUser } from '#lib/domain/users.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, requireUser, uiActor } from '#lib/server/http.ts';
@@ -43,10 +44,12 @@ export const actions: Actions = {
 			return formFailure(e);
 		}
 	},
-	removePasskey: async ({ request, locals }) => {
+	removePasskey: async ({ request, locals, url }) => {
 		const data = await request.formData();
 		try {
-			removePasskey(appDatabase(), requireUser(locals).id, String(data.get('id')));
+			const me = requireUser(locals);
+			const name = removePasskey(appDatabase(), me.id, String(data.get('id')));
+			void sendSecurityNotice(appDatabase(), me.id, 'passkey_removed', { origin: url.origin, detail: name });
 			return { success: 'Passkey removed. It can no longer sign in here.' };
 		} catch (e) {
 			return formFailure(e);

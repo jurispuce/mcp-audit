@@ -48,7 +48,9 @@ const WRITERS: Record<string, string[]> = {
 	// What was sent by email and whether the mail server took it (#86); never message text.
 	'src/lib/domain/email.ts': ['email_log'],
 	// Passkey public keys and one-time WebAuthn challenges (#87): credentials, like password hashes.
-	'src/lib/domain/passkeys.ts': ['passkey', 'webauthn_challenge']
+	'src/lib/domain/passkeys.ts': ['passkey', 'webauthn_challenge'],
+	// One-time sign-in codes sent by email (#88), stored as hashes.
+	'src/lib/domain/sign-in-codes.ts': ['sign_in_code']
 };
 
 const SQL_WRITE =

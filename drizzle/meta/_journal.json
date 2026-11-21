@@ -176,6 +176,13 @@
       "when": 1795254126100,
       "tag": "0024_passkeys",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1795278531276,
+      "tag": "0025_sign_in_code",
+      "breakpoints": true
     }
   ]
 }

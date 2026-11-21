@@ -180,6 +180,23 @@
 									>Reset password</button
 								>
 							</form>
+							{#if user.id !== data.user.id && user.active}
+								<form
+									method="POST"
+									action="?/shutOut"
+									use:enhance={({ cancel }) => {
+										if (
+											!confirm(
+												`End ${user.name}'s sessions and remove their passkeys? Use this when a device is lost. They can sign in again and add a new passkey.`
+											)
+										)
+											cancel();
+									}}
+								>
+									<input type="hidden" name="id" value={user.id} />
+									<button class="au-btn au-btn--ghost" type="submit">End sessions and remove passkeys</button>
+								</form>
+							{/if}
 							{#if user.id !== data.user.id}
 								<form
 									method="POST"

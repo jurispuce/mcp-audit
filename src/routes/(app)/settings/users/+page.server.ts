@@ -8,6 +8,8 @@ import {
 	setUserActive,
 	updateUser
 } from '#lib/domain/users.ts';
+import { endSessionsAndRemovePasskeys } from '#lib/domain/passkeys.ts';
+import { sendSecurityNotice } from '#lib/domain/security-notices.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, uiActor } from '#lib/server/http.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -65,6 +67,23 @@ export const actions: Actions = {
 			};
 		} catch (e) {
 			return formFailure(e, { id, action: 'active' });
+		}
+	},
+	/** A lost device: end the person's sessions and remove their passkeys (#88). */
+	shutOut: async ({ request, locals, url }) => {
+		const data = await request.formData();
+		const id = String(data.get('id'));
+		try {
+			const app = appDatabase();
+			const removed = endSessionsAndRemovePasskeys(app, uiActor(locals), id);
+			void sendSecurityNotice(app, id, 'shut_out_by_admin', { origin: url.origin });
+			return {
+				action: 'shutOut',
+				id,
+				success: `Sessions ended and ${removed} ${removed === 1 ? 'passkey' : 'passkeys'} removed. They sign in again with a code by email or their password.`
+			};
+		} catch (e) {
+			return formFailure(e, { id, action: 'shutOut' });
 		}
 	},
 	reset: async ({ request, locals }) => {

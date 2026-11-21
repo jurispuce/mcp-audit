@@ -51,12 +51,17 @@
 		<Field label="Password" name="password" type="password" autocomplete="current-password" required />
 		<button class="au-btn au-btn--primary" type="submit" disabled={busy}>Sign in</button>
 		<p class="au-muted">Forgot your password? Ask an admin to reset it.</p>
-		{#if data.passkeys}
+		{#if data.passkeys || data.codes}
 			<p class="au-auth__or"><span>or</span></p>
+		{/if}
+		{#if data.passkeys}
 			{#if passkeyMessage}<div class="au-alert au-alert--danger" role="alert">{passkeyMessage}</div>{/if}
 			<button class="au-btn" type="button" onclick={passkey} disabled={passkeyBusy}
 				>{passkeyBusy ? 'Waiting for your device…' : 'Sign in with a passkey'}</button
 			>
+		{/if}
+		{#if data.codes}
+			<a class="au-btn" href="/login/code{page.url.search}">Email me a sign-in code</a>
 		{/if}
 	</form>
 </main>

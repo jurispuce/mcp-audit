@@ -182,6 +182,19 @@ People can add a passkey on **Settings → Account** and then sign in with the d
 - Only the public half of a passkey is stored. Adding and removing one shows in the person's history by name, without key material.
 - Wrong or unknown passkeys count towards the same lock-outs as wrong passwords (docs/public-endpoint.md). Deactivating a person makes their passkeys unusable until they are reactivated.
 
+## Sign-in codes by email
+
+Where email is set up (above), the sign-in page offers **Email me a sign-in code**: the way in for a device without a passkey, and the way back after a lost one.
+
+- The person enters their email and gets a six-digit code and a link. Either signs them in. Both work once, for 10 minutes, and **only in the browser that asked**: a code read out or forwarded to someone else opens nothing, and the link opened in a mail app or on another device says where to go instead.
+- The page answers the same way whether or not the address has an account.
+- After signing in with a code the app offers to add a passkey to the device, every time. On a device that cannot hold one the person continues without.
+- Each use of a code, and each passkey added or removed, is announced to the account by email. If an announcement cannot be sent the action still happens; Settings → Email shows the failed send.
+- Codes are stored only as hashes, and the list of sends on Settings → Email holds no subject or text.
+- **A lost device:** on Settings → Users an admin uses **End sessions and remove passkeys** for that person. The device is signed out at once and its passkey stops working; the person comes back with a code by email and adds a new passkey. The person is told by email.
+
+Without email settings none of this is offered, and a person's last passkey can be removed only while they have a password.
+
 ## Health
 
 `GET /health` needs no login and returns the version, whether the database answers, and how many migrations are applied. Docker uses it for the container healthcheck; `docker compose ps` shows `healthy` when all is well.

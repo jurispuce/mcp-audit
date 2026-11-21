@@ -1,6 +1,8 @@
 /** Paths reachable without signing in. Everything else needs a session (or a token on /mcp). */
 const PUBLIC_PATHS = [
 	/^\/login\/?$/,
+	// Sign-in with a one-time code sent by email (#88).
+	/^\/login\/code\/?$/,
 	/^\/setup\/?$/,
 	/^\/health\/?$/,
 	/^\/manifest\.webmanifest$/,

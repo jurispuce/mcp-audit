@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 import { finishPasskeyRegistration, relyingParty } from '#lib/domain/passkeys.ts';
+import { sendSecurityNotice } from '#lib/domain/security-notices.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { requireUser } from '#lib/server/http.ts';
 import { body } from '#lib/server/json.ts';
@@ -26,6 +27,11 @@ export const POST: RequestHandler = async (event) => {
 			relyingParty(event.url.origin),
 			data.name
 		);
+		// Tell the account; not awaited, and a failed email never undoes the passkey.
+		void sendSecurityNotice(appDatabase(), user.id, 'passkey_added', {
+			origin: event.url.origin,
+			detail: passkey.name
+		});
 		return json({ id: passkey.id, name: passkey.name });
 	} catch (e) {
 		return domainFailure(event, e);

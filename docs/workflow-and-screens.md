@@ -113,10 +113,13 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 - All of it comes from `src/lib/guide/content.ts`.
 
 ### Settings (outside engagements)
-- **Account:** name and email, password, and **Passkeys** (#87): add one on this device with a name, see when each was added and last used, rename and remove. The last passkey can be removed only while another way in exists. Where the address cannot have passkeys (not https, or an IP address) the section says so.
+- **Account:** name and email, password, and **Passkeys** (#87): add one on this device with a name, see when each was added and last used, rename and remove. The last passkey can be removed only while another way in exists (a password, or sign-in codes by email). Where the address cannot have passkeys (not https, or an IP address) the section says so.
 - **Email** (admins, #86): whether outbound email is set up, the sender and mail server without the password, **Send test email** to one's own address, and the most recent sends.
-- Users and AI (admins), Skills, Access tokens: see their milestones.
-- The sign-in page offers **Sign in with a passkey** below the password form, where the address can have passkeys.
+- **Users** (admins): besides the actions of milestone 1, **End sessions and remove passkeys** for another person (#88), for a lost device. It asks first, and the person is told by email.
+- AI (admins), Skills, Access tokens: see their milestones.
+- The sign-in page offers **Sign in with a passkey** below the password form, where the address can have passkeys, and **Email me a sign-in code** where email is set up (#88).
+- **Sign in with a code** (`/login/code`, #88): enter the email, then the six-digit code from the email, or open its link in the same browser. The screen is the same for an address without an account. **Send a new code** and **Use another address** start over. A link opened in another browser says to open it where the code was asked for.
+- **Add a passkey to this device** (`/add-passkey`): shown after every sign-in with a code where the address can have passkeys, with **Continue without a passkey**.
 
 ### Item sheet
 - Details, Comments, History for any record. History lists versions with author, time, channel and changed fields, and offers revert on every version except the current one.

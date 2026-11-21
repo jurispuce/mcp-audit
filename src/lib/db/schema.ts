@@ -743,6 +743,26 @@ export const webauthnChallenge = sqliteTable('webauthn_challenge', {
 });
 
 /**
+ * One-time sign-in codes sent by email (#88): recovery when a passkey is lost, and the way in for a
+ * device that cannot hold one. The id is the SHA-256 of a cookie value, so a code works only in the
+ * browser that asked for it; the code and the link are stored only as hashes. A row exists for an
+ * address without an account too (user_id null), so the app behaves the same for both.
+ * Written only by src/lib/domain/sign-in-codes.ts.
+ */
+export const signInCode = sqliteTable('sign_in_code', {
+	id: text('id').primaryKey(),
+	userId: text('user_id'),
+	email: text('email').notNull(),
+	codeHash: text('code_hash').notNull(),
+	linkHash: text('link_hash').notNull(),
+	/** Where to go after signing in. */
+	next: text('next'),
+	attempts: integer('attempts').notNull().default(0),
+	createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+	expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
+});
+
+/**
  * What the instance tried to send by email (#86): when, to whom, which kind, and whether the mail
  * server took it. No message text, links or codes. Infrastructure like sessions: not versioned.
  * Written only by src/lib/domain/email.ts, which keeps the newest few hundred rows.

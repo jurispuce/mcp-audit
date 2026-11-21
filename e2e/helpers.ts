@@ -1,4 +1,4 @@
-import { expect, test as base, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test as base, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 
 /**
  * Playwright's test, with page.goto waiting until the page has hydrated: buttons that only open a
@@ -130,4 +130,34 @@ export async function waitForMail(
 		)
 		.toBe(true);
 	return found!;
+}
+
+/**
+ * A person of their own for a test, added by the admin and past the one-time password, so tests
+ * that send email or change sign-in do not share a mailbox or lock-outs with the seeded users.
+ */
+export async function addUser(
+	browser: Browser,
+	name = 'Nora New'
+): Promise<{ name: string; email: string; password: string }> {
+	const email = `${unique('person')}@example.test`;
+	const password = 'own-password-123';
+	const context = await browser.newContext();
+	const page = await context.newPage();
+	await loginAs(page, ADMIN);
+	await page.goto('/settings/users');
+	await page.getByRole('button', { name: 'Add user' }).click();
+	await page.getByLabel('Name').fill(name);
+	await page.getByLabel('Email').fill(email);
+	await page.getByRole('button', { name: 'Add user' }).click();
+	const temp = (await page.getByTestId('one-time-password').locator('.au-secret').textContent())!.trim();
+	await context.clearCookies();
+	await signIn(page, email, temp);
+	await page.getByLabel('Current password').fill(temp);
+	await page.getByLabel('New password', { exact: true }).fill(password);
+	await page.getByLabel('Repeat new password').fill(password);
+	await page.getByRole('button', { name: 'Change password' }).click();
+	await expect(page).toHaveURL('/');
+	await context.close();
+	return { name, email, password };
 }

@@ -11,11 +11,12 @@ import {
 	type RegistrationResponseJSON
 } from '@simplewebauthn/server';
 import type { AppDatabase } from '#lib/db/client.ts';
-import { createSession, type SessionUser } from './auth';
+import { createSession, revokeSessions, type SessionUser } from './auth';
+import { emailSettings } from './email';
 import { NotFoundError, UnauthenticatedError, ValidationError } from './errors';
 import { accountKey, addressKey, assertNotLocked, clearThrottle, POLICIES, recordFailure } from './throttle';
-import { getUser, userDefinition } from './users';
-import { updateEntity } from './write';
+import { getUser, requireAdmin, userDefinition } from './users';
+import { updateEntity, type Actor } from './write';
 
 /**
  * Passkeys (#87): sign-in with the device's fingerprint, face or PIN instead of a password. A
@@ -362,20 +363,50 @@ export function renamePasskey(app: AppDatabase, userId: string, id: string, name
 	return toPasskey({ ...row, name: label });
 }
 
-/** Whether the person can still get in without any passkey. Email recovery joins this with #88. */
-export function hasOtherWayIn(app: AppDatabase, userId: string): boolean {
+/** Whether the person can still get in without any passkey: a password, or a code by email (#88). */
+export function hasOtherWayIn(app: AppDatabase, userId: string, env: Env = process.env): boolean {
+	if (emailSettings(env).configured) return true;
 	return !!app.sqlite
 		.prepare('SELECT 1 FROM user_credential WHERE user_id = ? AND password_hash IS NOT NULL')
 		.get(userId);
 }
 
-/** Remove a passkey. The last one goes only when another way in exists, so nobody locks themselves out. */
-export function removePasskey(app: AppDatabase, userId: string, id: string): void {
+/**
+ * Remove a passkey; returns its name. The last one goes only when another way in exists, so nobody
+ * locks themselves out.
+ */
+export function removePasskey(app: AppDatabase, userId: string, id: string, env: Env = process.env): string {
 	const row = ownPasskey(app, userId, id);
-	if (rowsOf(app, userId).length === 1 && !hasOtherWayIn(app, userId))
+	if (rowsOf(app, userId).length === 1 && !hasOtherWayIn(app, userId, env))
 		throw new ValidationError('This is your only way to sign in. Add another passkey before removing it.');
 	app.sqlite.transaction(() => {
 		app.sqlite.prepare('DELETE FROM passkey WHERE id = ?').run(row.id);
 		recordCount(app, userId, userId, `Passkey removed: ${row.name}`);
 	})();
+	return row.name;
+}
+
+/**
+ * An admin shuts a person's devices out (#88): every session ends and every passkey is removed, so
+ * a lost phone or laptop opens nothing. The person comes back with a code by email (or their
+ * password) and adds a new passkey. Returns how many passkeys were removed.
+ */
+export function endSessionsAndRemovePasskeys(app: AppDatabase, actor: Actor, userId: string): number {
+	requireAdmin(app, actor);
+	if (userId === actor.userId) throw new ValidationError('Remove your own passkeys on Settings, Account.');
+	getUser(app, userId);
+	const count = rowsOf(app, userId).length;
+	app.sqlite.transaction(() => {
+		revokeSessions(app, userId);
+		if (count) {
+			app.sqlite.prepare('DELETE FROM passkey WHERE user_id = ?').run(userId);
+			recordCount(
+				app,
+				actor.userId,
+				userId,
+				`Sessions ended and ${count} ${count === 1 ? 'passkey' : 'passkeys'} removed by an admin`
+			);
+		}
+	})();
+	return count;
 }

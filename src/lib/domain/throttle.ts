@@ -30,6 +30,10 @@ export const POLICIES = {
 	oauth: { max: 30, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE },
 	/** Per client address: 20 OAuth client registrations an hour (every registration counts). */
 	register: { max: 20, windowMs: 60 * MINUTE, lockMs: 60 * MINUTE },
+	/** Per address asked for: 5 sign-in codes in 15 minutes (every request counts). */
+	codeAccount: { max: 5, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE },
+	/** Per client address: 10 requests for a sign-in code in 15 minutes (every request counts). */
+	codeAddress: { max: 10, windowMs: 15 * MINUTE, lockMs: 15 * MINUTE },
 	/** Per recipient: 10 emails an hour (every email counts), so nobody's mailbox can be flooded. */
 	emailRecipient: { max: 10, windowMs: 60 * MINUTE, lockMs: 60 * MINUTE },
 	/** For the whole instance: 300 emails an hour. */
