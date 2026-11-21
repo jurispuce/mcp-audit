@@ -6,6 +6,7 @@ How to reach mcp-audit over the public internet, and what remote MCP clients nee
 
 - **Sign-in lock-out.** Five wrong passwords for an account within 15 minutes lock that account's sign-in for 15 minutes, even with the right password. The same happens for an email that has no account, so a lock does not reveal whether an account exists. An admin's Reset password lifts the lock.
 - **Rate limits per client address.** 20 failed sign-ins in 15 minutes from one address, 30 wrong tokens on `/mcp`, or 10 wrong set-up codes lock that address for 15 minutes. The answer is `429` with `Retry-After`. Locks are stored in the database, so a restart does not lift them.
+- **Passkeys.** A person can sign in with a passkey instead of a password (docs/deployment.md, Passkeys). A passkey works only at this instance's own address, so a look-alike site cannot use it, and each answer from the device works once. Refused passkeys count towards the same lock-outs and rate limits as wrong passwords, and the message never says why one was refused.
 - **Cookies.** The session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` whenever the app is reached over https. The cookie value is never stored; the database keeps its SHA-256.
 - **Headers.** `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options: DENY` and a `Permissions-Policy` on every response, plus `Strict-Transport-Security` over https.
 - **Every route and tool needs a signed-in user or a personal access token.** There is no anonymous access, and `/mcp` is never authless.

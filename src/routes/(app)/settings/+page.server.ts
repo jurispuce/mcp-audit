@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { changeOwnPassword } from '#lib/domain/account.ts';
 import { ValidationError } from '#lib/domain/errors.ts';
+import { listPasskeys, passkeysPossible, removePasskey, renamePasskey } from '#lib/domain/passkeys.ts';
 import { getUser, updateUser } from '#lib/domain/users.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, requireUser, uiActor } from '#lib/server/http.ts';
@@ -10,6 +11,8 @@ export const load: PageServerLoad = ({ locals, url }) => {
 	const me = requireUser(locals);
 	return {
 		me: getUser(appDatabase(), me.id),
+		passkeys: listPasskeys(appDatabase(), me.id),
+		passkeysPossible: passkeysPossible(url.origin),
 		mustChangePassword: me.mustChangePassword || url.searchParams.get('password') === 'required'
 	};
 };
@@ -24,6 +27,29 @@ export const actions: Actions = {
 			return { success: 'Your details were saved.' };
 		} catch (e) {
 			return formFailure(e, values);
+		}
+	},
+	renamePasskey: async ({ request, locals }) => {
+		const data = await request.formData();
+		try {
+			const p = renamePasskey(
+				appDatabase(),
+				requireUser(locals).id,
+				String(data.get('id')),
+				data.get('name')
+			);
+			return { success: `Passkey renamed to “${p.name}”.` };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	removePasskey: async ({ request, locals }) => {
+		const data = await request.formData();
+		try {
+			removePasskey(appDatabase(), requireUser(locals).id, String(data.get('id')));
+			return { success: 'Passkey removed. It can no longer sign in here.' };
+		} catch (e) {
+			return formFailure(e);
 		}
 	},
 	password: async ({ request, locals }) => {

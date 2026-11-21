@@ -56,7 +56,12 @@ export const user = sqliteTable(
 		role: text('role', { enum: ['admin', 'auditor'] }).notNull(),
 		active: integer('active', { mode: 'boolean' }).notNull().default(true),
 		/** The first-time welcome was dismissed (#84); set by the person themselves. */
-		welcomed: integer('welcomed', { mode: 'boolean' }).notNull().default(false)
+		welcomed: integer('welcomed', { mode: 'boolean' }).notNull().default(false),
+		/**
+		 * How many passkeys the person has (#87). The passkeys themselves are credentials and live
+		 * outside the snapshots; this count is what puts "Passkey added" in the person's history.
+		 */
+		passkeys: integer('passkeys').notNull().default(0)
 	},
 	(t) => [uniqueIndex('user_email').on(t.email)]
 );
@@ -694,6 +699,47 @@ export const authThrottle = sqliteTable('auth_throttle', {
 	failures: integer('failures').notNull(),
 	windowStart: integer('window_start', { mode: 'timestamp_ms' }).notNull(),
 	lockedUntil: integer('locked_until', { mode: 'timestamp_ms' })
+});
+
+/**
+ * Passkeys (#87): WebAuthn public keys a person signs in with. Credentials like password hashes:
+ * not versioned and never copied into revisions. A public key is not a secret, but it is nobody
+ * else's business either. Written only by src/lib/domain/passkeys.ts.
+ */
+export const passkey = sqliteTable(
+	'passkey',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		/** The credential id the authenticator chose, base64url. */
+		credentialId: text('credential_id').notNull(),
+		/** The COSE public key, base64url. */
+		publicKey: text('public_key').notNull(),
+		/** The authenticator's signature counter; 0 for those that do not count. */
+		counter: integer('counter').notNull().default(0),
+		transports: text('transports', { mode: 'json' }),
+		/** Synced between the person's devices by their passkey provider, or bound to one device. */
+		synced: integer('synced', { mode: 'boolean' }).notNull().default(false),
+		name: text('name').notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [uniqueIndex('passkey_credential').on(t.credentialId), index('passkey_user').on(t.userId)]
+);
+
+/**
+ * One-time WebAuthn challenges, kept for the few minutes between asking the browser and checking its
+ * answer. The id is the SHA-256 of a cookie value, so a challenge works only in the browser that
+ * asked for it, and once.
+ */
+export const webauthnChallenge = sqliteTable('webauthn_challenge', {
+	id: text('id').primaryKey(),
+	purpose: text('purpose', { enum: ['register', 'sign_in'] }).notNull(),
+	userId: text('user_id'),
+	challenge: text('challenge').notNull(),
+	expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
 });
 
 /**

@@ -46,7 +46,9 @@ const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/throttle.ts': ['auth_throttle'],
 	'src/lib/domain/oauth.ts': ['oauth_client', 'oauth_code', 'oauth_token'],
 	// What was sent by email and whether the mail server took it (#86); never message text.
-	'src/lib/domain/email.ts': ['email_log']
+	'src/lib/domain/email.ts': ['email_log'],
+	// Passkey public keys and one-time WebAuthn challenges (#87): credentials, like password hashes.
+	'src/lib/domain/passkeys.ts': ['passkey', 'webauthn_challenge']
 };
 
 const SQL_WRITE =

@@ -11,6 +11,8 @@ const PUBLIC_PATHS = [
 	// /oauth/authorize is not here: the person approving must be signed in.
 	/^\/\.well-known\//,
 	/^\/oauth\/(token|register|revoke)\/?$/,
+	// Signing in with a passkey (#87): nobody is signed in yet when the browser asks.
+	/^\/api\/passkeys\/sign-in\/(options|verify)\/?$/,
 	/^\/_app\//
 ];
 

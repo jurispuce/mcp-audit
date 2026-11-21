@@ -173,6 +173,15 @@ For mail to arrive in the inbox and not in spam, the sender's domain needs two D
 
 The instance sends at most 10 emails an hour to one address and 300 an hour in total. Settings → Email lists the most recent sends: to whom and whether the mail server took them, never the text.
 
+## Passkeys
+
+People can add a passkey on **Settings → Account** and then sign in with the device's fingerprint, face or PIN: **Sign in with a passkey** on the sign-in page, with no email or password typed. Passwords keep working next to it.
+
+- Browsers give passkeys only to an **https address with a host name** (or `localhost` for development). On a plain http address or an IP address the app does not offer them and says so.
+- A passkey is bound to the instance's host name, taken from `ORIGIN`. **Changing the host name makes every passkey of the instance unusable**; people then sign in with their password and add a new passkey.
+- Only the public half of a passkey is stored. Adding and removing one shows in the person's history by name, without key material.
+- Wrong or unknown passkeys count towards the same lock-outs as wrong passwords (docs/public-endpoint.md). Deactivating a person makes their passkeys unusable until they are reactivated.
+
 ## Health
 
 `GET /health` needs no login and returns the version, whether the database answers, and how many migrations are applied. Docker uses it for the container healthcheck; `docker compose ps` shows `healthy` when all is well.

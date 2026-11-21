@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { login, SESSION_COOKIE } from '#lib/domain/auth.ts';
 import { TooManyAttemptsError, UnauthenticatedError } from '#lib/domain/errors.ts';
+import { passkeysPossible } from '#lib/domain/passkeys.ts';
 import { needsSetup } from '#lib/domain/setup.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { safeNext, sessionCookieOptions } from '#lib/server/http.ts';
@@ -9,7 +10,8 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = ({ locals, url }) => {
 	if (needsSetup(appDatabase())) redirect(303, '/setup');
 	if (locals.user) redirect(303, safeNext(url.searchParams.get('next')));
-	return {};
+	// Offered only where the address can have passkeys: https with a host name, or localhost.
+	return { passkeys: passkeysPossible(url.origin) };
 };
 
 export const actions: Actions = {
