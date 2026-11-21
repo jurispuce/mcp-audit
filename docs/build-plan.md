@@ -96,7 +96,7 @@ Planned on 2026-11-21 as epic [#85](https://github.com/jurispuce/mcp-audit/issue
 | #90 | Invite people by email; they join with a passkey | #86, #87, #88 |
 | #89 | Sign-in method per instance: passkeys or passwords | #87, #88, #90 |
 | #91 | Pre-set instance: a tenant profile applied at first start | #86, #89, #90 |
-| #92 | Tenant host: one shared proxy, one isolated container per tenant | — |
+| #92 | Tenant host behind the Cloudflare Tunnel: one isolated container per tenant | — |
 | #93 | MCP connections with passkey sign-in: Claude, ChatGPT and tokens | #87, #88, #89 |
 | #94 | Tenant command: create, list, suspend, resume and delete | #91, #92 |
 | #95 | AI through the shared gateway: a key and a monthly budget per tenant | #91, #92, #94 |
