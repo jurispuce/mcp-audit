@@ -7,6 +7,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors';
 import { generateTemporaryPassword, validatePassword } from './password';
 import { registerEntity } from './registry';
 import { USER_ROLES, type UserRole } from './roles';
+import { assertPasswords } from './sign-in-method';
 import {
 	createEntity,
 	readRow,
@@ -186,6 +187,8 @@ export async function createFirstAdmin(
 	app: AppDatabase,
 	input: { name: string; email: string; password: string }
 ): Promise<User> {
+	// Where the instance has no passwords, the first admin is invited by email at start (startup.ts).
+	assertPasswords();
 	validatePassword(input.password);
 	if (countUsers(app) > 0) throw new ForbiddenError('Set-up is already complete.');
 	const id = randomUUID();
@@ -209,6 +212,8 @@ export async function createUser(
 	input: { name: string; email: string; role?: UserRole }
 ): Promise<{ user: User; temporaryPassword: string }> {
 	requireAdmin(app, actor);
+	// Before anything is created: without passwords, people are invited by email (#90).
+	assertPasswords();
 	const temporaryPassword = generateTemporaryPassword();
 	const { row } = createEntity(app, actor, userDefinition, {
 		name: input.name,
@@ -275,6 +280,7 @@ export async function resetPassword(
 	id: string
 ): Promise<{ temporaryPassword: string }> {
 	requireAdmin(app, actor);
+	assertPasswords();
 	const user = getUser(app, id);
 	// An invited person joins by their link; a password handed over would leave the invitation open.
 	if (user.invited) throw new ValidationError('They have not joined yet. Send the invitation again instead.');

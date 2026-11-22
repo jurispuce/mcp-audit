@@ -38,8 +38,13 @@
 			<a class="au-btn" href="/login">{data.used ? 'Sign in' : 'Go to sign-in'}</a>
 		{:else}
 			<p data-testid="invitation">
-				{data.invitedBy ?? 'An admin'} invited you as <strong>{data.invitee.name}</strong>
-				({data.invitee.email}).
+				{#if data.first}
+					This instance was set up with you, <strong>{data.invitee.name}</strong>
+					({data.invitee.email}), as its first admin.
+				{:else}
+					{data.invitedBy ?? 'An admin'} invited you as <strong>{data.invitee.name}</strong>
+					({data.invitee.email}).
+				{/if}
 			</p>
 			{#if data.signedInAs}
 				<div class="au-alert au-alert--info" role="status">

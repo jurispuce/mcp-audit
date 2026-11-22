@@ -4,7 +4,16 @@ import { setPassword } from './auth';
 import { ForbiddenError } from './errors';
 import { builtInSources, importBuiltInSource } from './library-import';
 import { getSourceByCode } from './library';
-import { countUsers, createFirstAdmin, createUser, listUsers, setWelcomed, type User } from './users';
+import { passwordsAllowed } from './sign-in-method';
+import {
+	countUsers,
+	createFirstAdmin,
+	createUser,
+	listUsers,
+	setWelcomed,
+	userDefinition,
+	type User
+} from './users';
 import { createEngagement, listEngagements, listScopes, getEngagement, type Engagement } from './engagements';
 import { findRequirement } from './library';
 import { addPerson } from './people';
@@ -49,10 +58,16 @@ export async function seedTestData(
 	const actor = { userId: actorAdmin.id, channel: 'ui' as const };
 	users = byEmail();
 
+	// An instance without passwords (#89) has its first admin from the start; seeded people there
+	// have no password and tests sign in as them through the test-only login.
+	const passwords = passwordsAllowed(env);
 	for (const spec of Object.values(SEED_USERS)) {
-		if (!users.get(spec.email)) {
+		if (users.get(spec.email)) continue;
+		if (passwords) {
 			const { user } = await createUser(app, actor, spec);
 			await setPassword(app, user.id, SEED_PASSWORD, false);
+		} else {
+			createEntity(app, actor, userDefinition, spec, {}, { skipAuthorization: true });
 		}
 	}
 	// Seeded people are not first-timers: the welcome (#84) is for a person's real first sign-in.

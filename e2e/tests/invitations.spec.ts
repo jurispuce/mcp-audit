@@ -54,6 +54,16 @@ test('an admin invites by email; the invitee joins with a passkey and lands on t
 	expect(notice.subject).toContain('A passkey was added to your account');
 	expect(notice.text).toContain('Ina’s laptop');
 
+	// They have no password. On an instance with passwords they may set one, with no current one to give.
+	await invitee.goto(`${base}/settings`);
+	await expect(invitee.getByText('You have no password.')).toBeVisible();
+	await expect(invitee.getByLabel('Current password')).toHaveCount(0);
+	await invitee.getByLabel('New password', { exact: true }).fill('a-password-of-my-own');
+	await invitee.getByLabel('Repeat new password').fill('a-password-of-my-own');
+	await invitee.getByRole('button', { name: 'Set password' }).click();
+	await expect(invitee.getByRole('status')).toContainText('Your password was saved.');
+	await expect(invitee.getByLabel('Current password')).toBeVisible();
+
 	// The passkey signs them in from then on.
 	await invitee.locator('nav.au-rail').getByRole('button', { name: 'Sign out' }).click();
 	await invitee.goto(`${base}/login`);

@@ -231,13 +231,15 @@
 									</form>
 								{/if}
 							{:else}
-								<form method="POST" action="?/reset" use:enhance>
-									<input type="hidden" name="id" value={user.id} />
-									<input type="hidden" name="email" value={user.email} />
-									<button class="au-btn au-btn--ghost" type="submit" disabled={!user.active}
-										>Reset password</button
-									>
-								</form>
+								{#if data.canAdd}
+									<form method="POST" action="?/reset" use:enhance>
+										<input type="hidden" name="id" value={user.id} />
+										<input type="hidden" name="email" value={user.email} />
+										<button class="au-btn au-btn--ghost" type="submit" disabled={!user.active}
+											>Reset password</button
+										>
+									</form>
+								{/if}
 								{#if user.id !== data.user.id && user.active}
 									<form
 										method="POST"

@@ -29,6 +29,7 @@ export const load: PageServerLoad = ({ url, locals }) => {
 		// Who was invited is shown only to someone holding a link that works.
 		invitee: view.state === 'open' && view.user ? { name: view.user.name, email: view.user.email } : null,
 		invitedBy: view.state === 'open' ? view.invitedBy : null,
+		first: view.state === 'open' && view.first,
 		options: joinOptions(url.origin),
 		signedInAs: locals.user?.name ?? null,
 		minPassword: MIN_PASSWORD_LENGTH

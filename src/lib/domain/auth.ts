@@ -3,6 +3,7 @@ import { accountKey, addressKey, assertNotLocked, clearThrottle, POLICIES, recor
 import type { AppDatabase } from '#lib/db/client.ts';
 import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors';
 import { dummyPasswordHash, hashPassword, validatePassword, verifyPassword } from './password';
+import { assertPasswords } from './sign-in-method';
 import type { UserRole } from './roles';
 import type { Actor } from './write';
 
@@ -35,6 +36,7 @@ export async function setPassword(
 	mustChange: boolean,
 	now = new Date()
 ): Promise<void> {
+	assertPasswords();
 	const hash = await hashPassword(validatePassword(password));
 	app.sqlite
 		.prepare(
@@ -43,6 +45,23 @@ export async function setPassword(
 			   must_change_password = excluded.must_change_password, updated_at = excluded.updated_at`
 		)
 		.run(userId, hash, mustChange ? 1 : 0, now.getTime());
+}
+
+/** Whether the person has a password at all: someone who joined with a passkey may have none. */
+export function hasPassword(app: AppDatabase, userId: string): boolean {
+	return !!app.sqlite.prepare('SELECT 1 FROM user_credential WHERE user_id = ?').get(userId);
+}
+
+export function countPasswords(app: AppDatabase): number {
+	return (app.sqlite.prepare('SELECT count(*) AS n FROM user_credential').get() as { n: number }).n;
+}
+
+/**
+ * An instance that signs in with passkeys keeps no passwords (#89): called at start in that mode.
+ * Returns how many were deleted. Sessions stay; people sign in next with a passkey or a code by email.
+ */
+export function removeAllPasswords(app: AppDatabase): number {
+	return app.sqlite.prepare('DELETE FROM user_credential').run().changes;
 }
 
 export async function checkPassword(app: AppDatabase, userId: string, password: string): Promise<boolean> {
@@ -90,6 +109,7 @@ export async function login(
 	now = new Date(),
 	address: string | null = null
 ): Promise<{ token: string; expiresAt: Date; user: SessionUser }> {
+	assertPasswords();
 	const normalized = String(email ?? '')
 		.trim()
 		.toLowerCase();

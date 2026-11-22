@@ -81,6 +81,8 @@ export interface MailTransport {
 		html: string;
 		headers?: Record<string, string>;
 	}): Promise<unknown>;
+	/** Connect and sign in to the mail server without sending anything. */
+	verify?(): Promise<unknown>;
 }
 
 export interface EmailDeps {
@@ -140,6 +142,23 @@ export function describeSendError(e: unknown, s: EmailSettings): string {
 		.replace(/\s+/g, ' ')
 		.slice(0, 240);
 	return `The mail server answered: ${said}`;
+}
+
+/**
+ * Whether the mail server takes a connection (and the user name and password), without sending:
+ * null when it does, otherwise what went wrong, in words. Used before a step that would leave
+ * people with email as their only way in (#89).
+ */
+export async function checkMailServer(deps: EmailDeps = {}): Promise<string | null> {
+	const env = deps.env ?? process.env;
+	const s = emailSettings(env);
+	if (!s.configured) return EMAIL_NOT_SET_UP;
+	try {
+		await (deps.transport ?? transportFor(env, s)).verify?.();
+		return null;
+	} catch (e) {
+		return describeSendError(e, s);
+	}
 }
 
 const KEEP = 500;

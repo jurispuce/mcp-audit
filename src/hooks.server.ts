@@ -3,7 +3,7 @@ import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, validateSession } from '#lib/domain/auth.ts';
 import { issueSetupCode, needsSetup } from '#lib/domain/setup.ts';
 import { failInterruptedJobs } from '#lib/domain/jobs.ts';
-import { ensureInitialAdmin } from '#lib/domain/users.ts';
+import { prepareSignIn, StartupError } from '#lib/domain/startup.ts';
 import {
 	allowedWhileChangingPassword,
 	isApiPath,
@@ -16,8 +16,14 @@ import { sessionCookieOptions } from '#lib/server/http.ts';
 /** Before the first request: open the database, run migrations, and make sure someone can sign in. */
 export const init: ServerInit = async () => {
 	const app = appDatabase();
-	const created = await ensureInitialAdmin(app);
-	if (created) console.log(`Created the first admin ${created.email} from INITIAL_ADMIN_EMAIL.`);
+	try {
+		await prepareSignIn(app);
+	} catch (e) {
+		if (!(e instanceof StartupError)) throw e;
+		// A setting keeps the instance from starting: say which, plainly, and stop.
+		console.error(`\nCannot start.\n${e.message}\n`);
+		process.exit(1);
+	}
 	const interrupted = failInterruptedJobs(app);
 	if (interrupted) console.log(`Closed ${interrupted} AI action(s) the previous run left open.`);
 	if (needsSetup(app)) {

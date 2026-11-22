@@ -116,23 +116,24 @@ Work done since the upgrade is in the replaced data, which restore keeps in `pre
 
 All settings are environment variables in `.env`. Only the Compose ones (`BIND_ADDRESS`, `HOST_PORT`, `MCP_AUDIT_TAG`) are read by Docker; the rest reach the app.
 
-| Variable                                                                           | Default           | Purpose                                                                                                                                                     |
-| ---------------------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BIND_ADDRESS`                                                                     | `127.0.0.1`       | Host address the port is published on. Use a LAN or VPN address to share.                                                                                   |
-| `HOST_PORT`                                                                        | `3000`            | Port on the host.                                                                                                                                           |
-| `MCP_AUDIT_TAG`                                                                    | `main`            | Image tag to run.                                                                                                                                           |
-| `ORIGIN`                                                                           | empty             | Fixed public URL, for example `https://audit.example.lan`. Empty accepts any host; the protocol then comes from `X-Forwarded-Proto` and is http without it. |
-| `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH`                    | empty             | Headers to trust behind a reverse proxy; `docker-compose.public.yml` sets them (docs/public-endpoint.md).                                                   |
-| `BODY_SIZE_LIMIT`                                                                  | `100M`            | Largest request body, for uploading several documents at once. One file may be at most 50 MB.                                                               |
-| `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_ADMIN_NAME`              | empty             | Create the first admin at first start instead of using `/setup`.                                                                                            |
-| `BACKUP_PASSPHRASE`                                                                | empty             | Required for backup and restore. At least 12 characters.                                                                                                    |
-| `LITELLM_BASE_URL`, `LITELLM_API_KEY`                                              | empty             | Default AI gateway address and key for the in-app AI actions. Settings, AI overrides them. See "In-app AI" below.                                           |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | empty             | Mail server for invitations, sign-in codes and security notices. `SMTP_HOST` and `SMTP_FROM` switch email on. See "Email" below.                            |
-| `INSTANCE_NAME`                                                                    | `mcp-audit`       | What this instance is called in emails, so a person with two instances can tell them apart.                                                                 |
-| `TZ`                                                                               | `Europe/Riga`     | Time zone for logs and report dates.                                                                                                                        |
-| `TEST_SEED_ENABLED`                                                                | `false`           | Test environments only: seed data and a password-free test login. Never in production.                                                                      |
-| `DATA_DIR`                                                                         | `/data`           | Where the database and files live inside the container. Leave as is.                                                                                        |
-| `HOST`, `PORT`                                                                     | `0.0.0.0`, `3000` | Address and port inside the container. Leave as is.                                                                                                         |
+| Variable                                                                           | Default           | Purpose                                                                                                                                                       |
+| ---------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BIND_ADDRESS`                                                                     | `127.0.0.1`       | Host address the port is published on. Use a LAN or VPN address to share.                                                                                     |
+| `HOST_PORT`                                                                        | `3000`            | Port on the host.                                                                                                                                             |
+| `MCP_AUDIT_TAG`                                                                    | `main`            | Image tag to run.                                                                                                                                             |
+| `ORIGIN`                                                                           | empty             | Fixed public URL, for example `https://audit.example.lan`. Empty accepts any host; the protocol then comes from `X-Forwarded-Proto` and is http without it.   |
+| `PROTOCOL_HEADER`, `HOST_HEADER`, `ADDRESS_HEADER`, `XFF_DEPTH`                    | empty             | Headers to trust behind a reverse proxy; `docker-compose.public.yml` sets them (docs/public-endpoint.md).                                                     |
+| `BODY_SIZE_LIMIT`                                                                  | `100M`            | Largest request body, for uploading several documents at once. One file may be at most 50 MB.                                                                 |
+| `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_ADMIN_NAME`              | empty             | Create the first admin at first start instead of using `/setup`. With `SIGN_IN_METHOD=passkey`: name and email only, and the first admin is invited by email. |
+| `SIGN_IN_METHOD`                                                                   | `password`        | `password` or `passkey`. With `passkey` nobody has a password; see "Sign-in method" below.                                                                    |
+| `BACKUP_PASSPHRASE`                                                                | empty             | Required for backup and restore. At least 12 characters.                                                                                                      |
+| `LITELLM_BASE_URL`, `LITELLM_API_KEY`                                              | empty             | Default AI gateway address and key for the in-app AI actions. Settings, AI overrides them. See "In-app AI" below.                                             |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | empty             | Mail server for invitations, sign-in codes and security notices. `SMTP_HOST` and `SMTP_FROM` switch email on. See "Email" below.                              |
+| `INSTANCE_NAME`                                                                    | `mcp-audit`       | What this instance is called in emails, so a person with two instances can tell them apart.                                                                   |
+| `TZ`                                                                               | `Europe/Riga`     | Time zone for logs and report dates.                                                                                                                          |
+| `TEST_SEED_ENABLED`                                                                | `false`           | Test environments only: seed data and a password-free test login. Never in production.                                                                        |
+| `DATA_DIR`                                                                         | `/data`           | Where the database and files live inside the container. Leave as is.                                                                                          |
+| `HOST`, `PORT`                                                                     | `0.0.0.0`, `3000` | Address and port inside the container. Leave as is.                                                                                                           |
 
 ## In-app AI (optional)
 
@@ -173,9 +174,46 @@ For mail to arrive in the inbox and not in spam, the sender's domain needs two D
 
 The instance sends at most 10 emails an hour to one address and 300 an hour in total. Settings → Email lists the most recent sends: to whom and whether the mail server took them, never the text.
 
+## Sign-in method
+
+`SIGN_IN_METHOD` decides how people sign in on the instance. An unknown value stops the start.
+
+|              | `password` (the default)                                                        | `passkey`                                                               |
+| ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Sign in with | email and password; a passkey or an emailed code as further ways in             | a passkey; an emailed code where there is none on the device            |
+| New people   | **Invite user** by email, or **Add user** with a one-time password              | **Invite user** by email only                                           |
+| First admin  | set-up code from the log, or `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` | invited by email at start (`INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_NAME`) |
+| Lost access  | an admin resets the password                                                    | a code by email; an admin can end sessions and remove passkeys          |
+| Needs        | nothing more                                                                    | email settings, and `ORIGIN` as an https address with a host name       |
+
+**Choose `password`** for a private instance on your own network, above all one without email or without https. **Choose `passkey`** for an instance other people reach over the internet: there is no password to guess, reuse or phish, and nobody has to pass one on.
+
+### An instance with `passkey`
+
+```
+SIGN_IN_METHOD=passkey
+ORIGIN=https://audit.example.com
+INITIAL_ADMIN_EMAIL=first.admin@example.com
+INITIAL_ADMIN_NAME=First Admin
+SMTP_HOST=…            # and the other email settings, see Email
+```
+
+- At the first start the first admin gets an email with a link, creates a passkey and is in. There is no set-up page and no code in the log, so nobody who reaches the address first can claim the instance. Until the first admin has joined, **each restart sends a new link** (the earlier one stops working), which is also how to replace an expired one.
+- No password can be set, changed or reset anywhere: the sign-in page, Settings → Account and Settings → Users show none.
+- The instance **refuses to start** when email settings are missing, when `ORIGIN` is not an address browsers allow passkeys on, or when a new instance has no `INITIAL_ADMIN_EMAIL`. The log names the setting.
+
+### Moving an instance from `password` to `passkey`
+
+1. Set up email and check it with **Settings → Email → Send test email**. Make sure every person's email address is right: it becomes their way in.
+2. Set `SIGN_IN_METHOD=passkey` (and `ORIGIN`), and restart.
+3. At that start the app connects to the mail server first. If it does not answer, the app does not start and **nothing is changed**. If it does, **all stored passwords are deleted**; the log says how many.
+4. People who are signed in stay signed in. At their next sign-in each person asks for a code by email and is offered to add a passkey.
+
+Going back to `password` is possible, but the passwords are gone: people sign in with a passkey or a code by email and set a new password on Settings → Account, or an admin resets it. Keep email working until everyone has one.
+
 ## Passkeys
 
-People can add a passkey on **Settings → Account** and then sign in with the device's fingerprint, face or PIN: **Sign in with a passkey** on the sign-in page, with no email or password typed. Passwords keep working next to it.
+People can add a passkey on **Settings → Account** and then sign in with the device's fingerprint, face or PIN: **Sign in with a passkey** on the sign-in page, with no email or password typed. On an instance with passwords they keep working next to it, and someone who joined with a passkey can set a password on Settings → Account without giving a current one.
 
 - Browsers give passkeys only to an **https address with a host name** (or `localhost` for development). On a plain http address or an IP address the app does not offer them and says so.
 - A passkey is bound to the instance's host name, taken from `ORIGIN`. **Changing the host name makes every passkey of the instance unusable**; people then sign in with their password and add a new passkey.
@@ -193,7 +231,7 @@ Where email is set up (above), an admin adds people on **Settings → Users → 
 - Only the hash of a link is stored. The person's history shows who invited them and when they joined.
 - If the mail server refuses the invitation, the admin is told why at once; the person stays listed as invited, to be sent the invitation again.
 
-Without email settings, **Add user** with a one-time password shown on screen stays the way to add people.
+Without email settings, **Add user** with a one-time password shown on screen stays the way to add people. An instance with `SIGN_IN_METHOD=passkey` has only invitations.
 
 ## Sign-in codes by email
 

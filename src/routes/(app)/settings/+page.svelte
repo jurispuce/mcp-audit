@@ -103,39 +103,49 @@
 	ontrack={() => (lastAction = 'passkey')}
 />
 
-<section class="au-section" aria-labelledby="password-title">
-	<h2 class="au-section__title" id="password-title">Password</h2>
-	<FormMessage form={passwordForm} />
-	<form method="POST" action="?/password" class="au-form au-form--stack" use:enhance={track('password')}>
-		<Field
-			label="Current password"
-			name="current"
-			type="password"
-			required
-			autocomplete="current-password"
-			error={wf.current}
-		/>
-		<Field
-			label="New password"
-			name="password"
-			type="password"
-			required
-			minlength={10}
-			autocomplete="new-password"
-			error={wf.password}
-			hint="At least 10 characters"
-		/>
-		<Field
-			label="Repeat new password"
-			name="confirm"
-			type="password"
-			required
-			autocomplete="new-password"
-			error={wf.confirm}
-		/>
-		<div><button class="au-btn" type="submit">Change password</button></div>
-	</form>
-</section>
+{#if data.passwords}
+	<section class="au-section" aria-labelledby="password-title">
+		<h2 class="au-section__title" id="password-title">Password</h2>
+		<FormMessage form={passwordForm} />
+		<form method="POST" action="?/password" class="au-form au-form--stack" use:enhance={track('password')}>
+			{#if data.hasPassword}
+				<Field
+					label="Current password"
+					name="current"
+					type="password"
+					required
+					autocomplete="current-password"
+					error={wf.current}
+				/>
+			{:else}
+				<p class="au-muted">
+					You have no password. Set one if you also want to sign in with your email and a password.
+				</p>
+			{/if}
+			<Field
+				label="New password"
+				name="password"
+				type="password"
+				required
+				minlength={10}
+				autocomplete="new-password"
+				error={wf.password}
+				hint="At least 10 characters"
+			/>
+			<Field
+				label="Repeat new password"
+				name="confirm"
+				type="password"
+				required
+				autocomplete="new-password"
+				error={wf.confirm}
+			/>
+			<div>
+				<button class="au-btn" type="submit">{data.hasPassword ? 'Change password' : 'Set password'}</button>
+			</div>
+		</form>
+	</section>
+{/if}
 
 <section class="au-section au-phone-only" aria-label="Session">
 	<form method="POST" action="/logout"><button class="au-btn" type="submit">Sign out</button></form>

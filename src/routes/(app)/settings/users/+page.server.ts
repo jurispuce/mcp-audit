@@ -155,7 +155,7 @@ export const actions: Actions = {
 			return {
 				action: 'shutOut',
 				id,
-				success: `Sessions ended and ${removed} ${removed === 1 ? 'passkey' : 'passkeys'} removed. They sign in again with a code by email or their password.`
+				success: `Sessions ended and ${removed} ${removed === 1 ? 'passkey' : 'passkeys'} removed. They sign in again with ${signInMethod() === 'password' ? 'a code by email or their password' : 'a code by email'}.`
 			};
 		} catch (e) {
 			return formFailure(e, { id, action: 'shutOut' });

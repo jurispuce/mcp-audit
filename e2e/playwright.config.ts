@@ -71,14 +71,7 @@ export default defineConfig({
 			: [])
 	],
 	webServer: [
-		// Only the main instance has email set up; the first-start one shows the app without it.
-		...(external
-			? []
-			: [
-					server('main', 4173, MAIL_ENV),
-					server('first-start', 4174),
-					server('passkey-mode', 4175, { ...MAIL_ENV, SIGN_IN_METHOD: 'passkey' })
-				]),
+		// First, because the instance without passwords sends an invitation as it starts.
 		// With E2E_MAIL_URL set, the mail server is already running where the app can reach it.
 		...(process.env.E2E_MAIL_URL
 			? []
@@ -91,6 +84,21 @@ export default defineConfig({
 						timeout: 20_000,
 						env: { SMTP_PORT: '2525', HTTP_PORT: '2526' }
 					}
+				]),
+		// Only the main instance has email set up; the first-start one shows the app without it.
+		...(external
+			? []
+			: [
+					server('main', 4173, MAIL_ENV),
+					server('first-start', 4174),
+					server('passkey-mode', 4175, {
+						...MAIL_ENV,
+						SIGN_IN_METHOD: 'passkey',
+						ORIGIN: 'http://localhost:4175',
+						// Invited by email at start; the seeded people come on top (e2e/helpers.ts FIRST_ADMIN).
+						INITIAL_ADMIN_EMAIL: 'first@example.test',
+						INITIAL_ADMIN_NAME: 'Fia First'
+					})
 				]),
 		// The scripted stand-in for a LiteLLM gateway that in-app AI tests point the app at. With
 		// E2E_LLM_URL set, it is already running where the app can reach it (CI starts it for the containers).

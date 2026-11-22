@@ -1,9 +1,9 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { createSession, setPassword } from './auth';
 import { EmailNotSetUpError, emailSettings, sendEmail, type EmailDeps } from './email';
-import { instanceInfo, invitationEmail } from './email-templates';
+import { firstAdminEmail, instanceInfo, invitationEmail } from './email-templates';
 import { DomainError, ForbiddenError, ValidationError } from './errors';
 import {
 	finishPasskeyRegistration,
@@ -14,7 +14,7 @@ import {
 import { validatePassword } from './password';
 import type { UserRole } from './roles';
 import { signInMethod } from './sign-in-method';
-import { getUser, requireAdmin, toUser, userDefinition, type User } from './users';
+import { countUsers, getUser, requireAdmin, toUser, userDefinition, type User } from './users';
 import { createEntity, updateEntity, type Actor } from './write';
 
 /**
@@ -70,26 +70,32 @@ function issue(app: AppDatabase, user: User, invitedBy: string, now: Date): stri
 	return token;
 }
 
-/** Send the email. A mail server that refuses is reported in words; the invitation stays open. */
+/**
+ * Send the email. A mail server that refuses is reported in words; the invitation stays open.
+ * Without an inviter it is the first admin's: the instance was set up for them.
+ */
 async function send(
 	app: AppDatabase,
 	user: User,
-	inviterName: string,
+	inviterName: string | null,
 	token: string,
 	origin: string,
 	deps: EmailDeps
 ): Promise<string | null> {
 	const instance = instanceInfo(origin, deps.env ?? process.env);
+	const link = `${instance.origin}/join?t=${token}`;
 	try {
 		await sendEmail(
 			app,
 			{
-				...invitationEmail(instance, {
-					inviteeName: user.name,
-					inviterName,
-					link: `${instance.origin}/join?t=${token}`,
-					days: INVITATION_DAYS
-				}),
+				...(inviterName === null
+					? firstAdminEmail(instance, { name: user.name, link, days: INVITATION_DAYS })
+					: invitationEmail(instance, {
+							inviteeName: user.name,
+							inviterName,
+							link,
+							days: INVITATION_DAYS
+						})),
 				to: user.email,
 				kind: 'invitation'
 			},
@@ -139,6 +145,54 @@ export async function inviteUser(
 		user,
 		problem: await send(app, user, getUser(app, actor.userId).name, token, context.origin, { ...deps, now })
 	};
+}
+
+/**
+ * The first admin of an instance without passwords (#89): created as invited, as the author of their
+ * own account, and sent a link. Only possible while there are no users.
+ */
+export async function inviteFirstAdmin(
+	app: AppDatabase,
+	input: { name: string; email: string },
+	context: InvitationContext,
+	deps: EmailDeps = {}
+): Promise<InvitationResult> {
+	if (countUsers(app) > 0) throw new ForbiddenError('Set-up is already complete.');
+	if (!emailSettings(deps.env ?? process.env).configured) throw new EmailNotSetUpError();
+	const now = context.now ?? deps.now ?? new Date();
+	const id = randomUUID();
+	const { row } = createEntity(
+		app,
+		{ userId: id, channel: 'ui' },
+		userDefinition,
+		{ name: input.name, email: input.email, role: 'admin', invited: true },
+		{ id, note: 'First admin invited at set-up' },
+		{ skipAuthorization: true, now }
+	);
+	const user = toUser(row);
+	const token = issue(app, user, user.id, now);
+	return { user, problem: await send(app, user, null, token, context.origin, { ...deps, now }) };
+}
+
+/** At a later start, while the first admin has not joined: a new link. Null when there is nobody to send to. */
+export async function resendFirstAdminInvitation(
+	app: AppDatabase,
+	context: InvitationContext,
+	deps: EmailDeps = {}
+): Promise<InvitationResult | null> {
+	const now = context.now ?? deps.now ?? new Date();
+	const row = app.sqlite
+		.prepare(
+			`SELECT u.id FROM "user" u
+			  WHERE u.invited = 1 AND u.active = 1 AND u.deleted = 0
+			    AND EXISTS (SELECT 1 FROM invitation i WHERE i.user_id = u.id AND i.invited_by = u.id)
+			  LIMIT 1`
+		)
+		.get() as { id: string } | undefined;
+	if (!row) return null;
+	const user = getUser(app, row.id);
+	const token = issue(app, user, user.id, now);
+	return { user, problem: await send(app, user, null, token, context.origin, { ...deps, now }) };
 }
 
 /** A new link for someone who has not joined; the earlier one stops working. Undoes a withdrawal. */
@@ -209,6 +263,8 @@ export interface InvitationView {
 	/** Set for every state but `unknown`. */
 	user: { id: string; name: string; email: string } | null;
 	invitedBy: string | null;
+	/** The first admin's own invitation, sent when the instance was set up (#89). */
+	first: boolean;
 	expiresAt: Date | null;
 }
 
@@ -222,13 +278,14 @@ export function readInvitation(
 		? (app.sqlite.prepare('SELECT * FROM invitation WHERE id = ?').get(sha256(token)) as
 				InvitationRow | undefined)
 		: undefined;
-	if (!row) return { state: 'unknown', user: null, invitedBy: null, expiresAt: null };
+	if (!row) return { state: 'unknown', user: null, invitedBy: null, first: false, expiresAt: null };
 	const user = app.sqlite
 		.prepare('SELECT id, name, email, active, invited, deleted FROM "user" WHERE id = ?')
 		.get(row.user_id) as
 		{ id: string; name: string; email: string; active: number; invited: number; deleted: number } | undefined;
 	const inviter = app.sqlite.prepare('SELECT name FROM "user" WHERE id = ?').get(row.invited_by) as
 		{ name: string } | undefined;
+	const first = row.invited_by === row.user_id;
 	let state: InvitationState = row.state;
 	if (state === 'open') {
 		if (!user || user.deleted === 1 || user.invited !== 1) state = 'used';
@@ -240,14 +297,15 @@ export function readInvitation(
 	return {
 		state,
 		user: user ? { id: user.id, name: user.name, email: user.email } : null,
-		invitedBy: inviter?.name ?? null,
+		invitedBy: first ? null : (inviter?.name ?? null),
+		first,
 		expiresAt: new Date(row.expires_at)
 	};
 }
 
 /** Why a link does not work, said plainly, with whom to ask. Null for a link that works. */
 export function invitationProblem(view: InvitationView): string | null {
-	const admin = view.invitedBy ?? 'your admin';
+	const admin = view.first ? 'whoever set this instance up' : (view.invitedBy ?? 'your admin');
 	switch (view.state) {
 		case 'open':
 			return null;

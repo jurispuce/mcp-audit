@@ -75,12 +75,17 @@ jobs:
           docker run -d --name app   -p 3000:3000 -e TEST_SEED_ENABLED=true -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
           docker run -d --name first -p 3001:3000 -e TEST_SEED_ENABLED=true --read-only --tmpfs /tmp mcp-audit:ci
           # an instance without passwords: people join by invitation with a passkey (#89, #90)
-          docker run -d --name passkey -p 3003:3000 -e TEST_SEED_ENABLED=true -e SIGN_IN_METHOD=passkey -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
+          docker run -d --name passkey -p 3003:3000 -e TEST_SEED_ENABLED=true -e SIGN_IN_METHOD=passkey -e ORIGIN=http://localhost:3003 -e INITIAL_ADMIN_EMAIL=first@example.test -e "INITIAL_ADMIN_NAME=Fia First" -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
           # 'prod' uses .env.example as shipped, including its empty settings such as ORIGIN=
           docker run -d --name prod  -p 3002:3000 --env-file .env.example -e BACKUP_PASSPHRASE= --read-only --tmpfs /tmp mcp-audit:ci
           for port in 3000 3001 3002 3003; do
             for i in $(seq 1 60); do curl -sf "http://127.0.0.1:$port/health" > /dev/null && break; sleep 1; done
           done
+
+      - name: An instance without passwords refuses to start without email, and says why
+        run: |
+          out=$(timeout 60 docker run --rm -e SIGN_IN_METHOD=passkey -e ORIGIN=https://audit.example.com -e INITIAL_ADMIN_EMAIL=first@example.test --read-only --tmpfs /tmp mcp-audit:ci 2>&1) && { echo "it started"; exit 1; }
+          echo "$out" | tee /dev/stderr | grep -q "SIGN_IN_METHOD=passkey needs email"
 
       - name: The image reports its version
         run: curl -s http://127.0.0.1:3002/health | tee /dev/stderr | grep -q '"version":"${{ steps.version.outputs.value }}"'

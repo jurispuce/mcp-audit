@@ -99,6 +99,20 @@ export function invitationEmail(
 	);
 }
 
+/** The first admin of an instance without passwords (#89): nobody invited them; the instance was set up for them. */
+export function firstAdminEmail(
+	instance: Instance,
+	input: { name: string; link: string; days: number }
+): EmailContent {
+	return compose(instance, tagged(instance, 'Your instance is ready'), `${instance.name} is ready for you`, [
+		`Hello ${input.name}, ${instance.name} was set up with you as its first admin. Join to create your passkey; then invite your colleagues on Settings, Users.`,
+		{ link: { href: input.link, label: 'Join' } },
+		{
+			small: `The link works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask whoever set the instance up to restart it: a new link is sent at each start until you have joined.`
+		}
+	]);
+}
+
 export function signInCodeEmail(
 	instance: Instance,
 	input: { code: string; link: string; minutes: number }

@@ -1,8 +1,10 @@
 import { redirect } from '@sveltejs/kit';
 import { changeOwnPassword } from '#lib/domain/account.ts';
+import { hasPassword } from '#lib/domain/auth.ts';
 import { ValidationError } from '#lib/domain/errors.ts';
 import { listPasskeys, passkeysPossible, removePasskey, renamePasskey } from '#lib/domain/passkeys.ts';
 import { sendSecurityNotice } from '#lib/domain/security-notices.ts';
+import { passwordsAllowed } from '#lib/domain/sign-in-method.ts';
 import { getUser, updateUser } from '#lib/domain/users.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, formValues, requireUser, uiActor } from '#lib/server/http.ts';
@@ -14,6 +16,9 @@ export const load: PageServerLoad = ({ locals, url }) => {
 		me: getUser(appDatabase(), me.id),
 		passkeys: listPasskeys(appDatabase(), me.id),
 		passkeysPossible: passkeysPossible(url.origin),
+		// An instance that signs in with passkeys (#89) has no Password section at all.
+		passwords: passwordsAllowed(),
+		hasPassword: hasPassword(appDatabase(), me.id),
 		mustChangePassword: me.mustChangePassword || url.searchParams.get('password') === 'required'
 	};
 };
@@ -73,6 +78,6 @@ export const actions: Actions = {
 			return formFailure(e);
 		}
 		if (me.mustChangePassword) redirect(303, '/');
-		return { success: 'Your password was changed. Other sessions were signed out.' };
+		return { success: 'Your password was saved. Other sessions were signed out.' };
 	}
 };

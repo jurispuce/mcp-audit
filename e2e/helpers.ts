@@ -34,6 +34,8 @@ export { expect };
 export const PASSWORD = 'test-password-123';
 export const ADMIN = 'admin@example.test';
 export const AUDITOR = 'auditor@example.test';
+/** On the instance without passwords: invited by email at start, and never seeded. */
+export const FIRST_ADMIN = { name: 'Fia First', email: 'first@example.test' };
 
 export interface SeedResult {
 	users: { id: string; email: string; role: string }[];
