@@ -71,7 +71,9 @@ export const load: PageServerLoad = (event) => {
 		step: pending ? ('code' as const) : ('email' as const),
 		email: pending?.email ?? null,
 		minutes: CODE_MINUTES,
-		linkProblem
+		linkProblem,
+		// Where to go after signing in, for example back to the window an assistant opened (#93).
+		next: safeNext(url.searchParams.get('next') ?? pending?.next, '')
 	};
 };
 
@@ -84,7 +86,7 @@ export const actions: Actions = {
 			const r = requestSignInCode(appDatabase(), email, {
 				origin: event.url.origin,
 				address: event.getClientAddress(),
-				next: safeNext(event.url.searchParams.get('next'), '') || null
+				next: safeNext(String(data.get('next') ?? ''), '') || null
 			});
 			// Not awaited: sending takes time only for a real account, and the wait would give it away.
 			void r.sent;

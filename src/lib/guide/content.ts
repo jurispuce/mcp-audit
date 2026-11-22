@@ -326,6 +326,18 @@ export function fill(text: string, mcpUrl: string): string {
 	return text.replaceAll('{desktop-config}', desktopConfig(mcpUrl)).replaceAll('{mcp}', mcpUrl);
 }
 
+/**
+ * What the window an assistant opens asks for (#93). An instance that signs in with passkeys never
+ * mentions a password; a copy of the guide that belongs to no instance names every way.
+ */
+export function signInNote(method?: 'password' | 'passkey'): string {
+	if (method === 'passkey')
+		return 'When the window asks you to sign in: choose **Sign in with a passkey**, or **Email me a sign-in code** on a device that has no passkey yet. Then you come back to **Allow access**.';
+	if (method === 'password')
+		return 'When the window asks you to sign in: sign in the way you do in the app, with your email and password, a passkey, or a code by email. Then you come back to **Allow access**.';
+	return 'When the window asks you to sign in: sign in the way you do in the app (a passkey, a code by email, or a password where the instance has them). Then you come back to **Allow access**.';
+}
+
 /** A custom connector is called from the assistant's servers: it needs https. */
 export function connectorReady(mcpUrl: string): boolean {
 	return /^https:\/\//i.test(mcpUrl.trim());

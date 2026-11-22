@@ -81,7 +81,14 @@ describe('asking for a sign-in code (#88)', () => {
 		expect(r.code).toMatch(/^\d{6}$/);
 		expect(r.link.length).toBeGreaterThan(20);
 		expect(r.expiresAt).toEqual(later(10));
-		expect(pendingSignInCode(app, r.token, T0)).toEqual({ email: 'bo@example.test', expiresAt: later(10) });
+		expect(pendingSignInCode(app, r.token, T0)).toEqual({
+			email: 'bo@example.test',
+			expiresAt: later(10),
+			next: null
+		});
+		// Where to go afterwards is kept with the code, for example the window an assistant opened (#93).
+		const back = await ask('bo@example.test', T0, '203.0.113.6', '/oauth/authorize?client_id=x');
+		expect(pendingSignInCode(app, back.token, T0)?.next).toBe('/oauth/authorize?client_id=x');
 		const stored = JSON.stringify(app.sqlite.prepare('SELECT * FROM sign_in_code').all());
 		expect(stored).not.toContain(r.code);
 		expect(stored).not.toContain(r.link);

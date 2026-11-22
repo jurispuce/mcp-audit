@@ -2,8 +2,41 @@
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
+	import { confirmWithPasskey } from '#lib/passkeys-client.ts';
+	import type { SubmitFunction } from './$types';
 
 	let { data, form } = $props();
+	/** Creating a token needs a fresh proof (#93): the passkey is asked for, then the form goes again. */
+	let confirming = $state(false);
+	let confirmProblem = $state('');
+	let confirmed = false;
+	const createToken: SubmitFunction = () => {
+		confirmProblem = '';
+		return async ({ result, update, formElement }) => {
+			const stale = result.type === 'failure' && (result.data as { recheck?: boolean } | undefined)?.recheck;
+			if (stale && data.canConfirmWithPasskey && !confirmed) {
+				confirming = true;
+				try {
+					await confirmWithPasskey();
+					confirmed = true;
+					formElement.requestSubmit();
+					return;
+				} catch (e) {
+					const err = e as { name?: string; message?: string };
+					confirmProblem =
+						err?.name === 'NotAllowedError'
+							? 'Your passkey was not used, so no token was created. Try again.'
+							: err?.message || 'Your passkey could not be checked. Try again.';
+				} finally {
+					confirming = false;
+				}
+				return;
+			}
+			confirmed = false;
+			await update({ reset: !stale });
+		};
+	};
+	const needsSignIn = $derived(!!form?.recheck && !data.canConfirmWithPasskey);
 	const fmt = (d: Date | null) =>
 		d ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(d) : 'never';
 	const f = $derived((form?.fields ?? {}) as Record<string, string>);
@@ -64,11 +97,24 @@
 			<p class="au-alert__title">Token "{form.created.name}" created. Copy it now: it is shown only once.</p>
 			<p class="au-secret">{form.created.token}</p>
 		</div>
-	{:else}
+	{:else if needsSignIn}
+		<div class="au-alert au-alert--info" role="alert" data-testid="sign-in-again">
+			<p class="au-alert__title">Sign in again to create a token</p>
+			<p>
+				A token is a long-lived key to everything you can reach, so creating one needs a sign-in no older than
+				{data.recheckMinutes} minutes. You come back to this page.
+			</p>
+			<form method="POST" action="?/signInAgain">
+				<button class="au-btn" type="submit">Sign in again</button>
+			</form>
+		</div>
+	{:else if confirmProblem}
+		<div class="au-alert au-alert--danger" role="alert">{confirmProblem}</div>
+	{:else if !form?.recheck}
 		<FormMessage {form} />
 	{/if}
 
-	<form method="POST" action="?/create" class="au-form" use:enhance>
+	<form method="POST" action="?/create" class="au-form" use:enhance={createToken}>
 		<Field
 			label="Token name"
 			name="name"
@@ -78,7 +124,16 @@
 			value={String(form?.values?.name ?? '')}
 			error={f.name}
 		/>
-		<div><button class="au-btn au-btn--primary" type="submit">Create token</button></div>
+		<div>
+			<button class="au-btn au-btn--primary" type="submit" disabled={confirming}
+				>{confirming ? 'Waiting for your passkey…' : 'Create token'}</button
+			>
+		</div>
+		<p class="au-muted">
+			{data.canConfirmWithPasskey
+				? `If you signed in more than ${data.recheckMinutes} minutes ago, your passkey is asked for again.`
+				: `If you signed in more than ${data.recheckMinutes} minutes ago, you are asked to sign in again first.`}
+		</p>
 	</form>
 
 	{#if data.tokens.length === 0}

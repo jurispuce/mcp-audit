@@ -91,7 +91,12 @@ export const session = sqliteTable(
 			.references(() => user.id),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 		expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-		lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull()
+		lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+		/**
+		 * When the person last proved who they are in this session after signing in (#93): a passkey
+		 * asked for again. Empty means the sign-in itself (`createdAt`) is the last proof.
+		 */
+		verifiedAt: integer('verified_at', { mode: 'timestamp_ms' })
 	},
 	(t) => [index('session_user').on(t.userId)]
 );

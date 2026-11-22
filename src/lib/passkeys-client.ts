@@ -37,6 +37,16 @@ export async function addPasskey(name: string): Promise<{ id: string; name: stri
 	return post('/api/passkeys/register/verify', { response, name });
 }
 
+/** Ask the signed-in person for their passkey again, before something sensitive (#93). */
+export async function confirmWithPasskey(): Promise<void> {
+	if (!passkeysSupported()) throw new Error(NOT_SUPPORTED);
+	const optionsJSON = await post<Parameters<typeof startAuthentication>[0]['optionsJSON']>(
+		'/api/passkeys/confirm/options'
+	);
+	const response = await startAuthentication({ optionsJSON });
+	await post('/api/passkeys/confirm/verify', { response });
+}
+
 /** Join by invitation (#90): make a passkey for the invited person. Resolves to where to go next. */
 export async function joinWithPasskey(token: string, name: string): Promise<string> {
 	if (!passkeysSupported()) throw new Error(NOT_SUPPORTED);

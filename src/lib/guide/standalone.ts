@@ -9,7 +9,8 @@ import {
 	connectorReady,
 	desktopConfig,
 	fill,
-	rich
+	rich,
+	signInNote
 } from './content.ts';
 
 /**
@@ -24,6 +25,8 @@ import {
 export interface StandaloneOptions {
 	/** The instance's MCP address; empty for a copy that belongs to no instance. */
 	mcpUrl?: string;
+	/** How people sign in on the instance, for the note on the sign-in window; unset for no instance. */
+	signIn?: 'password' | 'passkey';
 	version?: string;
 	/** Link the app's typefaces from Google Fonts. Off for the download, which must work offline. */
 	webFonts?: boolean;
@@ -145,7 +148,7 @@ ${s.tip ? `<p class="tip">${text(s.tip)}</p>` : ''}
 </article>`;
 }
 
-function clientPanel(c: (typeof CLIENTS)[number], mcp: string): string {
+function clientPanel(c: (typeof CLIENTS)[number], mcp: string, signIn?: 'password' | 'passkey'): string {
 	return `<article class="panel" id="client-${c.key}" data-client="${c.key}" role="tabpanel" aria-labelledby="ctab-${c.key}">
 <header><h3>${esc(c.label)}</h3><span class="badge ${c.needs === 'public' ? 'info' : ''}">${c.needs === 'public' ? 'Needs a public https address' : 'Uses an access token'}</span><p>${esc(c.summary)}</p></header>
 ${c.unverified ? `<p class="note" role="note">${esc(c.unverified)}</p>` : ''}
@@ -155,6 +158,7 @@ ${c.unverified ? `<p class="note" role="note">${esc(c.unverified)}</p>` : ''}
 				`<li>${text(st.text)}${st.code ? `<div class="code"><pre data-tpl="${esc(st.code)}">${esc(fill(st.code, mcp))}</pre><button class="btn" type="button" data-copy>Copy</button></div>` : ''}</li>`
 		)
 		.join('')}</ol>
+${c.needs === 'public' ? `<p class="sign-in">${text(signInNote(signIn))}</p>` : ''}
 <ul class="notes">${c.notes.map((n) => `<li>${text(n)}</li>`).join('')}</ul>
 </article>`;
 }
@@ -297,7 +301,7 @@ ${opts.webFonts ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css
 		(c) =>
 			`<button class="btn" type="button" role="tab" id="ctab-${c.key}" data-client-tab="${c.key}" aria-controls="client-${c.key}" aria-selected="false">${esc(c.label)}</button>`
 	).join('')}</div>
-<div>${CLIENTS.map((c) => clientPanel(c, shown)).join('\n')}</div>
+<div>${CLIENTS.map((c) => clientPanel(c, shown, opts.signIn)).join('\n')}</div>
 </section>
 
 <section id="after" aria-labelledby="after-h">

@@ -141,9 +141,9 @@ export function pendingSignInCode(
 	app: AppDatabase,
 	token: string | undefined,
 	now = new Date()
-): { email: string; expiresAt: Date } | null {
+): { email: string; expiresAt: Date; next: string | null } | null {
 	const row = read(app, token, now);
-	return row ? { email: row.email, expiresAt: new Date(row.expires_at) } : null;
+	return row ? { email: row.email, expiresAt: new Date(row.expires_at), next: row.next } : null;
 }
 
 export function cancelSignInCode(app: AppDatabase, token: string | undefined): void {

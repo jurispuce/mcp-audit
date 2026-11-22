@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { accountKey, addressKey, assertNotLocked, clearThrottle, POLICIES, recordFailure } from './throttle';
 import type { AppDatabase } from '#lib/db/client.ts';
-import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors';
+import { DomainError, ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors';
 import { dummyPasswordHash, hashPassword, validatePassword, verifyPassword } from './password';
 import { assertPasswords } from './sign-in-method';
 import type { UserRole } from './roles';
@@ -143,6 +143,56 @@ export function createSession(app: AppDatabase, userId: string, now = new Date()
 	return { token, expiresAt };
 }
 
+// ---- A fresh check before something sensitive (#93)
+
+/** How old the last proof of who the person is may be for creating an access token. */
+export const RECHECK_MINUTES = 5;
+
+/** Signing in is a proof; so is a passkey asked for again later (markSessionVerified). */
+export function sessionVerifiedAt(app: AppDatabase, sessionId: string | null | undefined): Date | null {
+	if (!sessionId) return null;
+	const row = app.sqlite
+		.prepare('SELECT COALESCE(verified_at, created_at) AS at FROM session WHERE id = ?')
+		.get(sessionId) as { at: number } | undefined;
+	return row ? new Date(row.at) : null;
+}
+
+export function recentlyVerified(
+	app: AppDatabase,
+	sessionId: string | null | undefined,
+	now = new Date()
+): boolean {
+	const at = sessionVerifiedAt(app, sessionId);
+	return !!at && now.getTime() - at.getTime() <= RECHECK_MINUTES * 60_000;
+}
+
+export function markSessionVerified(app: AppDatabase, sessionId: string, now = new Date()): void {
+	app.sqlite.prepare('UPDATE session SET verified_at = ? WHERE id = ?').run(now.getTime(), sessionId);
+}
+
+export const RECHECK_NEEDED = `It is more than ${RECHECK_MINUTES} minutes since you last proved it is you.`;
+
+/** The last proof is too old for what was asked. The screen asks for the passkey, or a new sign-in. */
+export class RecheckNeededError extends DomainError {
+	override readonly status = 403;
+	override readonly code = 'recheck_needed';
+	constructor() {
+		super(RECHECK_NEEDED);
+	}
+}
+
+/** Test only (the seeded test instance): make a session's last proof look `minutes` old. */
+export function ageSessionForTests(
+	app: AppDatabase,
+	sessionId: string,
+	minutes: number,
+	now = new Date()
+): void {
+	app.sqlite
+		.prepare('UPDATE session SET verified_at = ? WHERE id = ?')
+		.run(now.getTime() - minutes * 60_000, sessionId);
+}
+
 /** The user behind a session cookie, or null. Sessions slide: use keeps them alive for 30 more days. */
 export function validateSession(
 	app: AppDatabase,
@@ -197,6 +247,21 @@ export interface PersonalTokenInfo {
 	createdAt: Date;
 	lastUsedAt: Date | null;
 	revokedAt: Date | null;
+}
+
+/**
+ * What the Settings screen calls: a token is a long-lived key to everything the person can reach, so
+ * creating one needs a proof no older than 5 minutes in this session (#93).
+ */
+export function createPersonalTokenInSession(
+	app: AppDatabase,
+	actor: Actor,
+	sessionId: string | null | undefined,
+	name: string,
+	now = new Date()
+): { token: string; info: PersonalTokenInfo } {
+	if (!recentlyVerified(app, sessionId, now)) throw new RecheckNeededError();
+	return createPersonalToken(app, actor, name, now);
 }
 
 /** Create a token for the signed-in user. The token itself is returned once and never stored. */

@@ -52,6 +52,7 @@
 			<div class="au-row">
 				<form method="POST" action="?/request" use:enhance>
 					<input type="hidden" name="email" value={data.email} />
+					<input type="hidden" name="next" value={data.next} />
 					<button class="au-btn au-btn--ghost" type="submit">Send a new code</button>
 				</form>
 				<form method="POST" action="?/cancel" use:enhance>
@@ -64,6 +65,7 @@
 				address.
 			</p>
 			<form method="POST" action="?/request" class="au-form au-form--stack" use:enhance={submit}>
+				<input type="hidden" name="next" value={data.next} />
 				<Field
 					label="Email"
 					name="email"
@@ -75,6 +77,8 @@
 				<button class="au-btn au-btn--primary" type="submit" disabled={busy}>Email me a sign-in code</button>
 			</form>
 		{/if}
-		<a class="au-linkbtn" href="/login">Sign in another way</a>
+		<a class="au-linkbtn" href="/login{data.next ? `?next=${encodeURIComponent(data.next)}` : ''}"
+			>Sign in another way</a
+		>
 	</div>
 </main>

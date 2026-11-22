@@ -1,6 +1,7 @@
 import { NotFoundError } from '#lib/domain/errors.ts';
 import { getEngagement } from '#lib/domain/engagements.ts';
 import { proposalSummary } from '#lib/domain/proposals.ts';
+import { signInMethod } from '#lib/domain/sign-in-method.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import type { LayoutServerLoad } from './$types';
 
@@ -22,6 +23,7 @@ export const load: LayoutServerLoad = ({ url }) => {
 	return {
 		engagement,
 		proposals: engagement ? proposalSummary(app, engagement.id) : null,
-		mcpUrl: `${url.origin}/mcp`
+		mcpUrl: `${url.origin}/mcp`,
+		signIn: signInMethod()
 	};
 };

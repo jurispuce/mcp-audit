@@ -11,7 +11,7 @@ import {
 	type RegistrationResponseJSON
 } from '@simplewebauthn/server';
 import type { AppDatabase } from '#lib/db/client.ts';
-import { createSession, revokeSessions, type SessionUser } from './auth';
+import { createSession, markSessionVerified, revokeSessions, type SessionUser } from './auth';
 import { emailSettings } from './email';
 import { NotFoundError, UnauthenticatedError, ValidationError } from './errors';
 import { accountKey, addressKey, assertNotLocked, clearThrottle, POLICIES, recordFailure } from './throttle';
@@ -114,7 +114,7 @@ const transportsOf = (r: PasskeyRow) =>
 
 function saveChallenge(
 	app: AppDatabase,
-	purpose: 'register' | 'sign_in',
+	purpose: 'register' | 'sign_in' | 'confirm',
 	userId: string | null,
 	challenge: string,
 	now: Date
@@ -134,7 +134,7 @@ function saveChallenge(
 function takeChallenge(
 	app: AppDatabase,
 	token: string | undefined,
-	purpose: 'register' | 'sign_in',
+	purpose: 'register' | 'sign_in' | 'confirm',
 	now: Date
 ): { challenge: string; userId: string | null } {
 	const expired = new ValidationError('That took too long, or was already used. Start again.');
@@ -344,6 +344,78 @@ export async function finishPasskeySignIn(
 			mustChangePassword: row.must_change_password === 1
 		}
 	};
+}
+
+// ---- Asking for the passkey again (#93)
+
+/**
+ * The signed-in person proves it is still them, with one of their own passkeys, before something
+ * sensitive such as creating an access token.
+ */
+export async function startPasskeyConfirm(
+	app: AppDatabase,
+	userId: string,
+	rp: RelyingParty,
+	now = new Date()
+): Promise<{ options: PublicKeyCredentialRequestOptionsJSON; token: string; expiresAt: Date }> {
+	if (!passkeysPossible(rp.origin)) throw new ValidationError(PASSKEYS_NEED_HTTPS);
+	const rows = rowsOf(app, userId);
+	if (!rows.length) throw new ValidationError('You have no passkey to confirm with. Sign in again instead.');
+	const options = await generateAuthenticationOptions({
+		rpID: rp.id,
+		userVerification: 'required',
+		allowCredentials: rows.map((r) => ({ id: r.credential_id, transports: transportsOf(r) }))
+	});
+	return { options, ...saveChallenge(app, 'confirm', userId, options.challenge, now) };
+}
+
+const NOT_CONFIRMED = 'That passkey could not confirm it is you.';
+
+/** Check the answer; on success this session counts as freshly proven. Only the person's own passkeys count. */
+export async function finishPasskeyConfirm(
+	app: AppDatabase,
+	userId: string,
+	sessionId: string,
+	token: string | undefined,
+	response: AuthenticationResponseJSON,
+	rp: RelyingParty,
+	now = new Date()
+): Promise<void> {
+	const user = getUser(app, userId);
+	const lock = accountKey(user.email);
+	assertNotLocked(app, [lock], now);
+	const expected = takeChallenge(app, token, 'confirm', now);
+	const fail = (): never => {
+		recordFailure(app, lock, POLICIES.account, now);
+		throw new UnauthenticatedError(NOT_CONFIRMED);
+	};
+	if (expected.userId !== userId) return fail();
+	const row = rowsOf(app, userId).find((r) => r.credential_id === String(response?.id ?? ''));
+	if (!row) return fail();
+	let newCounter: number;
+	try {
+		const verified = await verifyAuthenticationResponse({
+			response,
+			expectedChallenge: expected.challenge,
+			expectedOrigin: rp.origin,
+			expectedRPID: rp.id,
+			requireUserVerification: true,
+			credential: {
+				id: row.credential_id,
+				publicKey: new Uint8Array(Buffer.from(row.public_key, 'base64url')),
+				counter: row.counter,
+				transports: transportsOf(row)
+			}
+		});
+		if (!verified.verified) return fail();
+		newCounter = verified.authenticationInfo.newCounter;
+	} catch {
+		return fail();
+	}
+	app.sqlite
+		.prepare('UPDATE passkey SET counter = ?, last_used_at = ? WHERE id = ?')
+		.run(newCounter, now.getTime(), row.id);
+	markSessionVerified(app, sessionId, now);
 }
 
 // ---- Managing one's passkeys

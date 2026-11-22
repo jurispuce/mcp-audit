@@ -37,6 +37,8 @@ const SECURITY_HEADERS: Record<string, string> = {
 	'x-content-type-options': 'nosniff',
 	'referrer-policy': 'same-origin',
 	'x-frame-options': 'DENY',
+	// The same for browsers that follow the newer header: no page here opens inside a frame (#93).
+	'content-security-policy': "frame-ancestors 'none'",
 	'permissions-policy': 'camera=(self), microphone=(), geolocation=()'
 };
 
