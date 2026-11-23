@@ -46,6 +46,16 @@ if [[ "$*" == *"scripts/gateway-keys.mjs"* ]]; then
 	done
 	exec node "$FAKE_DOCKER_REPO/scripts/gateway-keys.mjs" "${args[@]}"
 fi
+if [[ "$*" == *"scripts/check-edge.mjs"* ]]; then
+	# The real check (#92), run here against the test's stand-in for Cloudflare and the app.
+	args=()
+	seen=false
+	for a in "$@"; do
+		if $seen; then args+=("$a"); fi
+		[ "$a" = scripts/check-edge.mjs ] && seen=true
+	done
+	exec node "$FAKE_DOCKER_REPO/scripts/check-edge.mjs" "${args[@]}"
+fi
 if [[ "$*" == *"scripts/onboarding-pack.mjs"* ]]; then
 	# The real pack maker (#100), run here: its facts come in the environment, the profile on standard input.
 	for a in "$@"; do what="$a"; done

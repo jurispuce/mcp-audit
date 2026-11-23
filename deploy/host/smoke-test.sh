@@ -142,6 +142,17 @@ check "nothing in it is left to fill in" bash -c "! grep -q 'TO FILL IN' '$work/
 check "the pack is the operator's only" bash -c "[ \"\$(stat -c %a '$work/host/packs/smoke-a')\" = 700 ]"
 check "with a fact about the host missing, no pack is made to send" bash -c "! OPERATOR_HOSTING= '$work/host/bin/tenant' pack smoke-b && [ ! -e '$work/host/packs/smoke-b' ]"
 
+say "The check of a tenant's address, run where the tunnel stands (#92)"
+# What bin/tenant check-edge runs, sent from the tunnel's own network straight to the proxy: no
+# Cloudflare here, so this shows the instance answers as the check expects of a well-set-up zone.
+edge_check() { docker run --rm --network mcp-audit-edge-smoke "$image" node scripts/check-edge.mjs "$@" --via "http://$proxy:80"; }
+edge_out="$(edge_check "https://$host_a" 2>&1)" && edge_ok=yes || edge_ok=no
+check "check-edge passes for a tenant behind the proxy" bash -c "[ $edge_ok = yes ]"
+[ "$edge_ok" = yes ] || echo "$edge_out" | sed 's/^/    /'
+check "its sign-in page, its policy, /mcp and the OAuth endpoints are each checked" bash -c '[ "$(printf "%s" "$1" | grep -c -e "sign-in page is the app" -e "Content-Security-Policy arrives intact" -e "/mcp answers" -e "/oauth/register answers")" = 4 ]' _ "$edge_out"
+nobody_out="$(edge_check https://mcpaudit-nobody.smoke.test 2>&1)" && nobody_ok=yes || nobody_ok=no
+check "and it fails for a name that is no tenant" bash -c '[ "$2" = no ] && printf "%s" "$1" | grep -q "it does not answer as an instance: /health gave HTTP 404"' _ "$nobody_out" "$nobody_ok"
+
 say "A name that is no tenant is refused"
 check "an unknown name gets 404" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: mcpaudit-nobody.smoke.test' http://127.0.0.1:$port/login)\" = 404 ]"
 check "and no instance's page" bash -c "! curl -s --max-time 10 -H 'Host: mcpaudit-nobody.smoke.test' http://127.0.0.1:$port/login | grep -q 'Tenant smoke'"

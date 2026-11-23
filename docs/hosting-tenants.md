@@ -144,8 +144,27 @@ Tick these off once for the zone. They are settings in Cloudflare, not in the ap
 **Pages are passed on as they are**
 
 - [ ] A **Configuration Rule** for `starts_with(http.host, "mcpaudit-")` that turns off Rocket Loader and Email Obfuscation (the app's pages must reach the browser as the app sent them: Rocket Loader changes how scripts load, and the email addresses on a page are data).
-- [ ] Auto Minify, if your zone still has the setting, is off for the same names.
+- [ ] Auto Minify, if your zone still has the setting, is off for the same names. (Cloudflare retired it in 2024; an older zone may still show it.)
+- [ ] **Web Analytics** does not put its script into tenant pages. For a proxied site Cloudflare turns its automatic set-up on by default, which adds a script from `static.cloudflareinsights.com` to every page: the app's Content-Security-Policy blocks it, and it reports on the tenants' visitors. In Web Analytics, open the site and turn the automatic set-up off (or exclude the tenant names with a rule).
 - [ ] A **Cache Rule** for the same names with **Bypass cache**. The app sends `no-store` where it matters, but nothing of a tenant belongs in a shared cache.
+
+**Check it from outside**
+
+```bash
+bin/tenant check-edge acme
+```
+
+asks the tenant's address the way a browser and an assistant's server do, through Cloudflare, and reports each of the points above that can be seen from outside:
+
+- it answers over https, as the instance it should be (its own issuer, Strict-Transport-Security);
+- its sign-in page is the app's own, with no Access in front;
+- `/login` and the public guide arrive as the app sent them: its Content-Security-Policy, no Rocket Loader, no Web Analytics beacon, no other Cloudflare script;
+- nothing comes from Cloudflare's cache;
+- `/mcp`, the connector metadata and `/oauth/register` give the app's own answers to a server, not a Cloudflare challenge.
+
+With `OPERATOR_INSTANCE=https://<your own address>` in `host.env` (or `--operator <address>`), it also checks that your own instance still asks for Access, that `/oauth/authorize` stays behind it, and that the paths connectors need are let through. It needs no token, reads nothing a stranger could not, and ends with exit code 1 when a check fails; `tenant create` suggests it once the DNS record is known. The registry keeps the last result (`edge_checked`).
+
+What it cannot see: Email Obfuscation (no public page holds an email address), and whether Bot Fight Mode is off (Cloudflare challenges by its own judgement, so a pass is not proof). Look at those two settings. `--lockout` adds the check that a made-up `CF-Connecting-IP` does not change the address the app counts; it locks the address you run it from out of that tenant's `/mcp` for 15 minutes.
 
 **Limits to know**
 
@@ -635,7 +654,7 @@ Also accepted: the operator's SSH access and `host.env` are the keys to everythi
 
 ### Cloudflare
 
-Cloudflare ends the encryption and passes requests to the server through the tunnel, so it can read everything that people and assistants send and receive, and it could answer in the server's place. Its account is also a way in: whoever controls it can point a tenant's name elsewhere or attach Access to it. What there is: the API token the tenant command uses can edit DNS in one zone and nothing else; page rewriting (Rocket Loader, minify, Email Obfuscation) is off for tenant names, so Cloudflare does not change the pages; the Cloudflare account should have two-step sign-in and as few members as possible.
+Cloudflare ends the encryption and passes requests to the server through the tunnel, so it can read everything that people and assistants send and receive, and it could answer in the server's place. Its account is also a way in: whoever controls it can point a tenant's name elsewhere or attach Access to it. What there is: the API token the tenant command uses can edit DNS in one zone and nothing else; page rewriting (Rocket Loader, minify, Email Obfuscation, the Web Analytics script) is off for tenant names, so Cloudflare does not change the pages (`bin/tenant check-edge` looks); the Cloudflare account should have two-step sign-in and as few members as possible.
 
 Accepted, and to be stated in the onboarding pack (#100): Cloudflare is a processor of every tenant's traffic. A tenant that cannot accept it needs an address that does not go through Cloudflare.
 
@@ -662,8 +681,7 @@ IMAGE=ghcr.io/jurispuce/mcp-audit:main deploy/host/smoke-test.sh
 
 It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, each tenant has its own key and budget at an AI gateway (a scripted stand-in for LiteLLM: spend on one tenant does not show on the other, a key that is off or over budget is refused, a deleted tenant's key is revoked), that every answer carries a Content-Security-Policy, that no two tenants share a secret, that the operator's overview reports a stopped tenant and a missing backup with a non-zero exit code, that the operator endpoint answers its own tenant's token only and returns no content, that an upgrade backs up first and shows the "being upgraded" page, that a version which damages the data and fails to start is rolled back with the data as before, that `--all` stops at the first failure, and that suspend, resume and delete do what they say. CI runs it on every push.
 
-On the real tunnel, check by hand after the first tenant:
+On the real tunnel, after the first tenant, run `bin/tenant check-edge <name>` with `OPERATOR_INSTANCE` set. It covers the address answering over https with no Access prompt, and your own address still asking for Access. Then check by hand what it cannot:
 
-- its address answers over https and shows the sign-in page, with no Access prompt;
 - a Claude custom connector added with `https://<tenant address>/mcp` reaches the consent screen and lists the tools;
-- your own address still asks for Access.
+- in a browser, the tenant's sign-in page shows no errors in the console.
