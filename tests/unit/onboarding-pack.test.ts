@@ -171,7 +171,7 @@ describe('tenant pack', () => {
 
 	it('writes the statement and the note for a tenant, readable by the operator only', () => {
 		const created = h.create('acme', ['--admin-name', 'Ina Bērziņa']);
-		expect(created.out).toContain('Next: bin/tenant pack acme');
+		expect(created.out).toContain('Then: bin/tenant pack acme');
 		expect(h.tenant(['pack', 'acme', '--dry-run']).out).toContain('Nothing was changed (--dry-run).');
 		const dir = path.join(h.hostDir, 'packs/acme');
 		expect(existsSync(dir)).toBe(false);
