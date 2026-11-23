@@ -4,6 +4,8 @@ export const PROFILE_ADMIN = { name: 'Tia Tenant-Admin', email: 'tenant-admin@ex
 export const PROFILE_INSTANCE = 'Baltic Audit';
 /** The operator token the profile instance is started with (#98). Test value only. */
 export const OPERATOR_TOKEN = 'e2e-operator-token-0123456789abcdef0123456789';
+/** And the one of the instance without passwords, which stands for another tenant (#99). */
+export const OTHER_OPERATOR_TOKEN = 'e2e-other-operator-token-fedcba9876543210fedcba';
 
 /** @param {string} gateway The AI gateway's address, as the instance reaches it. */
 export function tenantProfile(gateway) {

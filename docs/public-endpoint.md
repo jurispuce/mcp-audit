@@ -61,6 +61,27 @@ With another proxy (nginx, Traefik, a cloud load balancer), keep the same three 
 - [ ] **Updates.** `MCP_AUDIT_TAG` is a version (for example `v0.7.0`) rather than `main`, and upgrades follow docs/deployment.md.
 - [ ] **In-app AI.** If it is set up, the gateway is not public (keep LiteLLM on the Compose network). For each engagement, check where its documents go: the model provider behind the gateway sees what a button reads.
 
+## Checklist for a tenant host
+
+For a server that runs instances for other firms (`docs/hosting-tenants.md`). The checklist above still holds for each instance; these are the points that only a tenant host has. Go through it before the first external person signs in, and again after any change to the tunnel, the proxy or Cloudflare.
+
+- [ ] **No open inbound ports.** From another machine, `nmap -Pn <server address>` shows nothing open but what you use to administer it (SSH, limited to your own addresses). On the server, `ss -ltnp` shows the proxy on `127.0.0.1:8088` only, and `docker ps --format '{{.Names}} {{.Ports}}'` shows no tenant, gateway or database with a published port.
+- [ ] **Only through the tunnel.** `curl -sI http://<server address>/` from outside gets no answer. `curl -s -H 'Host: <tenant address>' http://127.0.0.1:8088/health` on the server answers; the same with a name that is no tenant answers `404`.
+- [ ] **The visitor's address cannot be forged.** `for i in $(seq 1 31); do curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'authorization: Bearer mcpa_wrong' -H 'CF-Connecting-IP: 203.0.113.'$i https://<tenant address>/mcp; done` ends in `429`: the made-up addresses counted as one sender, yours. (It locks your address out of `/mcp` on that tenant for 15 minutes.)
+- [ ] **Cloudflare, per tenant name** (see Cloudflare checklist in `docs/hosting-tenants.md`):
+  - no Access application covers it: opening it in a private window shows the sign-in page, no Access prompt;
+  - the bot settings let `/mcp`, `/oauth/*` and `/.well-known/*` through: a Claude custom connector reaches the consent screen;
+  - page rewriting is off: the page source of `/login` has no `rocket-loader` or `cloudflare-static` script, and the response has the app's own `content-security-policy`;
+  - nothing is cached: `/login` answers with `cf-cache-status: DYNAMIC` or `BYPASS`.
+- [ ] **Your own instance** still asks for Access.
+- [ ] **Sign-in.** Each tenant is on `SIGN_IN_METHOD=passkey`; `/setup` redirects to `/login`; nobody can sign up without an invitation.
+- [ ] **Secrets.** `bin/tenant check-secrets` passes. `host.env` and every tenant's `.env` are mode `600`. The mail account can only send, for your domain only.
+- [ ] **Two tenants, by hand.** Sign in to tenant A in a browser, then open tenant B's address in the same browser: B shows its sign-in page, and A's passkey is not offered there. Connect an assistant to A; the same connector address with B's name asks to sign in again.
+- [ ] **Backups.** `bin/tenant status --all` shows a backup from last night and a restore check for every tenant; the copy off the server exists; each tenant's passphrase is also kept somewhere that is not the server.
+- [ ] **Overview by mail.** The scheduled `bin/tenant status --all` mails you when something needs attention: stop one test tenant and see the mail arrive.
+- [ ] **Versions.** Every tenant is on a released version (`bin/tenant list` shows none on `main`), and the image passed CI, which checks dependencies and Debian's security updates.
+- [ ] **People with access to the server and to the Cloudflare account** are few, named, and sign in with keys or two-step sign-in.
+
 ## Remote MCP clients
 
 Checked on 2026-11-12 against Anthropic's connector documentation ([building connectors](https://claude.com/docs/connectors/building), [authentication](https://claude.com/docs/connectors/building/authentication)).

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { OPERATOR_TOKEN, tenantProfile } from './tenant-profile.mjs';
+import { OPERATOR_TOKEN, OTHER_OPERATOR_TOKEN, tenantProfile } from './tenant-profile.mjs';
 
 /**
  * End-to-end tests run against a real server with a fresh data directory.
@@ -130,7 +130,8 @@ export default defineConfig({
 						ORIGIN: 'http://localhost:4175',
 						// Invited by email at start; the seeded people come on top (e2e/helpers.ts FIRST_ADMIN).
 						INITIAL_ADMIN_EMAIL: 'first@example.test',
-						INITIAL_ADMIN_NAME: 'Fia First'
+						INITIAL_ADMIN_NAME: 'Fia First',
+						OPERATOR_TOKEN: OTHER_OPERATOR_TOKEN
 					}),
 					// No name, sign-in method or first admin in its settings: the profile brings them.
 					server('profile', 4176, {

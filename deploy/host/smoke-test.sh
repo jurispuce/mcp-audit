@@ -114,6 +114,14 @@ check "$host_a is healthy" bash -c "curl -s --max-time 10 -H 'Host: $host_a' htt
 check "$host_a is Tenant smoke-a" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-a</title>'"
 check "$host_b is Tenant smoke-b" bash -c "curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-b</title>'"
 check "the instance knows its https address" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/.well-known/oauth-authorization-server | grep -q '\"issuer\":\"https://$host_a\"'"
+check "and so does the other: each names itself as issuer, and only itself" bash -c "curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/.well-known/oauth-authorization-server | grep -q '\"issuer\":\"https://$host_b\"' && ! curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/.well-known/oauth-authorization-server | grep -q '$host_a'"
+
+say "Every answer carries a Content-Security-Policy"
+csp_of() { via_proxy "$host_a" "$1" -o /dev/null -D - | tr -d '\r' | sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p'; }
+check "a page allows the app's own scripts and the one it names, nothing inline" bash -c "echo \"$(csp_of /login)\" | grep -q \"script-src 'self' 'nonce-[A-Za-z0-9+/=]*';\" && echo \"$(csp_of /login)\" | grep -q \"frame-ancestors 'none'\""
+check "an API answer allows nothing" bash -c "[ \"$(csp_of /health)\" = \"default-src 'none'; frame-ancestors 'none'\" ]"
+check "a static file allows nothing" bash -c "[ \"$(csp_of /icons/icon.svg)\" = \"default-src 'none'; frame-ancestors 'none'\" ]"
+check "a redirect allows nothing" bash -c "[ \"$(csp_of /settings)\" = \"default-src 'none'; frame-ancestors 'none'\" ]"
 
 say "A name that is no tenant is refused"
 check "an unknown name gets 404" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: mcpaudit-nobody.smoke.test' http://127.0.0.1:$port/login)\" = 404 ]"
@@ -156,6 +164,7 @@ for t in "${tenants[@]}"; do
 	check "$c holds no extra rights" bash -c "docker inspect -f '{{.HostConfig.CapDrop}}' $c | grep -q ALL"
 	check "$c has its own data volume" bash -c "docker inspect -f '{{range .Mounts}}{{.Name}} {{end}}' $c | grep -q \"mcp-audit-tenant-${t}_data\""
 done
+check "no two tenants share a secret, and none holds one of the host (the command compares their environment files)" "$work/host/bin/tenant" check-secrets
 check "the tenants' secrets differ" bash -c "[ \"\$(docker exec mcp-audit-tenant-smoke-a printenv BACKUP_PASSPHRASE)\" != \"\$(docker exec mcp-audit-tenant-smoke-b printenv BACKUP_PASSPHRASE)\" ]"
 
 say "AI: each tenant has its own key and budget at the shared gateway"

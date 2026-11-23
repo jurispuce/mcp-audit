@@ -34,12 +34,15 @@ export const init: ServerInit = async () => {
 	}
 };
 
+const NON_PAGE_CSP = "default-src 'none'; frame-ancestors 'none'";
 const SECURITY_HEADERS: Record<string, string> = {
 	'x-content-type-options': 'nosniff',
 	'referrer-policy': 'same-origin',
 	'x-frame-options': 'DENY',
-	// The same for browsers that follow the newer header: no page here opens inside a frame (#93).
-	'content-security-policy': "frame-ancestors 'none'",
+	// Pages carry the policy of vite.config.ts (csp). Everything else (JSON, downloads, redirects)
+	// gets this one: nothing in it may load or run anything, so a file that was uploaded can never
+	// act as a page of the app, and nothing opens inside a frame (#93, #99).
+	'content-security-policy': NON_PAGE_CSP,
 	'permissions-policy': 'camera=(self), microphone=(), geolocation=()'
 };
 

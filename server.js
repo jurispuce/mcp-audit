@@ -21,6 +21,10 @@ const port = Number(process.env.PORT ?? 3000);
 
 const server = http.createServer((req, res) => {
 	if (useForwardedProto && !req.headers['x-forwarded-proto']) req.headers['x-forwarded-proto'] = 'http';
+	// Static files are served before the app's own code sees the request. They get the strictest
+	// policy here; pages and API answers replace it with their own (src/hooks.server.ts, #99).
+	res.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
+	res.setHeader('x-content-type-options', 'nosniff');
 	handler(req, res, () => {
 		res.statusCode = 404;
 		res.end('Not found');

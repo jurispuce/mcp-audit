@@ -28,6 +28,9 @@ jobs:
       - run: npm run lint
       - run: npm run check
       - run: npm test
+      # Known vulnerabilities in what the app runs with (#99). Tools used only to build are not counted.
+      - name: Dependencies have no known high-severity vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
 
   e2e:
     name: End-to-end tests against the container
@@ -48,6 +51,8 @@ jobs:
           else
             echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
+          # Changes once a day, so Debian's security updates are fetched again and not taken from the cache.
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
       - name: Build the image
@@ -56,7 +61,9 @@ jobs:
           context: .
           load: true
           tags: mcp-audit:ci
-          build-args: APP_VERSION=${{ steps.version.outputs.value }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.value }}
+            APT_REFRESH=${{ steps.version.outputs.day }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -75,7 +82,7 @@ jobs:
           docker run -d --name app   -p 3000:3000 -e TEST_SEED_ENABLED=true -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
           docker run -d --name first -p 3001:3000 -e TEST_SEED_ENABLED=true --read-only --tmpfs /tmp mcp-audit:ci
           # an instance without passwords: people join by invitation with a passkey (#89, #90)
-          docker run -d --name passkey -p 3003:3000 -e TEST_SEED_ENABLED=true -e SIGN_IN_METHOD=passkey -e ORIGIN=http://localhost:3003 -e INITIAL_ADMIN_EMAIL=first@example.test -e "INITIAL_ADMIN_NAME=Fia First" -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
+          docker run -d --name passkey -p 3003:3000 -e TEST_SEED_ENABLED=true -e OPERATOR_TOKEN=e2e-other-operator-token-fedcba9876543210fedcba -e SIGN_IN_METHOD=passkey -e ORIGIN=http://localhost:3003 -e INITIAL_ADMIN_EMAIL=first@example.test -e "INITIAL_ADMIN_NAME=Fia First" -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
           # an instance that sets itself up from a tenant profile at its first start (#91)
           node e2e/tenant-profile.mjs http://host.docker.internal:4999 > tenant-profile.json
           docker run -d --name profile -p 3004:3000 -e TEST_SEED_ENABLED=true -e ORIGIN=http://localhost:3004 -e OPERATOR_TOKEN=e2e-operator-token-0123456789abcdef0123456789 -e TENANT_PROFILE=/config/tenant-profile.json -v "$PWD/tenant-profile.json:/config/tenant-profile.json:ro" -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
@@ -89,6 +96,12 @@ jobs:
         run: |
           out=$(timeout 60 docker run --rm -e SIGN_IN_METHOD=passkey -e ORIGIN=https://audit.example.com -e INITIAL_ADMIN_EMAIL=first@example.test --read-only --tmpfs /tmp mcp-audit:ci 2>&1) && { echo "it started"; exit 1; }
           echo "$out" | tee /dev/stderr | grep -q "SIGN_IN_METHOD=passkey needs email"
+
+      - name: The image has no pending Debian security updates
+        run: |
+          pending=$(docker run --rm --user root --entrypoint sh mcp-audit:ci -c 'apt-get update -qq > /dev/null 2>&1 || exit 9; apt-get -s upgrade | grep "^Inst" | grep -i security || true')
+          echo "${pending:-none pending}"
+          test -z "$pending"
 
       - name: The image reports its version
         run: curl -s http://127.0.0.1:3002/health | tee /dev/stderr | grep -q '"version":"${{ steps.version.outputs.value }}"'
@@ -146,6 +159,8 @@ jobs:
           else
             echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
+          # Changes once a day, so Debian's security updates are fetched again and not taken from the cache.
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -169,6 +184,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: APP_VERSION=${{ steps.version.outputs.value }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.value }}
+            APT_REFRESH=${{ steps.version.outputs.day }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

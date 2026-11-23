@@ -1,20 +1,7 @@
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Browser, Page } from '@playwright/test';
-import {
-	ADMIN,
-	expect,
-	invite,
-	joinLink,
-	loginAs,
-	postForm,
-	seed,
-	test,
-	unique,
-	virtualAuthenticator,
-	waitForMail
-} from '../helpers';
+import { ADMIN, expect, joined, loginAs, postForm, seed, test, unique, waitForMail } from '../helpers';
 import { TestProvider, callbackOf } from '../oauth-client';
 
 /**
@@ -24,22 +11,6 @@ import { TestProvider, callbackOf } from '../oauth-client';
 test.beforeEach(async ({ request }) => {
 	await seed(request);
 });
-
-/** A person who joined by invitation, in a browser of their own. */
-async function joined(browser: Browser, admin: Page, name: string, how: 'passkey' | 'without') {
-	const email = `${unique('tenant')}@example.test`;
-	await loginAs(admin, ADMIN);
-	const link = joinLink(await invite(admin, '', name, email));
-	const context = await browser.newContext();
-	const page = await context.newPage();
-	if (how === 'passkey') await virtualAuthenticator(context, page);
-	await page.goto(link);
-	await page
-		.getByRole('button', { name: how === 'passkey' ? 'Create passkey and join' : 'Join without a passkey' })
-		.click();
-	await expect(page).toHaveURL('/');
-	return { context, page, email };
-}
 
 test('an assistant connects through OAuth; the window signs the person in with a passkey', async ({
 	page,

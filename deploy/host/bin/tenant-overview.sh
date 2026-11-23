@@ -144,6 +144,10 @@ cmd_status_all() {
 		problems+=("The last nightly run had failures. See $registry/nightly.status")
 	fi
 
+	if ! shared_secrets > /dev/null; then
+		problems+=("A secret is shared where it should not be. See: bin/tenant check-secrets")
+	fi
+
 	local n
 	for n in "${notes[@]:-}"; do [ -n "$n" ] && echo "Note: $n"; done
 	if [ "${#problems[@]}" -eq 0 ]; then

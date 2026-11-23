@@ -523,6 +523,83 @@ Set in `deploy/host/tenant/docker-compose.yml`, the same for every tenant:
 
 Each tenant has its own database and files, so nothing of one tenant, internal requirements included, can appear in another.
 
+## Threat model
+
+Tenants are audit firms, sometimes competitors, with their clients' evidence on one server. Tenant addresses are not behind Cloudflare Access, so the app's own sign-in is the only gate. For each party that could do harm: what stops it, and what is accepted. "Checked" names the automated check; the checks run on every change (see Checking the layout).
+
+### One tenant against another
+
+| What could happen                                                     | What stops it                                                                                                                                                                         | Checked                                                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| A tenant's instance reads another's data                              | Each tenant has its own container, database, files, network and secrets. Nothing is shared but the server, the proxy and the gateway                                                  | Smoke test: a request from inside A to B fails, by name and by address          |
+| A person signed in at A is let in at B                                | Sessions, access tokens, assistants' connections and the operator's token are looked up in the instance's own database                                                                | Browser test with two instances: each works at home and is refused at the other |
+| A's cookie is sent to B (the names are siblings under one domain)     | The session cookie has no `Domain`: the browser sends it to the exact host it came from and to no other                                                                               | Unit test and browser test                                                      |
+| A's passkey signs in at B                                             | A passkey is made for the instance's own host name, not for the domain above it; the browser offers it nowhere else, and B refuses it even when it is offered or its record is copied | Unit tests and browser test                                                     |
+| A connector made for A is used at B                                   | Each instance names its own address as issuer and accepts tokens made for that address only                                                                                           | Smoke test, browser test                                                        |
+| Someone locks B's people out by hammering A                           | Lock-outs and rate limits are kept per instance                                                                                                                                       | Smoke test, unit tests                                                          |
+| A request for a name that is no tenant reaches a tenant               | The proxy answers 404 for any name without a route                                                                                                                                    | Smoke test                                                                      |
+| A tenant's admin plants script in their own instance to attack others | Text is shown as text; the Content-Security-Policy lets a page run only the app's own script; an uploaded file is only ever a download                                                | Browser tests                                                                   |
+| Internal requirements of one auditee appear at another tenant         | Separate databases; rule 5 holds inside each instance as before                                                                                                                       | By construction                                                                 |
+| A secret is the same for two tenants                                  | Each tenant's secrets are generated for it; `bin/tenant check-secrets` compares the environment files, and the overview reports a match                                               | Smoke test, unit tests                                                          |
+
+Accepted: all tenants run on one kernel. A fault that lets code break out of a container would reach the others. The containers run without root, without extra kernel rights, with a read-only filesystem and limits, which narrows that, and the image is rebuilt with Debian's security updates. A tenant whose data must not share a machine needs a server of its own.
+
+Accepted: **the password of your mail account is in every tenant's environment**, because each instance sends its own mail. Code running inside one instance could send mail from your domain. Use a mail account or API key that can only send, for this domain only, and replace it if a tenant's instance is ever compromised.
+
+### The internet against a tenant
+
+| What could happen                                                    | What stops it                                                                                                                                                                                             |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Someone signs up or guesses their way in                             | Nobody can sign up: people join by an admin's invitation (7 days, single use). Sign-in is a passkey, or a one-time code sent by email. Five wrong tries lock an account for 15 minutes, twenty an address |
+| Someone reaches the server directly                                  | The server has no open inbound port: the tunnel dials out. The proxy listens on the Docker network and on the server's own loopback only (by hand, see `docs/public-endpoint.md`)                         |
+| Someone pretends to be another visitor, to dodge or cause a lock-out | Only the tunnel may name the visitor's address; a `CF-Connecting-IP` from anywhere else is replaced (smoke test)                                                                                          |
+| A page of the app is put inside another site's frame                 | `frame-ancestors 'none'` and `X-Frame-Options: DENY` on every response                                                                                                                                    |
+| A form on another site acts as the signed-in person                  | Form posts must come from the instance's own origin; the cookie is `SameSite=Lax`                                                                                                                         |
+| An assistant is connected without the person's say                   | A connection needs the consent screen, signed in, in a top-level window; creating an access token needs a proof no older than 5 minutes                                                                   |
+| Someone asks the instance for its numbers                            | The operator endpoint needs that tenant's token and does not exist through the tunnel                                                                                                                     |
+| A document carries instructions for the AI                           | Everything the AI writes is a proposal that a person accepts or rejects; it cannot approve findings or change plan status                                                                                 |
+
+Accepted: anyone on the internet can open a tenant's sign-in page and register an OAuth client (a connector must be able to). Both are rate limited, and a registered client can do nothing until a signed-in person approves it.
+
+### A lost device
+
+- A passkey asks for the device's own unlock (fingerprint, face or PIN) every time, so the device alone does not sign in.
+- A session lasts 30 days in a browser that is left signed in. The admin ends it: Settings, Users, "End sessions and remove passkeys" for that person, who then signs in again with a code by email and adds a new passkey.
+- Access tokens and connected assistants are listed per person and can be revoked there; deactivating the person ends all of them.
+
+Accepted: an unlocked, signed-in browser in the wrong hands acts as the person until the admin ends the session.
+
+### A taken-over mailbox
+
+Email is how a person gets back in without a passkey, so **whoever controls a person's mailbox can sign in as them**: ask for a code, read it, sign in, add a passkey. What limits it: a code lasts 10 minutes, works once and only in the browser that asked; five codes per address in 15 minutes; a notice goes to the person when a code signs in and when a passkey is added (the intruder can delete those); the admin sees the new passkey in the person's history and can end sessions and remove passkeys.
+
+Accepted. It is the same for every service with recovery by email. Tell tenants: protect the mailboxes of people who use the instance with two-step sign-in. The operator's own mailbox matters most: the first admin's invitation goes by email.
+
+### The operator
+
+The operator runs the server, holds the backups and the passphrases that open them, and so is able to read any tenant's data. Nothing technical prevents that. What there is instead: the operator has no account in a tenant's instance; the daily overview reads counts and dates only; opening a tenant's data is an exceptional step with a written request and a record (see What the operator can and cannot see). A tenant that cannot accept this should run the app on its own server, which the same image allows.
+
+Also accepted: the operator's SSH access and `host.env` are the keys to everything. Keep the server's access to as few people as possible, with keys and not passwords.
+
+### Cloudflare
+
+Cloudflare ends the encryption and passes requests to the server through the tunnel, so it can read everything that people and assistants send and receive, and it could answer in the server's place. Its account is also a way in: whoever controls it can point a tenant's name elsewhere or attach Access to it. What there is: the API token the tenant command uses can edit DNS in one zone and nothing else; page rewriting (Rocket Loader, minify, Email Obfuscation) is off for tenant names, so Cloudflare does not change the pages; the Cloudflare account should have two-step sign-in and as few members as possible.
+
+Accepted, and to be stated in the onboarding pack (#100): Cloudflare is a processor of every tenant's traffic. A tenant that cannot accept it needs an address that does not go through Cloudflare.
+
+### The AI gateway and the model provider
+
+See Which data passes through the gateway and the model provider. In short: what an AI action reads of an engagement goes to the model provider; the gateway keeps amounts, not text; each tenant has its own key and budget; a tenant can switch AI off per engagement or use a gateway of its own.
+
+### Known vulnerabilities
+
+Checked on every push (CI):
+
+- **Dependencies:** `npm audit --omit=dev --audit-level=high` must find nothing in what the app runs with. On 2026-11-23 it found the mail library (nodemailer 8) with high-severity faults in how it reads addresses; it was upgraded to 10.6.1 and the audit is clean.
+- **The image:** it is built on `node:22-bookworm-slim` with Debian's security updates applied at build, and CI fails when a security update is pending.
+- **Listed, not fixed:** `esbuild` inside `drizzle-kit` (moderate, GHSA-67mh-4wv8-2f99) concerns a development server. `drizzle-kit` is used only to generate migrations on a developer's machine and is not in the image.
+- **Not done:** a scan of the image against a vulnerability database (Trivy, Grype). It could not be run where this was built, and none is in CI yet.
+
 ## Checking the layout
 
 `deploy/host/smoke-test.sh` starts the proxy and two tenants on test names on the machine's own Docker, without Cloudflare, and removes them again:
@@ -531,7 +608,7 @@ Each tenant has its own database and files, so nothing of one tenant, internal r
 IMAGE=ghcr.io/jurispuce/mcp-audit:main deploy/host/smoke-test.sh
 ```
 
-It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, each tenant has its own key and budget at an AI gateway (a scripted stand-in for LiteLLM: spend on one tenant does not show on the other, a key that is off or over budget is refused, a deleted tenant's key is revoked), that the operator's overview reports a stopped tenant and a missing backup with a non-zero exit code, that the operator endpoint answers its own tenant's token only and returns no content, that an upgrade backs up first and shows the "being upgraded" page, that a version which damages the data and fails to start is rolled back with the data as before, that `--all` stops at the first failure, and that suspend, resume and delete do what they say. CI runs it on every push.
+It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, each tenant has its own key and budget at an AI gateway (a scripted stand-in for LiteLLM: spend on one tenant does not show on the other, a key that is off or over budget is refused, a deleted tenant's key is revoked), that every answer carries a Content-Security-Policy, that no two tenants share a secret, that the operator's overview reports a stopped tenant and a missing backup with a non-zero exit code, that the operator endpoint answers its own tenant's token only and returns no content, that an upgrade backs up first and shows the "being upgraded" page, that a version which damages the data and fails to start is rolled back with the data as before, that `--all` stops at the first failure, and that suspend, resume and delete do what they say. CI runs it on every push.
 
 On the real tunnel, check by hand after the first tenant:
 

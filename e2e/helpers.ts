@@ -13,6 +13,11 @@ import {
  */
 export const test = base.extend({
 	page: async ({ page }, use) => {
+		// The app runs under a Content-Security-Policy (#99): anything it blocks fails the test.
+		const blocked: string[] = [];
+		page.on('console', (m) => {
+			if (/Content Security Policy|Content-Security-Policy/i.test(m.text())) blocked.push(m.text());
+		});
 		const goto = page.goto.bind(page);
 		page.goto = async (url, options) => {
 			const res = await goto(url, options);
@@ -27,6 +32,7 @@ export const test = base.extend({
 			return res;
 		};
 		await use(page);
+		expect(blocked, 'blocked by the Content-Security-Policy').toEqual([]);
 	}
 });
 export { expect };
@@ -200,3 +206,26 @@ export async function addUser(
 	await context.close();
 	return { name, email, password };
 }
+
+/** A person who joined by invitation, in a browser of their own. */
+export async function joined(browser: Browser, admin: Page, name: string, how: 'passkey' | 'without') {
+	const email = `${unique('tenant')}@example.test`;
+	await loginAs(admin, ADMIN);
+	const link = joinLink(await invite(admin, '', name, email));
+	const context = await browser.newContext();
+	const page = await context.newPage();
+	if (how === 'passkey') await virtualAuthenticator(context, page);
+	await page.goto(link);
+	await page
+		.getByRole('button', { name: how === 'passkey' ? 'Create passkey and join' : 'Join without a passkey' })
+		.click();
+	await expect(page).toHaveURL('/');
+	return { context, page, email };
+}
+
+/**
+ * A second instance, for checks across instances (#99): the one set up from a tenant profile. The
+ * tests of the instance without passwords treat it as another tenant.
+ */
+export const OTHER_INSTANCE =
+	process.env.E2E_PROFILE_URL ?? (process.env.E2E_BASE_URL ? undefined : 'http://localhost:4176');
