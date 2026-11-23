@@ -18,6 +18,9 @@ const PUBLIC_PATHS = [
 	// Joining by an invitation link (#90): the link is the key.
 	/^\/join\/?$/,
 	/^\/api\/passkeys\/join\/(options|verify)\/?$/,
+	// The guide with this instance's own MCP address (#100): linked from the first admin's welcome,
+	// before they have joined. It holds nothing but the instance's name and address.
+	/^\/welcome\/guide\/?$/,
 	/^\/_app\//
 ];
 

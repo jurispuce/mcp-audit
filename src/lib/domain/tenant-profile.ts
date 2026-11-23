@@ -43,6 +43,8 @@ export interface TenantProfile {
 	/** Bundled library sources to load, by code. */
 	librarySources: BuiltInSource[];
 	ai: { baseUrl: string; apiKey: string | null; defaultModel: string; webSearch: boolean } | null;
+	/** Who runs the instance for the tenant (#100), named in the first admin's welcome. */
+	operator: { name: string; contact: string | null } | null;
 }
 
 const text = (max: number) =>
@@ -69,7 +71,8 @@ const FileSchema = z.strictObject({
 			default_model: text(200),
 			web_search: z.boolean('must be true or false').optional()
 		})
-		.optional()
+		.optional(),
+	operator: z.strictObject({ name: text(120), contact: text(200).optional() }).optional()
 });
 
 /** "first_admin.email: is missing" rather than the parser's own words. */
@@ -127,7 +130,8 @@ export function parseProfile(
 					defaultModel: p.ai.default_model,
 					webSearch: p.ai.web_search === true
 				}
-			: null
+			: null,
+		operator: p.operator ? { name: p.operator.name, contact: p.operator.contact ?? null } : null
 	};
 }
 
@@ -167,6 +171,9 @@ export interface AppliedProfile {
 	ai: { baseUrl: string; defaultModel: string; webSearch: boolean; keyGiven: boolean } | null;
 	/** The default model passed the tool-calling check and runs the AI actions. */
 	aiChecked: boolean;
+	/** What the first admin's welcome names (#100): the loaded sources by title, and who runs the instance. */
+	librarySourceTitles?: string[];
+	operator?: { name: string; contact: string | null } | null;
 }
 
 export function appliedProfile(app: AppDatabase): AppliedProfile | null {
@@ -207,7 +214,9 @@ export function applyProfile(
 						keyGiven: !!profile.ai.apiKey
 					}
 				: null,
-			aiChecked: false
+			aiChecked: false,
+			librarySourceTitles: profile.librarySources.map((s) => s.title),
+			operator: profile.operator
 		};
 		saveSetting(app, KEY, record, now);
 		return { user, token, record };

@@ -9,7 +9,7 @@
 # an upgrade backs up first and a failed one is rolled back (#97; test images made from $IMAGE), and
 # the operator's overview reports a stopped tenant and a missing backup and nothing of a tenant's
 # content (#98), and that suspend, resume and delete do what they say. Everything it starts is
-# removed at the end.
+# removed at the end. It also makes the onboarding pack for a tenant and reads the public guide (#100).
 set -euo pipefail
 
 image="${IMAGE:-mcp-audit:ci}"
@@ -75,6 +75,12 @@ AI_GATEWAY_NETWORK=$gateway_net
 TENANT_AI_DEFAULT_MODEL=fake-tools
 TENANT_AI_BUDGET=5
 DISK_ALERT_PERCENT=101
+OPERATOR_NAME=Smoke Hosting
+OPERATOR_CONTACT=hosting@smoke.test
+OPERATOR_HOSTING=a test machine
+OPERATOR_BACKUP_COPY=a directory next to it
+OPERATOR_EMAIL_SERVICE=no mail service at all
+OPERATOR_MODEL_PROVIDER=a scripted stand-in
 ENV
 tenant() { "$work/host/bin/tenant" "$@"; }
 
@@ -122,6 +128,19 @@ check "a page allows the app's own scripts and the one it names, nothing inline"
 check "an API answer allows nothing" bash -c "[ \"$(csp_of /health)\" = \"default-src 'none'; frame-ancestors 'none'\" ]"
 check "a static file allows nothing" bash -c "[ \"$(csp_of /icons/icon.svg)\" = \"default-src 'none'; frame-ancestors 'none'\" ]"
 check "a redirect allows nothing" bash -c "[ \"$(csp_of /settings)\" = \"default-src 'none'; frame-ancestors 'none'\" ]"
+
+say "What a new tenant's first admin is given (#100)"
+check "the guide is a public page of the instance, with its own MCP address in it" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/welcome/guide | grep -q 'value=\"https://$host_a/mcp\"'"
+check "and nothing of another tenant" bash -c "! curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/welcome/guide | grep -q '$host_b'"
+check "the rest of the instance still needs a sign-in" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/guide)\" = 303 ]"
+check "the profile names who runs the instance, for the welcome in the invitation" grep -q 'name: "Smoke Hosting"' "$work/tenants/smoke-a/tenant-profile.yaml"
+tenant pack smoke-a > "$work/pack.out" 2>&1 && packed=yes || packed=no
+check "tenant pack writes a note and a statement" bash -c "[ $packed = yes ] && [ -s '$work/host/packs/smoke-a/note.txt' ] && [ -s '$work/host/packs/smoke-a/statement.html' ]"
+[ "$packed" = yes ] || sed 's/^/    /' "$work/pack.out"
+check "the statement is this tenant's: its address, its budget, and the host's own facts" bash -c "grep -q 'at https://$host_a: a separate database' '$work/host/packs/smoke-a/statement.html' && grep -q 'Your budget is \$5 for each 30 days' '$work/host/packs/smoke-a/statement.html' && grep -q 'on a test machine' '$work/host/packs/smoke-a/statement.html'"
+check "nothing in it is left to fill in" bash -c "! grep -q 'TO FILL IN' '$work/host/packs/smoke-a/statement.html' '$work/host/packs/smoke-a/note.txt'"
+check "the pack is the operator's only" bash -c "[ \"\$(stat -c %a '$work/host/packs/smoke-a')\" = 700 ]"
+check "with a fact about the host missing, no pack is made to send" bash -c "! OPERATOR_HOSTING= '$work/host/bin/tenant' pack smoke-b && [ ! -e '$work/host/packs/smoke-b' ]"
 
 say "A name that is no tenant is refused"
 check "an unknown name gets 404" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: mcpaudit-nobody.smoke.test' http://127.0.0.1:$port/login)\" = 404 ]"

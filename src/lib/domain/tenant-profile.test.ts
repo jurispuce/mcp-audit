@@ -8,6 +8,7 @@ import { fakeLlmFetch } from '../../../e2e/fake-llm.mjs';
 import './entities';
 import { getAiSettings, removeModel, saveResearch } from './ai-settings';
 import type { MailTransport } from './email';
+import { WHAT_IT_IS } from './email-templates';
 import { joinWithoutPasskey, readInvitation } from './invitations';
 import { getItemHistory } from './items';
 import { getSourceByCode, listSources } from './library';
@@ -69,6 +70,63 @@ afterEach(() => {
 	rmSync(dir, { recursive: true, force: true });
 });
 
+describe('the first admin’s welcome (#100)', () => {
+	const OPERATOR = { name: 'Peak Audit Hosting', contact: 'hosting@peak.example.test' };
+
+	it('says what the app is, where the instance is, what is set up, what to do first, and who runs it', async () => {
+		write({ ...PROFILE, operator: OPERATOR });
+		await start();
+		const text = String(sent[0]!.text);
+		expect(String(sent[0]!.subject)).toBe('Your instance is ready (Baltic Audit)');
+		expect(text).toContain(
+			'Hello Tia Tenant, Baltic Audit was set up with you as its first admin by Peak Audit Hosting.'
+		);
+		// What mcp-audit is, in three sentences.
+		expect(text).toContain(WHAT_IT_IS);
+		expect(WHAT_IT_IS.split(/(?<=\.)\s+/)).toHaveLength(3);
+		// The tenant's own address, and what is already there.
+		expect(text).toContain(
+			'Baltic Audit is your own instance, at https://baltic.example.test. Nobody else works in it.'
+		);
+		expect(text).toContain(
+			'Already set up: the library holds NIS 2 Directive (EU) 2022/2555; the AI buttons are ready to use, within a budget; people sign in with a passkey'
+		);
+		// The first things to do, and the guide with this instance's own address.
+		expect(text).toContain('First, join with the link below and create your passkey.');
+		expect(text).toContain(
+			'Then invite your colleagues on Settings, Users, and create your first engagement.'
+		);
+		expect(text).toContain('Guide:\nhttps://baltic.example.test/welcome/guide');
+		expect(text).toContain(
+			'Questions about the instance, your data or the AI budget go to Peak Audit Hosting (hosting@peak.example.test), who runs it for you.'
+		);
+		// The link to join is still there, and still works.
+		expect(readInvitation(app, linkIn(text), T0)).toMatchObject({ state: 'open', first: true });
+		expect(String(sent[0]!.html)).toContain('href="https://baltic.example.test/welcome/guide"');
+		// The record of what was applied names the operator; a later start sends the same welcome.
+		expect(appliedProfile(app)).toMatchObject({ operator: OPERATOR });
+		await start({ ...ENV, TENANT_PROFILE: file }, new Date(T0.getTime() + 3_600_000));
+		expect(String(sent[1]!.text)).toContain(WHAT_IT_IS);
+	});
+
+	it('without an operator, AI or sources in the profile, says only what is true', async () => {
+		write({ instance_name: 'Baltic Audit', sign_in_method: 'passkey', first_admin: PROFILE.first_admin });
+		await start();
+		const text = String(sent[0]!.text);
+		expect(text).toContain('Hello Tia Tenant, Baltic Audit was set up with you as its first admin.');
+		expect(text).toContain('the library is empty, ready for the sources you add; AI is not set up yet;');
+		expect(text).not.toContain('who runs it for you');
+		expect(text).not.toContain('within a budget');
+	});
+
+	it('refuses an operator without a name, or with a field it does not know', async () => {
+		write({ ...PROFILE, operator: { contact: 'x@example.test' } });
+		await expect(start()).rejects.toThrow('operator.name: is missing');
+		write({ ...PROFILE, operator: { name: 'Peak', phone: '1' } });
+		await expect(start()).rejects.toThrow('operator.phone: is not a field of a tenant profile');
+	});
+});
+
 describe('applying a profile at the first start', () => {
 	it('loads the library, saves and checks AI, invites the first admin, and records what it did', async () => {
 		const env: Record<string, string | undefined> = { ...ENV, TENANT_PROFILE: file };
@@ -118,7 +176,9 @@ describe('applying a profile at the first start', () => {
 			firstAdmin: { id: tia!.id, name: 'Tia Tenant', email: 'tia@baltic.example.test' },
 			librarySources: ['nis2'],
 			ai: { baseUrl: 'http://gateway.test', defaultModel: 'fake-tools', webSearch: true, keyGiven: true },
-			aiChecked: true
+			aiChecked: true,
+			librarySourceTitles: ['NIS 2 Directive (EU) 2022/2555'],
+			operator: null
 		});
 		expect(JSON.stringify(record)).not.toContain('sk-tenant-secret');
 		expect(lines.join('\n')).not.toContain('sk-tenant-secret');
@@ -302,7 +362,8 @@ describe('the file', () => {
 			signInMethod: null,
 			firstAdmin: { name: 'Tia Tenant', email: 'tia@baltic.example.test' },
 			librarySources: [],
-			ai: null
+			ai: null,
+			operator: null
 		});
 		expect(() => parseProfile([], file)).toThrow(ProfileError);
 	});

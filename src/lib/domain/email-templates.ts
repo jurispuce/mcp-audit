@@ -101,16 +101,73 @@ export function invitationEmail(
 	);
 }
 
-/** The first admin of an instance without passwords (#89): nobody invited them; the instance was set up for them. */
+/** What an instance set up from a profile tells its first admin about itself (#100). */
+export interface SetUpForYou {
+	/** Titles of the library sources that were loaded. */
+	sources: string[];
+	/** AI through a gateway was set up with the instance. */
+	ai: boolean;
+	passkeys: boolean;
+	operator: { name: string; contact: string | null } | null;
+}
+
+/** mcp-audit in three sentences, for someone who has never seen it. */
+export const WHAT_IT_IS =
+	'mcp-audit is an app for planning and running audits: the requirements of laws and standards, the auditee’s documents, the plan, the meetings, the evidence and the findings are kept in one place. An AI can do the reading and the drafting, and everything it writes is a proposal that an auditor accepts or rejects. Every change is kept in a history, so it is always clear who decided what.';
+
+function list(items: string[]): string {
+	if (items.length <= 1) return items[0] ?? '';
+	return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+}
+
+/**
+ * The first admin of an instance without passwords (#89): nobody invited them; the instance was set up
+ * for them. Where it was set up from a profile (a tenant), the email is also their welcome (#100):
+ * what the app is, where their instance is, what is already there and what to do first.
+ */
 export function firstAdminEmail(
 	instance: Instance,
-	input: { name: string; link: string; days: number }
+	input: { name: string; link: string; days: number; setUp?: SetUpForYou | null }
 ): EmailContent {
+	const small = {
+		small: `The link works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask whoever set the instance up to restart it: a new link is sent at each start until you have joined.`
+	};
+	const s = input.setUp;
+	if (!s)
+		return compose(
+			instance,
+			tagged(instance, 'Your instance is ready'),
+			`${instance.name} is ready for you`,
+			[
+				`Hello ${input.name}, ${instance.name} was set up with you as its first admin. Join to create your passkey; then invite your colleagues on Settings, Users.`,
+				{ link: { href: input.link, label: 'Join' } },
+				small
+			]
+		);
+	const by = s.operator ? ` by ${s.operator.name}` : '';
+	const there = [
+		s.sources.length
+			? `the library holds ${list(s.sources)}`
+			: 'the library is empty, ready for the sources you add',
+		s.ai ? 'the AI buttons are ready to use, within a budget' : 'AI is not set up yet',
+		s.passkeys
+			? 'people sign in with a passkey (the fingerprint, face or PIN of their own device), or with a code sent by email'
+			: 'people sign in with their email and a password'
+	];
 	return compose(instance, tagged(instance, 'Your instance is ready'), `${instance.name} is ready for you`, [
-		`Hello ${input.name}, ${instance.name} was set up with you as its first admin. Join to create your passkey; then invite your colleagues on Settings, Users.`,
+		`Hello ${input.name}, ${instance.name} was set up with you as its first admin${by}.`,
+		WHAT_IT_IS,
+		`${instance.name} is your own instance, at ${instance.origin}. Nobody else works in it. Already set up: ${there.join('; ')}.`,
+		`First, join with the link below${s.passkeys ? ' and create your passkey' : ''}. Then invite your colleagues on Settings, Users, and create your first engagement. The guide shows the five steps of an audit and how to connect your own Claude or ChatGPT to this instance:`,
+		{ link: { href: `${instance.origin}/welcome/guide`, label: 'Guide' } },
 		{ link: { href: input.link, label: 'Join' } },
+		...(s.operator
+			? [
+					`Questions about the instance, your data or the AI budget go to ${s.operator.name}${s.operator.contact ? ` (${s.operator.contact})` : ''}, who runs it for you.`
+				]
+			: []),
 		{
-			small: `The link works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask whoever set the instance up to restart it: a new link is sent at each start until you have joined.`
+			small: `The link to join works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask ${s.operator?.name ?? 'whoever set the instance up'} for a new one.`
 		}
 	]);
 }

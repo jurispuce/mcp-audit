@@ -46,6 +46,11 @@ if [[ "$*" == *"scripts/gateway-keys.mjs"* ]]; then
 	done
 	exec node "$FAKE_DOCKER_REPO/scripts/gateway-keys.mjs" "${args[@]}"
 fi
+if [[ "$*" == *"scripts/onboarding-pack.mjs"* ]]; then
+	# The real pack maker (#100), run here: its facts come in the environment, the profile on standard input.
+	for a in "$@"; do what="$a"; done
+	exec node "$FAKE_DOCKER_REPO/scripts/onboarding-pack.mjs" "$what"
+fi
 if [[ "$*" == *"scripts/backup-retention.mjs"* ]]; then
 	# The real rules, run here: the fake only stands in for the container around them.
 	args=()

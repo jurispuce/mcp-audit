@@ -232,6 +232,9 @@ ai: # optional
   api_key: sk-…
   default_model: claude-sonnet
   web_search: false
+operator: # optional: who runs the instance for its people
+  name: Peak Audit Hosting
+  contact: hosting@example.com
 ```
 
 Mount the file into the container and name it, next to the email settings and `ORIGIN`:
@@ -248,7 +251,7 @@ At the first start the instance:
 
 - loads the listed library sources;
 - saves the AI gateway and its key, switches web search for research on or off, runs the tool-calling check on the default model and, when it passes, lets that model run the AI actions;
-- creates the first admin and sends their invitation by email. There is no set-up page and no code in the log, whatever the sign-in method;
+- creates the first admin and sends their invitation by email. There is no set-up page and no code in the log, whatever the sign-in method. The invitation is also their welcome: what the app is, the instance's address, what was set up, what to do first, a link to the guide at `/welcome/guide` (a public page with the instance's own MCP address), and, where the profile names an operator, who runs the instance and how to reach them;
 - takes its name and, where the profile gives one, its sign-in method from the profile.
 
 What to know:

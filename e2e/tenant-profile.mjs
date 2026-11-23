@@ -2,6 +2,8 @@
 //   node e2e/tenant-profile.mjs <gateway address>     prints it as JSON, for CI to mount into a container
 export const PROFILE_ADMIN = { name: 'Tia Tenant-Admin', email: 'tenant-admin@example.test' };
 export const PROFILE_INSTANCE = 'Baltic Audit';
+/** Who runs the instance for the tenant (#100), named in the first admin's welcome. */
+export const PROFILE_OPERATOR = { name: 'Peak Audit Hosting', contact: 'hosting@peak.example.test' };
 /** The operator token the profile instance is started with (#98). Test value only. */
 export const OPERATOR_TOKEN = 'e2e-operator-token-0123456789abcdef0123456789';
 /** And the one of the instance without passwords, which stands for another tenant (#99). */
@@ -14,7 +16,8 @@ export function tenantProfile(gateway) {
 		sign_in_method: 'passkey',
 		first_admin: PROFILE_ADMIN,
 		library_sources: ['nis2'],
-		ai: { base_url: gateway, api_key: 'sk-profile-test', default_model: 'fake-tools', web_search: true }
+		ai: { base_url: gateway, api_key: 'sk-profile-test', default_model: 'fake-tools', web_search: true },
+		operator: PROFILE_OPERATOR
 	};
 }
 

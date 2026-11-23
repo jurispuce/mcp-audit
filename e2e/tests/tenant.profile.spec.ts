@@ -1,11 +1,15 @@
 import { expect, joinLink, loginAs, mailTo, test, virtualAuthenticator } from '../helpers';
-import { OPERATOR_TOKEN, PROFILE_ADMIN, PROFILE_INSTANCE } from '../tenant-profile.mjs';
+import { OPERATOR_TOKEN, PROFILE_ADMIN, PROFILE_INSTANCE, PROFILE_OPERATOR } from '../tenant-profile.mjs';
 
 /**
  * #91: an instance started with TENANT_PROFILE and nothing else about itself in its settings. By the
  * time its first person arrives it has its name, its library, its AI and its sign-in method.
  */
-test('an instance set up from a profile is ready when its first admin joins', async ({ page, context }) => {
+test('an instance set up from a profile is ready when its first admin joins', async ({
+	page,
+	context,
+	baseURL
+}) => {
 	// The invitation went out when the instance started. Nobody typed a set-up code.
 	const invitations = (await mailTo(page.request, PROFILE_ADMIN.email)).filter(
 		(m) => m.kind === 'invitation'
@@ -13,6 +17,14 @@ test('an instance set up from a profile is ready when its first admin joins', as
 	const mail = invitations.at(-1)!;
 	expect(mail.subject).toBe(`Your instance is ready (${PROFILE_INSTANCE})`);
 	expect(mail.text).toContain(`${PROFILE_INSTANCE} was set up with you as its first admin`);
+	// The invitation is also the welcome (#100): what the app is, what is set up, the guide, who runs it.
+	expect(mail.text).toContain('mcp-audit is an app for planning and running audits');
+	expect(mail.text).toContain(`${PROFILE_INSTANCE} is your own instance, at ${new URL(baseURL!).origin}`);
+	expect(mail.text).toContain('the AI buttons are ready to use, within a budget');
+	expect(mail.text).toContain(`${new URL(baseURL!).origin}/welcome/guide`);
+	expect(mail.text).toContain(
+		`go to ${PROFILE_OPERATOR.name} (${PROFILE_OPERATOR.contact}), who runs it for you`
+	);
 
 	// No set-up page to claim the instance with, and the sign-in method the profile chose.
 	await page.goto('/setup');
@@ -107,4 +119,43 @@ test('the operator endpoint gives numbers to the operator token only, and no con
 	expect(text).not.toContain(PROFILE_ADMIN.email);
 	expect(text).not.toContain(PROFILE_INSTANCE);
 	await anonymous.dispose();
+});
+
+/**
+ * #100: the guide the welcome links to. Anyone with the link can read it, before joining; it has
+ * this instance's own MCP address in it, and it works as a page: its tabs are its own script.
+ */
+test('the guide with the instance’s own MCP address is a public page that works', async ({
+	browser,
+	baseURL
+}) => {
+	const context = await browser.newContext();
+	const page = await context.newPage();
+	const blocked: string[] = [];
+	page.on('console', (m) => {
+		if (/Content Security Policy/i.test(m.text())) blocked.push(m.text());
+	});
+	const opened = await page.goto(`${baseURL}/welcome/guide`);
+	expect(opened!.status()).toBe(200);
+	expect(new URL(page.url()).pathname).toBe('/welcome/guide');
+	const policy = opened!.headers()['content-security-policy']!;
+	expect(policy).toContain("default-src 'none'");
+	expect(policy).toMatch(/script-src 'sha256-[A-Za-z0-9+/=]+'/);
+	await expect(page).toHaveTitle(`${PROFILE_INSTANCE} Guide`);
+	await expect(page.getByRole('heading', { name: 'Run an audit in five steps' })).toBeVisible();
+	await expect(page.getByLabel('Your mcp-audit MCP address')).toHaveValue(`${new URL(baseURL!).origin}/mcp`);
+	// Its own script runs under that policy: choosing a step shows that step.
+	const tabs = page.getByRole('tablist', { name: 'Steps' }).getByRole('tab');
+	await tabs.nth(2).click();
+	await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+	await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'false');
+	expect(blocked).toEqual([]);
+	// Nothing of the instance but its name and address: no people, no engagements.
+	const html = await page.content();
+	expect(html).not.toContain(PROFILE_ADMIN.email);
+	expect(html).not.toContain(PROFILE_ADMIN.name);
+	// The rest of the instance still needs a sign-in.
+	await page.goto(`${baseURL}/guide`);
+	await expect(page).toHaveURL(/\/login/);
+	await context.close();
 });

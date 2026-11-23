@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
 	AFTER,
 	CLIENTS,
@@ -264,6 +265,15 @@ function script(): string {
     });
   });
 })();`;
+}
+
+/**
+ * The policy a browser needs to show the guide as a page (#100): its own styles, and the one script
+ * it carries, named by its hash. Nothing is loaded from anywhere.
+ */
+export function guidePolicy(): string {
+	const hash = createHash('sha256').update(script()).digest('base64');
+	return `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 }
 
 export function guideParts(opts: StandaloneOptions = {}): { head: string; body: string } {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -12,7 +13,7 @@ import {
 	rich,
 	stepProgress
 } from './content.ts';
-import { ADDRESS_PLACEHOLDER, GUIDE_TITLE, guideDocument, guideFragment } from './standalone.ts';
+import { ADDRESS_PLACEHOLDER, GUIDE_TITLE, guideDocument, guideFragment, guidePolicy } from './standalone.ts';
 
 const ROUTES = path.resolve(import.meta.dirname, '../../routes/(app)');
 const routeExists = (href: string) =>
@@ -115,5 +116,27 @@ describe('standalone guide (#84)', () => {
 	it('carries a script that parses', () => {
 		const js = /<script>([\s\S]*)<\/script>/.exec(html)![1]!;
 		expect(() => new Function(js)).not.toThrow();
+	});
+});
+
+describe('the guide as a public page (#100)', () => {
+	it('comes with a policy that lets its own script run, by its hash, and nothing else', () => {
+		const html = guideDocument({
+			mcpUrl: 'https://mcpaudit-acme.example.test/mcp',
+			instanceName: 'Acme Audit'
+		});
+		const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+		expect(scripts).toHaveLength(1);
+		const hash = createHash('sha256').update(scripts[0]!).digest('base64');
+		const policy = guidePolicy();
+		expect(policy).toContain(`script-src 'sha256-${hash}'`);
+		expect(policy).toContain("default-src 'none'");
+		expect(policy).toContain("frame-ancestors 'none'");
+		expect(policy).not.toContain("script-src 'unsafe-inline'");
+		// The page asks for nothing from anywhere else.
+		expect(html).not.toMatch(/<link |<img |src="http|url\(http/);
+		// A name with markup in it stays text, so the one script is still the only one.
+		const hostile = guideDocument({ instanceName: '<script>alert(1)</script>' });
+		expect([...hostile.matchAll(/<script>/g)]).toHaveLength(1);
 	});
 });

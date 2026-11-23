@@ -3,7 +3,8 @@ import type { RegistrationResponseJSON } from '@simplewebauthn/server';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { createSession, setPassword } from './auth';
 import { EmailNotSetUpError, emailSettings, sendEmail, type EmailDeps } from './email';
-import { firstAdminEmail, instanceInfo, invitationEmail } from './email-templates';
+import { readSetting } from './app-settings';
+import { firstAdminEmail, instanceInfo, invitationEmail, type SetUpForYou } from './email-templates';
 import { DomainError, ForbiddenError, ValidationError } from './errors';
 import {
 	finishPasskeyRegistration,
@@ -71,6 +72,26 @@ function issue(app: AppDatabase, user: User, invitedBy: string, now: Date): stri
 }
 
 /**
+ * What an instance that was set up from a tenant profile says of itself in its first admin's
+ * welcome (#100). Read from the record the profile left; null on any other instance.
+ */
+function setUpOf(app: AppDatabase, env: Env): SetUpForYou | null {
+	const record = readSetting<{
+		librarySources?: string[];
+		librarySourceTitles?: string[];
+		ai?: unknown;
+		operator?: { name: string; contact: string | null } | null;
+	} | null>(app, 'instance.profile', null);
+	if (!record) return null;
+	return {
+		sources: record.librarySourceTitles ?? record.librarySources ?? [],
+		ai: !!record.ai,
+		passkeys: signInMethod(env) === 'passkey',
+		operator: record.operator ?? null
+	};
+}
+
+/**
  * Send the email. A mail server that refuses is reported in words; the invitation stays open.
  * Without an inviter it is the first admin's: the instance was set up for them.
  */
@@ -82,14 +103,20 @@ async function send(
 	origin: string,
 	deps: EmailDeps
 ): Promise<string | null> {
-	const instance = instanceInfo(origin, deps.env ?? process.env);
+	const env = deps.env ?? process.env;
+	const instance = instanceInfo(origin, env);
 	const link = `${instance.origin}/join?t=${token}`;
 	try {
 		await sendEmail(
 			app,
 			{
 				...(inviterName === null
-					? firstAdminEmail(instance, { name: user.name, link, days: INVITATION_DAYS })
+					? firstAdminEmail(instance, {
+							name: user.name,
+							link,
+							days: INVITATION_DAYS,
+							setUp: setUpOf(app, env)
+						})
 					: invitationEmail(instance, {
 							inviteeName: user.name,
 							inviterName,

@@ -16,6 +16,7 @@
 #   bin/tenant export  <name> [--out <directory>]
 #   bin/tenant check-backup <name>       bin/tenant nightly
 #   bin/tenant check-secrets             no two tenants share a secret
+#   bin/tenant pack    <name> [--draft]  what to send a new tenant: a note and a data statement
 #
 # Every command takes --dry-run: it prints what it would do and changes nothing.
 #
@@ -34,7 +35,7 @@ registry="$HOST_DIR/registry"
 default_image=ghcr.io/jurispuce/mcp-audit
 
 die() { echo "$*" >&2; exit 1; }
-usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # ---- The registry: one small file per tenant. Names, addresses, versions, states and dates only;
@@ -263,6 +264,12 @@ cmd_create() {
 		fi
 		# Where the gateway is and which model to use. The key itself is in the environment file.
 		if [ -n "$ai_key" ]; then ai_profile; fi
+		# Who runs the instance, for the first admin's welcome (#100).
+		if [ -n "${OPERATOR_NAME:-}" ]; then
+			echo "operator:"
+			echo "  name: $(yaml "$OPERATOR_NAME")"
+			[ -n "${OPERATOR_CONTACT:-}" ] && echo "  contact: $(yaml "$OPERATOR_CONTACT")"
+		fi
 	} > "$dir/tenant-profile.yaml"
 	# The container reads it as its own user; it holds no secret.
 	chmod 644 "$dir/tenant-profile.yaml"
@@ -306,6 +313,7 @@ cmd_create() {
 	meta_set "$name" state active
 	say "Tenant \"$name\" is running at https://$host"
 	[ -n "${restore_file:-}" ] || say "The instance has emailed the first admin's invitation to $admin_email. A restart sends a new one until they have joined."
+	[ -n "${restore_file:-}" ] || say "Next: bin/tenant pack $name, for the note and the data statement to send them yourself."
 }
 
 # ---- list and status
@@ -497,6 +505,8 @@ cmd_delete() {
 . "$here/bin/tenant-overview.sh"
 # shellcheck disable=SC1091
 . "$here/bin/tenant-secrets.sh"
+# shellcheck disable=SC1091
+. "$here/bin/tenant-pack.sh"
 
 command="${1:-}"
 [ $# -gt 0 ] && shift
@@ -510,6 +520,7 @@ case "$command" in
 		;;
 	backups) cmd_backups "$@" ;;
 	check-secrets) cmd_check_secrets "$@" ;;
+	pack) cmd_pack "$@" ;;
 	list) cmd_list "$@" ;;
 	status) cmd_status "$@" ;;
 	-h | --help | help) usage 0 ;;

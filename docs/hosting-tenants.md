@@ -39,8 +39,9 @@ Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before t
     host.env                 the host's settings (chmod 600)
     tenants/<tenant>.caddy   one route per tenant, written by bin/proxy-sync
     registry/                which tenants exist: names, addresses, versions, states, dates
+    packs/<tenant>/          what to send a new tenant: a note and a data statement (bin/tenant pack)
     bin/                     tenant (create, list, status, suspend, resume, delete, ai, upgrade,
-                             backup, restore, export, nightly), tenant-address, proxy-sync
+                             backup, restore, export, nightly, pack), tenant-address, proxy-sync
   backups/<tenant>/          one encrypted backup per night, <tenant>-YYYYMMDDTHHMMSSZ.mcpa
   exports/                   archives for tenants that leave
   tenants/
@@ -290,6 +291,57 @@ For the onboarding pack (#100). When a person presses an AI button on an engagem
 - **Web search**, where it is on for the tenant (`TENANT_AI_WEB_SEARCH`), sends the model's search questions to the provider's search.
 - **Nothing is sent** for an engagement where AI is switched off, and nothing before someone presses an AI button.
 - **Not through your gateway at all:** a person's own Claude or ChatGPT connected through MCP (that is between their AI provider and the instance), and a tenant that set a gateway of its own.
+
+## Onboarding a tenant
+
+A tenant's first admin gets an invitation from software they have never seen. Three things tell them what it is, in this order.
+
+**1. Before you start,** fill in the facts about yourself in `host.env` (`OPERATOR_NAME`, `OPERATOR_CONTACT`, `OPERATOR_HOSTING`, `OPERATOR_BACKUP_COPY`, `OPERATOR_EMAIL_SERVICE`, `OPERATOR_MODEL_PROVIDER`). They are the same for every tenant.
+
+**2. `bin/tenant create`** makes the instance, and the instance emails the first admin. That email is the invitation and the welcome in one:
+
+- what mcp-audit is, in three sentences;
+- the tenant's own address, and what is already set up (the library sources, the AI, how people sign in);
+- the first things to do: join and create a passkey, invite colleagues, create the first engagement;
+- a link to **the guide** at `https://<tenant address>/welcome/guide`: the five steps of an audit and how to connect Claude or ChatGPT, with this instance's own MCP address filled in. The guide is the one public page of an instance besides the sign-in page; it shows the instance's name and address and nothing else;
+- who runs the instance and how to reach them;
+- the link to join, which works once and for 7 days.
+
+**3. `bin/tenant pack <name>`** writes two files for you to send from your own address, so the invitation does not arrive from a stranger:
+
+```bash
+bin/tenant pack acme
+```
+
+- `packs/acme/note.txt`: a short note in your name. It says which email to expect, from which sender and with which subject, and where the guide is.
+- `packs/acme/statement.html`: **one page the tenant can keep**, filled in for this tenant: where the data is stored and how it is backed up; what you can and cannot see; that traffic goes through Cloudflare, which sees it unencrypted at its edge; what goes to the AI gateway and the model provider, and how to switch AI off for an engagement or use a model of their own; how to get an export, what deletion removes, and when. Attach it, or open it and print it to PDF.
+
+The command refuses to make a pack while a fact about you is missing, and names the settings. `--draft` writes it anyway, with the gaps marked, to read before the facts are final. Run the command again after you change a tenant's budget or your own facts: the statement carries the date.
+
+What the statement says is what this host does. If you change how the host is run (another backup copy, another model provider), change the settings and send tenants the new page.
+
+For the contract with a tenant, `docs/tenant-agreement-topics.md` lists what an agreement and a data processing agreement need to cover, for a lawyer to write.
+
+### The pilot: once through with someone who is not you
+
+Before more tenants: one real external auditor, without a Google account, walks the whole path. Note what goes wrong or is unclear as you go; each becomes an issue, and the guide and the pack are corrected.
+
+The auditor:
+
+- [ ] gets your note and the invitation, and finds both understandable without asking;
+- [ ] joins from the invitation with a passkey, on their own device;
+- [ ] invites a colleague, who joins too;
+- [ ] connects their own Claude (or ChatGPT) with the address from the guide, and sees the tools;
+- [ ] creates an engagement, uploads a document and runs at least one AI action within the budget;
+- [ ] signs out and gets back in with a code by email, on purpose.
+
+You:
+
+- [ ] `bin/tenant create <name> …`, then `bin/tenant pack <name>`, and send the note with the statement;
+- [ ] see the tenant in `bin/tenant status --all`: up, a backup after the first night, people and last sign-in filled in, AI spend above zero after their AI action;
+- [ ] upgrade it once: `bin/tenant upgrade <name> --to <version>`;
+- [ ] restore its backup into a throwaway tenant and look at it: `bin/tenant restore <name> --from latest --as <name>-check`, then `bin/tenant delete <name>-check --without-export`. That is opening the tenant's data: for the pilot, agree it with the auditor first and record it (see Opening a tenant's data);
+- [ ] go through "Checklist for a tenant host" in `docs/public-endpoint.md` with this tenant as one of the two.
 
 ## Upgrades
 
