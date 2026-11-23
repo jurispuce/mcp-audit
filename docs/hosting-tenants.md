@@ -38,9 +38,12 @@ Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before t
     host.env                 the host's settings (chmod 600)
     tenants/<tenant>.caddy   one route per tenant, written by bin/proxy-sync
     registry/                which tenants exist: names, addresses, versions, states, dates
-    bin/                     tenant (create, list, status, suspend, resume, delete),
-                             tenant-address, proxy-sync
+    bin/                     tenant (create, list, status, suspend, resume, delete, backup,
+                             restore, export, nightly), tenant-address, proxy-sync
+  backups/<tenant>/          one encrypted backup per night, <tenant>-YYYYMMDDTHHMMSSZ.mcpa
+  exports/                   archives for tenants that leave
   tenants/
+    .deleted/<tenant>/.env   a deleted tenant's passphrase, kept until its backups are removed
     <tenant>/
       docker-compose.yml     a copy of deploy/host/tenant/docker-compose.yml
       .env                   this tenant's settings and secrets (chmod 600)
@@ -196,16 +199,93 @@ Suspending stops the instance and makes its address answer `503 This instance is
 ### Delete
 
 ```bash
-bin/tenant delete acme --without-export
+bin/tenant delete acme
 ```
 
-It asks for the tenant's name to be typed again, then removes the DNS record, the container, **the data volume**, the directory and the route. If the DNS record cannot be removed, nothing is deleted. A line stays in `registry/deleted.tsv`: name, title, address, created and deleted, nothing of the tenant's content.
+It asks for the tenant's name to be typed again, then:
 
-The final encrypted export comes with #96. Until then the command refuses to delete unless you add `--without-export`, so that deleting without a copy is something you say, not something that happens.
+1. makes a **final export** (see Export, below) and prints its passphrase;
+2. removes the DNS record, the container, **the data volume**, the directory and the route;
+3. keeps the tenant's **backups for 30 days** (`DELETED_BACKUPS_DAYS`), with the passphrase that opens them stored apart from them; the nightly run removes both after that;
+4. writes a line to `registry/deleted.tsv`: name, title, address, created, deleted, and until when the backups are kept. Nothing of the tenant's content.
+
+If the export fails or the DNS record cannot be removed, nothing is deleted. `--without-export` skips the export, for a tenant that was never used. Within the 30 days a backup can still be brought back as a new tenant (`bin/tenant restore acme --from latest --as acme-back`).
 
 ### The registry
 
-`host/registry/` holds one small file per tenant (`acme.meta`: name, title, address, version, state, dates) and `deleted.tsv`. It holds no tenant content and no secrets; the secrets are in each tenant's own `.env`.
+`host/registry/` holds one small file per tenant (`acme.meta`: name, title, address, version, state, dates, the last backup and restore check), `deleted.tsv`, `events.tsv` (what was done on this host and when: backups, restores, exports, deletions, backups removed) and `nightly.status` (the last nightly run and what failed in it). It holds no tenant content and no secrets; the secrets are in each tenant's own `.env`.
+
+## Backups
+
+Each tenant is backed up with the app's own encrypted backup (`docs/backup.md`), using **that tenant's own passphrase**, generated when the tenant was created. One tenant's backup cannot be opened with another's passphrase. Backups are made and restored inside the tenant's own image; nothing on the server opens one.
+
+Set `BACKUPS_DIR` in `host.env`. Backups are files named `<tenant>-YYYYMMDDTHHMMSSZ.mcpa` in `BACKUPS_DIR/<tenant>/`, readable by you only.
+
+### Every night
+
+```bash
+bin/tenant nightly
+```
+
+Run it from cron, as the user that runs the other commands (`crontab -e`):
+
+```
+15 2 * * * /srv/mcp-audit/host/bin/tenant nightly >> /var/log/mcp-audit-nightly.log 2>&1
+```
+
+For every tenant, suspended ones included, it:
+
+1. makes tonight's backup;
+2. removes old ones, keeping the newest of each of the last **7 days, 4 weeks and 6 months** (`BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`, `BACKUP_KEEP_MONTHLY`). A backup younger than 48 hours is always kept, so one made by hand or before a restore is still there the next morning;
+3. **once a month**, restores the newest backup into a throwaway instance without any network, sees it start and checks its database, then removes it;
+4. removes the backups of tenants deleted more than 30 days ago, and the passphrase kept for them;
+5. **copies the backups off the server** with `BACKUP_COPY_COMMAND`, for example `rsync -a --delete {dir}/ backup@nas.example.com:/volume1/mcp-audit/` or `rclone sync {dir} remote:mcp-audit-backups`. The files are encrypted, so ordinary storage will do. Without the setting it says that no copy is made.
+
+A failure of any step for any tenant is printed, written to `registry/nightly.status`, and makes the command end with an error, so cron's mail or your monitoring sees it. The other tenants are still done.
+
+**Keep the passphrases somewhere other than the server too.** They are in each tenant's `.env`. A backup copied off the server is useless without the passphrase if the server is lost; copy `tenants/*/.env` to your password manager or another safe place when a tenant is created.
+
+### One backup now, and what there is
+
+```bash
+bin/tenant backup acme
+```
+
+```bash
+bin/tenant backups acme
+```
+
+### Restore
+
+```bash
+bin/tenant restore acme --from latest
+```
+
+`--from` takes `latest`, a file name from `bin/tenant backups acme`, or a path. The instance goes back to that state **as a whole**: what was changed since is gone from it. So the command asks for the tenant's name to be typed again, **backs up the current state first**, stops the instance, restores, starts it and waits until it is healthy. The registry records the restore. If the backup cannot be opened, the data stays as it was and the instance is started again.
+
+To look into a backup without touching the tenant, or to get one item back, restore it **as a new tenant**:
+
+```bash
+bin/tenant restore acme --from acme-20261123T021500Z.mcpa --as acme-check
+```
+
+The copy is a tenant like any other, at its own address, with secrets of its own. It holds the people of the backup; they sign in there with a code by email, because passkeys belong to the address they were made at. Delete it when done (`bin/tenant delete acme-check --without-export`).
+
+### Check a backup
+
+```bash
+bin/tenant check-backup acme
+```
+
+What the nightly run does once a month, on demand: the newest backup is restored into a throwaway instance and checked.
+
+### Export, for a tenant that leaves
+
+```bash
+bin/tenant export acme
+```
+
+It writes `exports/acme-export-<time>.tar`: one encrypted file with the tenant's database and files, and a readme on how to open it in their own mcp-audit. It is encrypted with a **new passphrase, printed once and stored nowhere**, not with the tenant's backup passphrase. Send the archive to the tenant's admin, and give them the passphrase another way (a call, a message in another channel). `--out <directory>` writes it elsewhere.
 
 ### What is the same for every tenant, and what is not
 

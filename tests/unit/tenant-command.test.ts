@@ -47,7 +47,9 @@ const CLOUDFLARE = [
 function hostEnv(extra: string[] = []) {
 	writeFileSync(
 		path.join(hostDir, 'host.env'),
-		[...HOST_ENV, `TENANTS_DIR=${tenantsDir}`, ...extra].join('\n') + '\n'
+		[...HOST_ENV, `TENANTS_DIR=${tenantsDir}`, `BACKUPS_DIR=${path.join(root, 'backups')}`, ...extra].join(
+			'\n'
+		) + '\n'
 	);
 }
 
@@ -77,6 +79,7 @@ function tenant(args: string[], opts: { env?: Record<string, string>; input?: st
 			HOME: root,
 			FAKE_DOCKER_LOG: log,
 			FAKE_DOCKER_STATE: path.join(root, 'state'),
+			FAKE_DOCKER_REPO: REPO,
 			TENANT_POLL_SECONDS: '0',
 			...opts.env
 		}
@@ -395,13 +398,10 @@ describe('tenant suspend and resume', () => {
 });
 
 describe('tenant delete', () => {
-	it('asks for the name again, and says that no export is made yet', () => {
+	it('asks for the name again before anything is removed', () => {
 		hostEnv(CLOUDFLARE);
 		create('acme');
 		const passphrase = envOf('acme').BACKUP_PASSPHRASE!;
-		expect(tenant(['delete', 'acme'], { input: 'acme\n' }).err).toContain(
-			'The final encrypted export is not built yet (#96). To delete "acme" and all its data without one, add --without-export.'
-		);
 		const dry = tenant(['delete', 'acme', '--without-export', '--dry-run']);
 		expect(dry.out).toContain('would: remove the container mcp-audit-tenant-acme and its data volume');
 		expect(dry.out).toContain('Nothing was changed (--dry-run).');
@@ -427,8 +427,8 @@ describe('tenant delete', () => {
 		expect(calls.some((c) => /cloudflare-dns\.mjs remove mcpaudit-acme\.example\.test$/.test(c))).toBe(true);
 		// A record stays: who and when, nothing of the tenant's content and no secret.
 		const record = readFileSync(path.join(hostDir, 'registry/deleted.tsv'), 'utf8').trim().split('\n');
-		expect(record[0]).toBe('name\ttitle\taddress\tcreated\tdeleted');
-		expect(record[1]).toMatch(/^acme\tacme audit\thttps:\/\/mcpaudit-acme\.example\.test\t\S+Z\t\S+Z$/);
+		expect(record[0]).toBe('name\ttitle\taddress\tcreated\tdeleted\tbackups_kept_until');
+		expect(record[1]).toMatch(/^acme\tacme audit\thttps:\/\/mcpaudit-acme\.example\.test\t\S+Z\t\S+Z\t?$/);
 		expect(record.join('\n')).not.toContain(passphrase);
 		expect(tenant(['list']).out).not.toContain('acme');
 		// The name can be used again.

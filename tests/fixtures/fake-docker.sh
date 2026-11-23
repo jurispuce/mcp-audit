@@ -12,14 +12,57 @@ if [ -n "${FAKE_DOCKER_FAIL:-}" ] && [[ "$*" =~ $FAKE_DOCKER_FAIL ]]; then
 	exit 1
 fi
 up() { [ -f "$FAKE_DOCKER_STATE/$1" ] && [ "$(cat "$FAKE_DOCKER_STATE/$1")" = up ]; }
+# Which passphrase a backup or restore runs with: the one handed over, or the container's own.
+key() { [[ " $* " == *" -e BACKUP_PASSPHRASE "* ]] && echo "given:${BACKUP_PASSPHRASE:-}" || echo "own"; }
+
+# ---- Backups (#96): what the app's backup and restore scripts would do, recorded
+if [[ "$*" == *"scripts/backup.mjs --out -"* ]]; then
+	if [ "$1" = exec ]; then for a in "$@"; do [[ "$a" == mcp-audit-tenant-* ]] && c="$a"; done; else c="mcp-audit-tenant-$(basename "$PWD")"; fi
+	echo "MCPABK1 fake backup of $c how=$1 key=$(key "$@")"
+	exit 0
+fi
+if [[ "$*" == *"scripts/restore.mjs"* ]]; then
+	if [ "$1" = compose ]; then into="mcp-audit-tenant-$(basename "$PWD")"; else into="$(echo "$*" | sed -n 's/.* -v \([^ :]*\):\/data .*/\1/p')"; fi
+	{
+		echo "key=$(key "$@")"
+		[[ "$*" == *"--force"* ]] && echo "force=yes" || echo "force=no"
+		cat
+	} > "$FAKE_DOCKER_STATE/restored-$into"
+	[ "$1" = compose ] && [ ! -f "$FAKE_DOCKER_STATE/$into" ] && echo stopped > "$FAKE_DOCKER_STATE/$into"
+	exit 0
+fi
+if [[ "$*" == *"scripts/backup-retention.mjs"* ]]; then
+	# The real rules, run here: the fake only stands in for the container around them.
+	args=()
+	seen=false
+	for a in "$@"; do
+		if $seen; then args+=("$a"); fi
+		[ "$a" = scripts/backup-retention.mjs ] && seen=true
+	done
+	exec node "$FAKE_DOCKER_REPO/scripts/backup-retention.mjs" "${args[@]}"
+fi
+
 case "$1 ${2:-}" in
+	"run -d")
+		name=""
+		prev=""
+		for a in "$@"; do
+			[ "$prev" = --name ] && name="$a"
+			prev="$a"
+		done
+		echo up > "$FAKE_DOCKER_STATE/$name"
+		;;
+	"rm -f") rm -f "${FAKE_DOCKER_STATE:?}/${3:?}" ;;
+	"volume rm") : ;;
 	"compose up") echo up > "$FAKE_DOCKER_STATE/mcp-audit-tenant-$(basename "$PWD")" ;;
 	"compose stop") echo stopped > "$FAKE_DOCKER_STATE/mcp-audit-tenant-$(basename "$PWD")" ;;
 	"compose down") rm -f "$FAKE_DOCKER_STATE/mcp-audit-tenant-$(basename "$PWD")" ;;
 	"inspect -f")
 		container="${4:-}"
 		[ -f "$FAKE_DOCKER_STATE/$container" ] || exit 1
-		if [[ "$3" == *RestartCount* ]]; then
+		if [ "$3" = '{{.State.Status}}' ]; then
+			up "$container" && echo running || echo exited
+		elif [[ "$3" == *RestartCount* ]]; then
 			if ! up "$container"; then echo "exited 0 "
 			elif [ -n "${FAKE_DOCKER_UNHEALTHY:-}" ]; then echo "restarting 3 "
 			else echo "running 0 healthy"; fi

@@ -7,7 +7,11 @@
 #   bin/tenant status  <name>
 #   bin/tenant suspend <name>
 #   bin/tenant resume  <name>
-#   bin/tenant delete  <name> --without-export
+#   bin/tenant delete  <name> [--without-export]
+#   bin/tenant backup  <name>            bin/tenant backups <name>
+#   bin/tenant restore <name> --from <backup|latest> [--as <new name>]
+#   bin/tenant export  <name> [--out <directory>]
+#   bin/tenant check-backup <name>       bin/tenant nightly
 #
 # Every command takes --dry-run: it prints what it would do and changes nothing.
 #
@@ -26,12 +30,12 @@ registry="$HOST_DIR/registry"
 default_image=ghcr.io/jurispuce/mcp-audit
 
 die() { echo "$*" >&2; exit 1; }
-usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # ---- The registry: one small file per tenant. Names, addresses, versions, states and dates only;
 # ---- no tenant content and no secrets.
-meta_file() { echo "$registry/$1.meta"; }
+meta_file() { echo "$registry/${1:?}.meta"; }
 meta_get() { [ -f "$(meta_file "$1")" ] && sed -n "s/^$2=//p" "$(meta_file "$1")" | head -1; }
 meta_set() { # meta_set <tenant> <key> <value>
 	local f; f="$(meta_file "$1")"
@@ -44,7 +48,7 @@ meta_set() { # meta_set <tenant> <key> <value>
 known() { [ -f "$(meta_file "$1")" ]; }
 need_known() { known "$1" || die "There is no tenant \"$1\". See: bin/tenant list"; }
 
-tenant_dir() { echo "${TENANTS_DIR:?Set TENANTS_DIR in host.env}/$1"; }
+tenant_dir() { echo "${TENANTS_DIR:?Set TENANTS_DIR in host.env}/${1:?}"; }
 container() { echo "mcp-audit-tenant-$1"; }
 compose() { (cd "$(tenant_dir "$1")" && shift && docker compose "$@"); }
 # Run a command without its chatter; when it fails, show what it said.
@@ -96,8 +100,9 @@ sender() {
 }
 secret() { head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n'; }
 
-wait_healthy() { # wait_healthy <tenant>: the container reports healthy, or the reason it did not
-	local c; c="$(container "$1")"
+wait_healthy() { wait_container_healthy "$(container "$1")"; }
+wait_container_healthy() { # the container reports healthy, or the reason it did not
+	local c="$1"
 	local limit="${TENANT_START_TIMEOUT:-120}" waited=0 state
 	while [ "$waited" -lt "$limit" ]; do
 		state="$(docker inspect -f '{{.State.Status}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$c" 2> /dev/null || echo "missing 0")"
@@ -150,6 +155,7 @@ cmd_create() {
 	say "Creating tenant \"$name\" ($title) at https://$host, version $version"
 	if $dry; then
 		begin "write $dir with an environment file (new secrets) and a profile"
+		[ -z "${restore_file:-}" ] || begin "restore $(basename "$restore_file") of \"$restore_source\" into its data"
 		begin "start the container $(container "$name") and wait until it is healthy"
 		begin "add the route in the internal proxy"
 		if dns_set_up; then begin "add the DNS record $host"; else say "  skipped: the DNS record (no Cloudflare settings in host.env)"; fi
@@ -165,7 +171,7 @@ cmd_create() {
 		echo "Create failed at: $failed. Removing what was made." >&2
 		if $dns_added; then dns remove "$host" > /dev/null 2>&1 || echo "  The DNS record $host could not be removed; remove it by hand." >&2; fi
 		if $started; then remove_container "$name" > /dev/null 2>&1 || true; fi
-		if $made_dir; then rm -rf "$dir"; fi
+		if $made_dir; then rm -rf "${dir:?}"; fi
 		rm -f "$(meta_file "$name")"
 		if $routed || $started; then "$HOST_DIR/bin/proxy-sync" > /dev/null 2>&1 || true; fi
 		echo "Nothing of \"$name\" is left. The step that failed: $failed." >&2
@@ -224,6 +230,14 @@ cmd_create() {
 	meta_set "$name" state creating
 	meta_set "$name" created "$(now)"
 
+	if [ -n "${restore_file:-}" ]; then
+		# A copy of another tenant, from one of its backups: the data goes in before the first start.
+		begin "restore $(basename "$restore_file") of \"$restore_source\" into its data"
+		started=true
+		restore_into "$name" "$restore_file" "$restore_pass"
+		meta_set "$name" restored_from "$restore_source $(basename "$restore_file")"
+	fi
+
 	begin "start the container $(container "$name") and wait until it is healthy"
 	started=true
 	quiet compose "$name" up -d
@@ -245,7 +259,7 @@ cmd_create() {
 	trap - ERR
 	meta_set "$name" state active
 	say "Tenant \"$name\" is running at https://$host"
-	say "The instance has emailed the first admin's invitation to $admin_email. A restart sends a new one until they have joined."
+	[ -n "${restore_file:-}" ] || say "The instance has emailed the first admin's invitation to $admin_email. A restart sends a new one until they have joined."
 }
 
 # ---- list and status
@@ -330,15 +344,15 @@ cmd_delete() {
 	[ -n "$name" ] || usage
 	need_known "$name"
 	local host; host="$(meta_get "$name" host)"
-	# The final encrypted export comes with #96. Until then deleting is deleting, and has to be said.
-	$without_export || die "The final encrypted export is not built yet (#96). To delete \"$name\" and all its data without one, add --without-export."
+	local days="${DELETED_BACKUPS_DAYS:-30}"
 	say "Deleting tenant \"$name\" ($(meta_get "$name" title)) at https://$host: the container, all its data, its route and its DNS record."
 	if $dry; then
-		say "  skipped: the final encrypted export (#96 is not built yet)"
+		if $without_export; then say "  skipped: the final export (--without-export)"; else begin "make a final encrypted export in $(exports_dir)"; fi
 		begin "remove the DNS record $host"
 		begin "remove the container $(container "$name") and its data volume"
 		begin "remove $(tenant_dir "$name") and the route in the internal proxy"
 		say "  skipped: the AI key (#95 is not built yet)"
+		begin "keep its backups for $days days, then remove them"
 		begin "keep a record of the deletion, without tenant content"
 		say "Nothing was changed (--dry-run)."
 		return 0
@@ -348,7 +362,12 @@ cmd_delete() {
 	IFS= read -r typed || typed=""
 	[ "$typed" = "$name" ] || die "That is not \"$name\". Nothing was deleted."
 
-	say "  skipped: the final encrypted export (#96 is not built yet)"
+	if $without_export; then
+		say "  skipped: the final export (--without-export)"
+	else
+		begin "make a final encrypted export in $(exports_dir)"
+		make_export "$name" || die "The final export failed, so nothing was deleted. Fix it, or delete with --without-export."
+	fi
 	if dns_set_up; then
 		begin "remove the DNS record $host"
 		dns remove "$host" > /dev/null || die "The DNS record could not be removed, so nothing was deleted. Try again, or remove it by hand first."
@@ -356,27 +375,44 @@ cmd_delete() {
 	begin "remove the container $(container "$name") and its data volume"
 	remove_container "$name"
 	begin "remove $(tenant_dir "$name") and the route in the internal proxy"
-	local created title; created="$(meta_get "$name" created)"; title="$(meta_get "$name" title)"
-	rm -rf "$(tenant_dir "$name")"
+	local created title until=""
+	created="$(meta_get "$name" created)"
+	title="$(meta_get "$name" title)"
+	if [ -n "$(newest_backup "$name")" ]; then
+		# The backups stay for a while, and with them the one thing that opens them, kept apart from them.
+		begin "keep its backups for $days days, then remove them"
+		(umask 077 && mkdir -p "$(kept_dir "$name")")
+		cp "$(tenant_dir "$name")/.env" "$(kept_env "$name")"
+		chmod 600 "$(kept_env "$name")"
+		until="$(date -u -d "+$days days" +%Y-%m-%dT%H:%M:%SZ 2> /dev/null || echo "$days days after the deletion")"
+	fi
+	local gone
+	gone="$(tenant_dir "$name")"
+	rm -rf "${gone:?}"
 	rm -f "$(meta_file "$name")"
 	"$HOST_DIR/bin/proxy-sync" > /dev/null
 	say "  skipped: the AI key (#95 is not built yet)"
 	begin "keep a record of the deletion, without tenant content"
-	[ -f "$registry/deleted.tsv" ] || printf 'name\ttitle\taddress\tcreated\tdeleted\n' > "$registry/deleted.tsv"
-	printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$title" "https://$host" "$created" "$(now)" >> "$registry/deleted.tsv"
-	say "Tenant \"$name\" is deleted."
+	[ -f "$registry/deleted.tsv" ] || printf 'name\ttitle\taddress\tcreated\tdeleted\tbackups_kept_until\n' > "$registry/deleted.tsv"
+	printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$title" "https://$host" "$created" "$(now)" "$until" >> "$registry/deleted.tsv"
+	event "$name" deleted
+	say "Tenant \"$name\" is deleted.${until:+ Its backups are removed after $until.}"
 }
+
+# shellcheck disable=SC1091
+. "$here/bin/tenant-backups.sh"
 
 command="${1:-}"
 [ $# -gt 0 ] && shift
 case "$command" in
-	create | suspend | resume | delete)
+	create | suspend | resume | delete | backup | restore | export | check-backup | nightly)
 		# One change at a time on this host.
 		mkdir -p "$registry"
 		exec 9> "$registry/.lock"
 		flock -n 9 || die "Another tenant command is running. Try again when it has finished."
-		"cmd_$command" "$@"
+		"cmd_${command//-/_}" "$@"
 		;;
+	backups) cmd_backups "$@" ;;
 	list) cmd_list "$@" ;;
 	status) cmd_status "$@" ;;
 	-h | --help | help) usage 0 ;;

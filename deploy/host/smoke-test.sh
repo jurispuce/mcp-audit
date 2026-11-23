@@ -14,6 +14,8 @@ work="$(mktemp -d)"
 port="${SMOKE_PORT:-18088}"
 proxy=mcp-audit-proxy-smoke
 tenants=(smoke-a smoke-b)
+# Made later from a backup of smoke-a; removed with the others at the end.
+copies=(smoke-copy)
 failed=0
 
 say() { printf '\n== %s\n' "$*"; }
@@ -25,9 +27,12 @@ check() { # check "<what>" <command...>
 }
 
 cleanup() {
-	for t in "${tenants[@]}"; do
+	for t in "${tenants[@]}" "${copies[@]}"; do
+		docker network disconnect "mcp-audit-tenant-$t" "$proxy" > /dev/null 2>&1 || true
 		[ -d "$work/tenants/$t" ] && (cd "$work/tenants/$t" && docker compose down -v --remove-orphans > /dev/null 2>&1) || true
 	done
+	docker rm -f mcp-audit-check-smoke-a > /dev/null 2>&1 || true
+	docker volume rm -f mcp-audit-check-smoke-a smoke-export-check > /dev/null 2>&1 || true
 	[ -d "$work/host" ] && (cd "$work/host" && docker compose --env-file host.env down -v --remove-orphans > /dev/null 2>&1) || true
 	rm -rf "$work"
 }
@@ -50,6 +55,8 @@ TENANT_SOURCES=nis2
 TENANT_SMTP_HOST=127.0.0.1
 TENANT_SMTP_PORT=2599
 TENANT_SMTP_FROM={title} <audit@smoke.test>
+BACKUPS_DIR=$work/backups
+BACKUP_COPY_COMMAND=cp -r {dir} $work/offsite
 ENV
 tenant() { "$work/host/bin/tenant" "$@"; }
 
@@ -125,6 +132,59 @@ for t in "${tenants[@]}"; do
 done
 check "the tenants' secrets differ" bash -c "[ \"\$(docker exec mcp-audit-tenant-smoke-a printenv BACKUP_PASSPHRASE)\" != \"\$(docker exec mcp-audit-tenant-smoke-b printenv BACKUP_PASSPHRASE)\" ]"
 
+say "Back up a tenant, change it, restore: the change is gone"
+ca=mcp-audit-tenant-smoke-a
+db='const D=require("better-sqlite3");const db=new D("/data/app.db");'
+admin_name() { docker exec "$1" node -e "$db console.log(db.prepare('SELECT name FROM \"user\" ORDER BY created_at LIMIT 1').get().name)"; }
+tenant backup smoke-a > /dev/null
+first_backup="$(ls "$work/backups/smoke-a" | head -1)"
+check "the backup is the operator's only" bash -c "[ \"\$(stat -c %a '$work/backups/smoke-a/$first_backup')\" = 600 ] && [ \"\$(stat -c %a '$work/backups/smoke-a')\" = 700 ]"
+check "it is encrypted (the app's own format, no readable content)" bash -c "head -c 7 '$work/backups/smoke-a/$first_backup' | grep -q MCPABK1 && ! grep -q 'smoke.test' '$work/backups/smoke-a/$first_backup'"
+docker exec "$ca" node -e "$db db.prepare('UPDATE \"user\" SET name = ?').run('Changed after the backup')"
+docker exec "$ca" sh -c 'mkdir -p /data/files/zz && echo late > /data/files/zz/late'
+check "the change is there" bash -c "[ \"$(admin_name "$ca")\" = 'Changed after the backup' ]"
+check "restore asks for the name" bash -c "! echo nope | '$work/host/bin/tenant' restore smoke-a --from latest"
+echo smoke-a | tenant restore smoke-a --from "$first_backup" > /dev/null
+check "after the restore the change is gone" bash -c "[ \"$(admin_name "$ca")\" = 'Admin of smoke-a' ] || [ \"$(admin_name "$ca")\" = 'admin' ]"
+check "and so is the file added since" bash -c "! docker exec $ca test -e /data/files/zz/late"
+check "the state before the restore was backed up" bash -c "[ \"\$(ls '$work/backups/smoke-a' | wc -l)\" = 2 ]"
+check "nothing of the replaced data is left in the volume" bash -c "! docker exec $ca sh -c 'ls /data | grep -q pre-restore'"
+check "the instance answers again" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-a</title>'"
+
+say "Restore a backup as a new tenant"
+tenant restore smoke-a --from "$first_backup" --as smoke-copy > /dev/null
+host_copy=mcpaudit-smoke-copy.smoke.test
+check "the copy answers at its own address" bash -c "curl -s --max-time 10 -H 'Host: $host_copy' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-a</title>'"
+check "it holds the people of the backup" bash -c "[ \"$(admin_name mcp-audit-tenant-smoke-copy)\" = \"$(admin_name "$ca")\" ]"
+check "it has a passphrase of its own" bash -c "[ \"\$(docker exec mcp-audit-tenant-smoke-copy printenv BACKUP_PASSPHRASE)\" != \"\$(docker exec $ca printenv BACKUP_PASSPHRASE)\" ]"
+check "the original is untouched" bash -c "'$work/host/bin/tenant' list | grep -q 'smoke-a .* active '"
+
+say "One tenant's backup cannot be opened with another's passphrase"
+wrong_key="$( (cd "$work/tenants/smoke-b" && docker compose run --rm -T --no-deps -e DATA_DIR=/tmp/elsewhere app sh -c 'cat > /tmp/in.mcpa && node scripts/restore.mjs --in /tmp/in.mcpa' < "$work/backups/smoke-a/$first_backup" 2>&1) || true)"
+check "tenant B's passphrase is refused for tenant A's backup" bash -c "echo \"$wrong_key\" | grep -q 'Could not decrypt the backup'"
+
+say "The newest backup restores into a working instance"
+check "check-backup passes" "$work/host/bin/tenant" check-backup smoke-a
+check "and leaves no throwaway behind" bash -c "! docker container inspect mcp-audit-check-smoke-a && ! docker volume inspect mcp-audit-check-smoke-a"
+
+say "Export for a tenant that leaves"
+exported="$(tenant export smoke-a)"
+archive="$(echo "$exported" | sed -n 's/^Export of "smoke-a": //p')"
+export_pass="$(echo "$exported" | sed -n 's/^    \([A-Za-z0-9_-]\{43\}\)$/\1/p')"
+check "an archive with a readme and one encrypted file" bash -c "[ \"\$(tar -tf '$archive' | sort | tr '\n' ' ')\" = \"README.txt \$(basename '$archive' .tar).mcpa \" ]"
+open_export() { # open_export <passphrase>: restore the exported file somewhere harmless
+	tar -xOf "$archive" "$(basename "$archive" .tar).mcpa" | BACKUP_PASSPHRASE="$1" docker run --rm -i -e BACKUP_PASSPHRASE -e DATA_DIR=/tmp/elsewhere "$image" \
+		sh -c 'cat > /tmp/in.mcpa && node scripts/restore.mjs --in /tmp/in.mcpa'
+}
+check "it opens with the passphrase that was shown" open_export "$export_pass"
+check "and not with the tenant's backup passphrase" bash -c "! (tar -xOf '$archive' \"\$(basename '$archive' .tar).mcpa\" | docker run --rm -i -e BACKUP_PASSPHRASE=\"\$(docker exec $ca printenv BACKUP_PASSPHRASE)\" -e DATA_DIR=/tmp/elsewhere '$image' sh -c 'cat > /tmp/in.mcpa && node scripts/restore.mjs --in /tmp/in.mcpa')"
+
+say "The nightly run"
+check "nightly backs up every tenant and copies off the server" "$work/host/bin/tenant" nightly
+check "each tenant has a backup from tonight" bash -c "[ \"\$(ls '$work/backups/smoke-b' | wc -l)\" = 1 ] && [ \"\$(ls '$work/backups/smoke-a' | wc -l)\" = 3 ]"
+check "the copy off the server has them" bash -c "[ \"\$(ls '$work/offsite/smoke-a' | wc -l)\" = 3 ]"
+check "the status for the operator says no failures" grep -q '^failures=0$' "$work/host/registry/nightly.status"
+
 say "Suspend and resume a tenant"
 tenant suspend smoke-b > /dev/null
 check "its address shows the suspended page (503)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login)\" = 503 ]"
@@ -136,14 +196,16 @@ tenant resume smoke-b > /dev/null
 check "after resume it answers again" bash -c "curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-b</title>'"
 
 say "Delete a tenant"
-check "not without the name typed again" bash -c "! echo smoke-a | '$work/host/bin/tenant' delete smoke-b --without-export"
-echo smoke-b | tenant delete smoke-b --without-export > /dev/null
+check "not without the name typed again" bash -c "! echo smoke-a | '$work/host/bin/tenant' delete smoke-b"
+echo smoke-b | tenant delete smoke-b > /dev/null
 check "its address is no instance any more (404)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/health)\" = 404 ]"
 check "its container is gone" bash -c "! docker container inspect mcp-audit-tenant-smoke-b"
 check "its data is gone" bash -c "! docker volume inspect mcp-audit-tenant-smoke-b_data"
 check "its network is gone" bash -c "! docker network inspect mcp-audit-tenant-smoke-b"
 check "its directory is gone" bash -c "[ ! -e '$work/tenants/smoke-b' ]"
 check "a record of the deletion stays" bash -c "grep -q '^smoke-b' '$work/host/registry/deleted.tsv'"
+check "a final export was made" bash -c "ls '$work/exports' | grep -q '^smoke-b-export-.*\.tar$'"
+check "its backups are kept for now, with what opens them apart from them" bash -c "[ -n \"\$(ls '$work/backups/smoke-b')\" ] && [ \"\$(stat -c %a '$work/tenants/.deleted/smoke-b/.env')\" = 600 ]"
 check "the other tenant is untouched" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-a</title>'"
 
 if [ "$failed" = 0 ]; then printf '\nAll checks passed.\n'; else printf '\nSome checks FAILED.\n'; docker logs "$proxy" 2>&1 | tail -20; exit 1; fi
