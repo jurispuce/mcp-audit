@@ -4,7 +4,8 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck disable=SC1091
-[ -z "${TENANT_ADDRESS_PATTERN:-}" ] && [ -f "$here/host.env" ] && set -a && . "$here/host.env" && set +a
+. "$here/bin/lib.sh"
+load_env "$here/host.env"
 
 tenant="${1:-}"
 if ! [[ "$tenant" =~ ^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$ ]]; then

@@ -11,3 +11,8 @@ playwright-report/
 *.log
 .DS_Store
 .e2e/
+
+# A tenant host run from a checkout: its settings, routes and registry stay on the server
+deploy/host/host.env
+deploy/host/registry/
+deploy/host/tenants/*.caddy

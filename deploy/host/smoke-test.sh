@@ -2,9 +2,10 @@
 # Smoke test of the tenant host layout (#92), without Cloudflare: the internal proxy and two tenants
 # on test host names, on this machine's Docker.
 #   IMAGE=mcp-audit:ci deploy/host/smoke-test.sh
-# It checks that each name reaches its own instance, an unknown name is refused, one tenant's
-# container cannot reach another's, the visitor's address comes from the tunnel's header and from
-# nowhere else, and the containers run confined. Everything it starts is removed at the end.
+# It creates the tenants with the tenant command (#94) and checks that each name reaches its own
+# instance, an unknown name is refused, one tenant's container cannot reach another's, the visitor's
+# address comes from the tunnel's header and from nowhere else, the containers run confined, and
+# that suspend, resume and delete do what they say. Everything it starts is removed at the end.
 set -euo pipefail
 
 image="${IMAGE:-mcp-audit:ci}"
@@ -34,7 +35,7 @@ trap cleanup EXIT
 
 say "Set-up in $work"
 cp -r "$src" "$work/host"
-rm -f "$work/host/tenants"/*.caddy
+rm -rf "$work/host/tenants"/*.caddy "$work/host/registry" "$work/host/host.env"
 cat > "$work/host/host.env" <<ENV
 TENANT_ADDRESS_PATTERN=mcpaudit-{tenant}.smoke.test
 TENANTS_DIR=$work/tenants
@@ -43,40 +44,26 @@ PROXY_CONTAINER=$proxy
 EDGE_NETWORK=mcp-audit-edge-smoke
 EDGE_SUBNET=172.31.251.0/24
 PROXY_PORT=$port
-ENV
-
-for t in "${tenants[@]}"; do
-	host="$(TENANT_ADDRESS_PATTERN='mcpaudit-{tenant}.smoke.test' "$work/host/bin/tenant-address" "$t")"
-	mkdir -p "$work/tenants/$t"
-	cp "$src/tenant/docker-compose.yml" "$work/tenants/$t/"
-	# Each tenant has its own secrets; the mail server here does not exist, which a start must survive.
-	cat > "$work/tenants/$t/.env" <<ENV
-TENANT=$t
-TENANT_HOST=$host
 MCP_AUDIT_IMAGE=${image%:*}
 MCP_AUDIT_TAG=${image##*:}
-BACKUP_PASSPHRASE=passphrase-of-$t-only
-SMTP_HOST=127.0.0.1
-SMTP_PORT=2599
-SMTP_FROM=audit@smoke.test
+TENANT_SOURCES=nis2
+TENANT_SMTP_HOST=127.0.0.1
+TENANT_SMTP_PORT=2599
+TENANT_SMTP_FROM={title} <audit@smoke.test>
 ENV
-	chmod 600 "$work/tenants/$t/.env"
-	cat > "$work/tenants/$t/tenant-profile.yaml" <<YAML
-instance_name: Tenant $t
-sign_in_method: passkey
-first_admin:
-  name: Admin of $t
-  email: admin@$t.smoke.test
-library_sources:
-  - nis2
-YAML
-	chmod 644 "$work/tenants/$t/tenant-profile.yaml"
-done
+tenant() { "$work/host/bin/tenant" "$@"; }
 
-say "Start the proxy and two tenants"
+say "Start the proxy, then create two tenants with the tenant command"
 (cd "$work/host" && docker compose --env-file host.env up -d > /dev/null 2>&1)
-for t in "${tenants[@]}"; do (cd "$work/tenants/$t" && docker compose up -d > /dev/null 2>&1); done
-"$work/host/bin/proxy-sync"
+# The mail server named here does not exist: an instance must start all the same.
+for t in "${tenants[@]}"; do
+	tenant create "$t" --title "Tenant $t" --admin-email "admin@$t.smoke.test" | sed 's/^/  /'
+done
+check "create --dry-run changes nothing" bash -c "'$work/host/bin/tenant' create smoke-c --title 'Tenant c' --admin-email c@smoke.test --dry-run > /dev/null && [ ! -e '$work/tenants/smoke-c' ]"
+check "a reserved name is refused" bash -c "! '$work/host/bin/tenant' create admin --title x --admin-email a@smoke.test"
+check "a name that is taken is refused" bash -c "! '$work/host/bin/tenant' create smoke-a --title x --admin-email a@smoke.test"
+check "list shows both, active" bash -c "[ \"\$('$work/host/bin/tenant' list | grep -c ' active ')\" = 2 ]"
+check "the environment file is the operator's only" bash -c "[ \"\$(stat -c %a '$work/tenants/smoke-a/.env')\" = 600 ]"
 
 # What the tunnel does: a request for a name, arriving at the proxy.
 via_proxy() { # via_proxy <host> <path> [curl args...]
@@ -138,10 +125,25 @@ for t in "${tenants[@]}"; do
 done
 check "the tenants' secrets differ" bash -c "[ \"\$(docker exec mcp-audit-tenant-smoke-a printenv BACKUP_PASSPHRASE)\" != \"\$(docker exec mcp-audit-tenant-smoke-b printenv BACKUP_PASSPHRASE)\" ]"
 
-say "A suspended tenant has no route"
-touch "$work/tenants/smoke-b/suspended"
-"$work/host/bin/proxy-sync" > /dev/null
-check "its name is refused (404)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/health)\" = 404 ]"
+say "Suspend and resume a tenant"
+tenant suspend smoke-b > /dev/null
+check "its address shows the suspended page (503)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login)\" = 503 ]"
+check "and says so plainly" bash -c "curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login | grep -q 'This instance is suspended'"
+check "its container is stopped, its data kept" bash -c "[ \"\$(docker inspect -f '{{.State.Status}}' mcp-audit-tenant-smoke-b)\" = exited ] && docker volume inspect mcp-audit-tenant-smoke-b_data > /dev/null"
 check "the other tenant still answers" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/health | grep -q '\"status\":\"ok\"'"
+check "list says suspended" bash -c "'$work/host/bin/tenant' list | grep -q 'smoke-b .* suspended '"
+tenant resume smoke-b > /dev/null
+check "after resume it answers again" bash -c "curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-b</title>'"
+
+say "Delete a tenant"
+check "not without the name typed again" bash -c "! echo smoke-a | '$work/host/bin/tenant' delete smoke-b --without-export"
+echo smoke-b | tenant delete smoke-b --without-export > /dev/null
+check "its address is no instance any more (404)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/health)\" = 404 ]"
+check "its container is gone" bash -c "! docker container inspect mcp-audit-tenant-smoke-b"
+check "its data is gone" bash -c "! docker volume inspect mcp-audit-tenant-smoke-b_data"
+check "its network is gone" bash -c "! docker network inspect mcp-audit-tenant-smoke-b"
+check "its directory is gone" bash -c "[ ! -e '$work/tenants/smoke-b' ]"
+check "a record of the deletion stays" bash -c "grep -q '^smoke-b' '$work/host/registry/deleted.tsv'"
+check "the other tenant is untouched" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-a</title>'"
 
 if [ "$failed" = 0 ]; then printf '\nAll checks passed.\n'; else printf '\nSome checks FAILED.\n'; docker logs "$proxy" 2>&1 | tail -20; exit 1; fi

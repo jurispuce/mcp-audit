@@ -1,0 +1,384 @@
+#!/usr/bin/env bash
+# One command for a tenant's whole life on this host (#94).
+#
+#   bin/tenant create <name> --title "<firm>" --admin-email <email>
+#                            [--admin-name "<name>"] [--version <tag>] [--sources nis2,...]
+#   bin/tenant list
+#   bin/tenant status  <name>
+#   bin/tenant suspend <name>
+#   bin/tenant resume  <name>
+#   bin/tenant delete  <name> --without-export
+#
+# Every command takes --dry-run: it prints what it would do and changes nothing.
+#
+# It works on the layout of docs/hosting-tenants.md: a directory, an environment file and a profile
+# per tenant, one container, a route in the internal proxy, a DNS record. It never signs in to an
+# instance and never reads its database. The instance itself emails the first admin's invitation.
+# -E: a failure inside a function is seen by the caller's clean-up as well.
+set -Eeuo pipefail
+
+here="$(cd "$(dirname "$0")/.." && pwd)"
+HOST_DIR="${HOST_DIR:-$here}"
+# shellcheck disable=SC1091
+. "$here/bin/lib.sh"
+load_env "$HOST_DIR/host.env"
+registry="$HOST_DIR/registry"
+default_image=ghcr.io/jurispuce/mcp-audit
+
+die() { echo "$*" >&2; exit 1; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# ---- The registry: one small file per tenant. Names, addresses, versions, states and dates only;
+# ---- no tenant content and no secrets.
+meta_file() { echo "$registry/$1.meta"; }
+meta_get() { [ -f "$(meta_file "$1")" ] && sed -n "s/^$2=//p" "$(meta_file "$1")" | head -1; }
+meta_set() { # meta_set <tenant> <key> <value>
+	local f; f="$(meta_file "$1")"
+	mkdir -p "$registry"
+	touch "$f"
+	grep -v "^$2=" "$f" > "$f.new" || true
+	printf '%s=%s\n' "$2" "$3" >> "$f.new"
+	mv "$f.new" "$f"
+}
+known() { [ -f "$(meta_file "$1")" ]; }
+need_known() { known "$1" || die "There is no tenant \"$1\". See: bin/tenant list"; }
+
+tenant_dir() { echo "${TENANTS_DIR:?Set TENANTS_DIR in host.env}/$1"; }
+container() { echo "mcp-audit-tenant-$1"; }
+compose() { (cd "$(tenant_dir "$1")" && shift && docker compose "$@"); }
+# Run a command without its chatter; when it fails, show what it said.
+quiet() {
+	local out
+	if out="$("$@" 2>&1)"; then return 0; fi
+	echo "$out" | sed 's/^/    /' >&2
+	return 1
+}
+# Take a tenant's container, data volume and network away. The proxy leaves the network first:
+# a network something is still attached to cannot be removed.
+remove_container() {
+	local network; network="$(container "$1")"
+	docker network disconnect "$network" "${PROXY_CONTAINER:-mcp-audit-proxy}" > /dev/null 2>&1 || true
+	if [ -d "$(tenant_dir "$1")" ]; then quiet compose "$1" down -v --remove-orphans; fi
+}
+
+# ---- Steps that can be undone, for create
+dry=false
+say() { echo "$*"; }
+step=""
+begin() { step="$1"; $dry && say "  would: $1" || say "  $1"; }
+
+RESERVED=" www mail email smtp imap pop ftp ns ns1 ns2 mx admin root api app host proxy status support help billing login auth oauth mcp static cdn dev test staging "
+
+check_name() {
+	local name="$1"
+	"$HOST_DIR/bin/tenant-address" "$name" > /dev/null || exit 2
+	[[ "$RESERVED" == *" $name "* ]] && die "\"$name\" is a reserved name. Choose the firm's own short name."
+	known "$name" && die "There is already a tenant \"$name\" ($(meta_get "$name" state))."
+	[ -e "$(tenant_dir "$name")" ] && die "$(tenant_dir "$name") already exists. Remove it, or choose another name."
+	return 0
+}
+
+# One line of plain text, for a title or a person's name: nothing that could break a file it is written to.
+plain() { # plain <what> <value> <max>
+	local what="$1" value="$2" max="$3"
+	[ -n "${value// /}" ] || die "$what is empty."
+	[ "${#value}" -le "$max" ] || die "$what is longer than $max characters."
+	[[ "$value" =~ [[:cntrl:]] ]] && die "$what must be one line of plain text."
+	return 0
+}
+yaml() { local v="$1"; v="${v//\\/\\\\}"; v="${v//\"/\\\"}"; printf '"%s"' "$v"; }
+# The sender tenants' mail comes from: {title} in the host's pattern becomes the tenant's title.
+# Done by cutting the pattern, because a title may hold characters that mean something in a replacement.
+sender() {
+	local from="${TENANT_SMTP_FROM:-}" title="${1//[\"<>]/}"
+	if [[ "$from" == *"{title}"* ]]; then printf '%s%s%s' "${from%%\{title\}*}" "$title" "${from#*\{title\}}"; else printf '%s' "$from"; fi
+}
+secret() { head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n'; }
+
+wait_healthy() { # wait_healthy <tenant>: the container reports healthy, or the reason it did not
+	local c; c="$(container "$1")"
+	local limit="${TENANT_START_TIMEOUT:-120}" waited=0 state
+	while [ "$waited" -lt "$limit" ]; do
+		state="$(docker inspect -f '{{.State.Status}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$c" 2> /dev/null || echo "missing 0")"
+		case "$state" in
+			*" healthy") return 0 ;;
+			"exited "* | "dead "* | "missing "*) break ;;
+		esac
+		# An instance that refuses to start (a wrong profile, missing email settings) is restarted in a loop.
+		[ "$(echo "$state" | cut -d' ' -f2)" -ge 2 ] 2> /dev/null && break
+		sleep "${TENANT_POLL_SECONDS:-2}"
+		waited=$((waited + ${TENANT_POLL_SECONDS:-2}))
+	done
+	echo "The instance did not become healthy. Its last lines:" >&2
+	docker logs --tail 15 "$c" 2>&1 | sed 's/^/    /' >&2 || true
+	return 1
+}
+
+dns() { # dns add|remove <host>: in the app's image, which has what the helper needs
+	docker run --rm --env-file "$HOST_DIR/host.env" "${MCP_AUDIT_IMAGE:-$default_image}:${MCP_AUDIT_TAG:-main}" \
+		node scripts/cloudflare-dns.mjs "$1" "$2"
+}
+dns_set_up() { [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${CLOUDFLARE_TUNNEL_ID:-}" ]; }
+
+# ---- create
+cmd_create() {
+	local name="" title="" admin_email="" admin_name="" version="${MCP_AUDIT_TAG:-main}" sources="${TENANT_SOURCES:-}"
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--title) title="${2:-}"; shift 2 ;;
+			--admin-email) admin_email="${2:-}"; shift 2 ;;
+			--admin-name) admin_name="${2:-}"; shift 2 ;;
+			--version) version="${2:-}"; shift 2 ;;
+			--sources) sources="${2:-}"; shift 2 ;;
+			--dry-run) dry=true; shift ;;
+			-*) die "Unknown option $1" ;;
+			*) [ -z "$name" ] || die "One tenant at a time: \"$name\" and \"$1\""; name="$1"; shift ;;
+		esac
+	done
+	[ -n "$name" ] || usage
+	check_name "$name"
+	plain "The title (--title)" "$title" 60
+	[[ "$admin_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || die "--admin-email is not an email address: \"$admin_email\""
+	[ -n "$admin_name" ] || admin_name="${admin_email%%@*}"
+	plain "The admin's name (--admin-name)" "$admin_name" 120
+	[[ "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || die "--version is not an image tag: \"$version\""
+	[[ -z "$sources" || "$sources" =~ ^[a-z0-9-]+(,[a-z0-9-]+)*$ ]] || die "--sources is a comma-separated list of source codes, for example nis2: \"$sources\""
+	[ -n "${TENANT_SMTP_HOST:-}" ] && [ -n "${TENANT_SMTP_FROM:-}" ] || die "Set TENANT_SMTP_HOST and TENANT_SMTP_FROM in host.env: a tenant's first admin is invited by email."
+
+	local host dir; host="$("$HOST_DIR/bin/tenant-address" "$name")"; dir="$(tenant_dir "$name")"
+	say "Creating tenant \"$name\" ($title) at https://$host, version $version"
+	if $dry; then
+		begin "write $dir with an environment file (new secrets) and a profile"
+		begin "start the container $(container "$name") and wait until it is healthy"
+		begin "add the route in the internal proxy"
+		if dns_set_up; then begin "add the DNS record $host"; else say "  skipped: the DNS record (no Cloudflare settings in host.env)"; fi
+		say "  skipped: the AI key and budget (#95 is not built yet)"
+		say "Nothing was changed (--dry-run)."
+		return 0
+	fi
+
+	local made_dir=false started=false routed=false dns_added=false
+	undo() {
+		trap - ERR
+		local failed="$step"
+		echo "Create failed at: $failed. Removing what was made." >&2
+		if $dns_added; then dns remove "$host" > /dev/null 2>&1 || echo "  The DNS record $host could not be removed; remove it by hand." >&2; fi
+		if $started; then remove_container "$name" > /dev/null 2>&1 || true; fi
+		if $made_dir; then rm -rf "$dir"; fi
+		rm -f "$(meta_file "$name")"
+		if $routed || $started; then "$HOST_DIR/bin/proxy-sync" > /dev/null 2>&1 || true; fi
+		echo "Nothing of \"$name\" is left. The step that failed: $failed." >&2
+		exit 1
+	}
+
+	# From here on, any step that fails removes what was made so far.
+	trap undo ERR
+
+	begin "write $dir with an environment file (new secrets) and a profile"
+	mkdir -p "$(dirname "$dir")"
+	(umask 077 && mkdir "$dir")
+	made_dir=true
+	cp "$HOST_DIR/tenant/docker-compose.yml" "$dir/docker-compose.yml"
+	(
+		umask 077
+		{
+			echo "# Tenant $name. Written by bin/tenant create on $(now). Readable by the operator only."
+			echo "TENANT=$name"
+			echo "TENANT_HOST=$host"
+			[ -n "${MCP_AUDIT_IMAGE:-}" ] && echo "MCP_AUDIT_IMAGE=$MCP_AUDIT_IMAGE"
+			echo "MCP_AUDIT_TAG=$version"
+			echo "# This tenant's own passphrase for backups. No other tenant has it."
+			echo "BACKUP_PASSPHRASE=$(secret)"
+			echo "SMTP_HOST=$TENANT_SMTP_HOST"
+			echo "SMTP_PORT=${TENANT_SMTP_PORT:-587}"
+			[ -n "${TENANT_SMTP_SECURE:-}" ] && echo "SMTP_SECURE=$TENANT_SMTP_SECURE"
+			[ -n "${TENANT_SMTP_USER:-}" ] && echo "SMTP_USER=$TENANT_SMTP_USER"
+			[ -n "${TENANT_SMTP_PASSWORD:-}" ] && echo "SMTP_PASSWORD=$TENANT_SMTP_PASSWORD"
+			echo "SMTP_FROM=$(sender "$title")"
+			[ -n "${TENANT_MEMORY:-}" ] && echo "TENANT_MEMORY=$TENANT_MEMORY"
+			[ -n "${TENANT_CPUS:-}" ] && echo "TENANT_CPUS=$TENANT_CPUS"
+			echo "TZ=${TZ:-Europe/Riga}"
+		} > "$dir/.env"
+	)
+	chmod 600 "$dir/.env"
+	{
+		echo "# What this instance sets itself up from at its first start. A later edit is not read."
+		echo "instance_name: $(yaml "$title")"
+		echo "sign_in_method: passkey"
+		echo "first_admin:"
+		echo "  name: $(yaml "$admin_name")"
+		echo "  email: $(yaml "$admin_email")"
+		if [ -n "$sources" ]; then
+			echo "library_sources:"
+			local s
+			for s in ${sources//,/ }; do echo "  - $s"; done
+		fi
+	} > "$dir/tenant-profile.yaml"
+	# The container reads it as its own user; it holds no secret.
+	chmod 644 "$dir/tenant-profile.yaml"
+	meta_set "$name" name "$name"
+	meta_set "$name" title "$title"
+	meta_set "$name" host "$host"
+	meta_set "$name" version "$version"
+	meta_set "$name" state creating
+	meta_set "$name" created "$(now)"
+
+	begin "start the container $(container "$name") and wait until it is healthy"
+	started=true
+	quiet compose "$name" up -d
+	wait_healthy "$name"
+
+	begin "add the route in the internal proxy"
+	routed=true
+	"$HOST_DIR/bin/proxy-sync" > /dev/null
+
+	if dns_set_up; then
+		begin "add the DNS record $host"
+		dns add "$host" > /dev/null
+		dns_added=true
+	else
+		say "  skipped: the DNS record (no Cloudflare settings in host.env). Add it by hand: $host"
+	fi
+	say "  skipped: the AI key and budget (#95 is not built yet)"
+
+	trap - ERR
+	meta_set "$name" state active
+	say "Tenant \"$name\" is running at https://$host"
+	say "The instance has emailed the first admin's invitation to $admin_email. A restart sends a new one until they have joined."
+}
+
+# ---- list and status
+cmd_list() {
+	[ "${1:-}" = "--dry-run" ] && shift
+	printf '%-18s %-28s %-40s %-10s %-10s %s\n' NAME TITLE ADDRESS VERSION STATE CREATED
+	local f name
+	for f in "$registry"/*.meta; do
+		[ -e "$f" ] || continue
+		name="$(basename "$f" .meta)"
+		printf '%-18s %-28s %-40s %-10s %-10s %s\n' "$name" "$(meta_get "$name" title)" "https://$(meta_get "$name" host)" \
+			"$(meta_get "$name" version)" "$(meta_get "$name" state)" "$(meta_get "$name" created | cut -c1-10)"
+	done
+}
+
+cmd_status() {
+	local name=""
+	for a in "$@"; do [ "$a" = "--dry-run" ] || name="$a"; done
+	[ -n "$name" ] || usage
+	need_known "$name"
+	local c; c="$(container "$name")"
+	echo "Tenant:     $name"
+	echo "Title:      $(meta_get "$name" title)"
+	echo "Address:    https://$(meta_get "$name" host)"
+	echo "Version:    $(meta_get "$name" version)"
+	echo "State:      $(meta_get "$name" state)"
+	echo "Created:    $(meta_get "$name" created)"
+	[ -n "$(meta_get "$name" suspended)" ] && echo "Suspended:  $(meta_get "$name" suspended)"
+	echo "Directory:  $(tenant_dir "$name")"
+	echo "Container:  $c, $(docker inspect -f '{{.State.Status}}{{if .State.Health}}, {{.State.Health.Status}}{{end}}, image {{.Config.Image}}' "$c" 2> /dev/null || echo 'not there')"
+	echo "Data:       volume ${c}_data"
+	echo "Route:      $([ -f "$HOST_DIR/tenants/$name.caddy" ] && { grep -q 'respond' "$HOST_DIR/tenants/$name.caddy" && echo 'the suspended page' || echo 'to the instance'; } || echo 'none')"
+}
+
+# ---- suspend and resume
+cmd_suspend() {
+	local name=""; for a in "$@"; do [ "$a" = "--dry-run" ] && dry=true || name="$a"; done
+	[ -n "$name" ] || usage
+	need_known "$name"
+	[ "$(meta_get "$name" state)" = suspended ] && { say "\"$name\" is already suspended."; return 0; }
+	say "Suspending \"$name\": the instance stops, its data stays, its address shows a plain \"suspended\" page."
+	begin "stop the container $(container "$name")"
+	$dry || quiet compose "$name" stop
+	begin "show the suspended page at https://$(meta_get "$name" host)"
+	if $dry; then say "Nothing was changed (--dry-run)."; return 0; fi
+	date -u +%Y-%m-%dT%H:%M:%SZ > "$(tenant_dir "$name")/suspended"
+	meta_set "$name" state suspended
+	meta_set "$name" suspended "$(now)"
+	"$HOST_DIR/bin/proxy-sync" > /dev/null
+	say "\"$name\" is suspended. Bring it back with: bin/tenant resume $name"
+}
+
+cmd_resume() {
+	local name=""; for a in "$@"; do [ "$a" = "--dry-run" ] && dry=true || name="$a"; done
+	[ -n "$name" ] || usage
+	need_known "$name"
+	[ "$(meta_get "$name" state)" = suspended ] || { say "\"$name\" is not suspended."; return 0; }
+	say "Resuming \"$name\"."
+	begin "start the container $(container "$name") and wait until it is healthy"
+	begin "send its address to the instance again"
+	if $dry; then say "Nothing was changed (--dry-run)."; return 0; fi
+	quiet compose "$name" up -d
+	wait_healthy "$name" || die "\"$name\" stays suspended: its address still shows the suspended page."
+	rm -f "$(tenant_dir "$name")/suspended"
+	meta_set "$name" state active
+	meta_set "$name" suspended ""
+	"$HOST_DIR/bin/proxy-sync" > /dev/null
+	say "\"$name\" is running again at https://$(meta_get "$name" host)"
+}
+
+# ---- delete
+cmd_delete() {
+	local name="" without_export=false
+	for a in "$@"; do
+		case "$a" in
+			--dry-run) dry=true ;;
+			--without-export) without_export=true ;;
+			-*) die "Unknown option $a" ;;
+			*) name="$a" ;;
+		esac
+	done
+	[ -n "$name" ] || usage
+	need_known "$name"
+	local host; host="$(meta_get "$name" host)"
+	# The final encrypted export comes with #96. Until then deleting is deleting, and has to be said.
+	$without_export || die "The final encrypted export is not built yet (#96). To delete \"$name\" and all its data without one, add --without-export."
+	say "Deleting tenant \"$name\" ($(meta_get "$name" title)) at https://$host: the container, all its data, its route and its DNS record."
+	if $dry; then
+		say "  skipped: the final encrypted export (#96 is not built yet)"
+		begin "remove the DNS record $host"
+		begin "remove the container $(container "$name") and its data volume"
+		begin "remove $(tenant_dir "$name") and the route in the internal proxy"
+		say "  skipped: the AI key (#95 is not built yet)"
+		begin "keep a record of the deletion, without tenant content"
+		say "Nothing was changed (--dry-run)."
+		return 0
+	fi
+	local typed
+	printf 'This cannot be undone. Type the tenant'"'"'s name to delete it: '
+	IFS= read -r typed || typed=""
+	[ "$typed" = "$name" ] || die "That is not \"$name\". Nothing was deleted."
+
+	say "  skipped: the final encrypted export (#96 is not built yet)"
+	if dns_set_up; then
+		begin "remove the DNS record $host"
+		dns remove "$host" > /dev/null || die "The DNS record could not be removed, so nothing was deleted. Try again, or remove it by hand first."
+	fi
+	begin "remove the container $(container "$name") and its data volume"
+	remove_container "$name"
+	begin "remove $(tenant_dir "$name") and the route in the internal proxy"
+	local created title; created="$(meta_get "$name" created)"; title="$(meta_get "$name" title)"
+	rm -rf "$(tenant_dir "$name")"
+	rm -f "$(meta_file "$name")"
+	"$HOST_DIR/bin/proxy-sync" > /dev/null
+	say "  skipped: the AI key (#95 is not built yet)"
+	begin "keep a record of the deletion, without tenant content"
+	[ -f "$registry/deleted.tsv" ] || printf 'name\ttitle\taddress\tcreated\tdeleted\n' > "$registry/deleted.tsv"
+	printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$title" "https://$host" "$created" "$(now)" >> "$registry/deleted.tsv"
+	say "Tenant \"$name\" is deleted."
+}
+
+command="${1:-}"
+[ $# -gt 0 ] && shift
+case "$command" in
+	create | suspend | resume | delete)
+		# One change at a time on this host.
+		mkdir -p "$registry"
+		exec 9> "$registry/.lock"
+		flock -n 9 || die "Another tenant command is running. Try again when it has finished."
+		"cmd_$command" "$@"
+		;;
+	list) cmd_list "$@" ;;
+	status) cmd_status "$@" ;;
+	-h | --help | help) usage 0 ;;
+	*) usage ;;
+esac

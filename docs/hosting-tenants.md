@@ -23,7 +23,7 @@ Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before t
 
 ## What the server needs
 
-- Linux with Docker Engine and the Compose plugin, and `curl`. Nothing else is installed on the server: helper scripts that need more run in the app's own image.
+- Linux with Docker Engine 25 or newer and the Compose plugin, `bash` and `curl`. Nothing else is installed on the server: helper scripts that need more run in the app's own image.
 - About 150 MB of memory per idle tenant; each container is capped at 768 MB and one CPU unless you change it. Twenty tenants fit a server with 8 GB.
 - Disk for each tenant's database and documents, and for backups.
 - A Cloudflare zone for the domain, and a Cloudflare Tunnel (the one that already serves your own instance can be used).
@@ -37,13 +37,16 @@ Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before t
     Caddyfile
     host.env                 the host's settings (chmod 600)
     tenants/<tenant>.caddy   one route per tenant, written by bin/proxy-sync
-    bin/                     tenant-address, proxy-sync
+    registry/                which tenants exist: names, addresses, versions, states, dates
+    bin/                     tenant (create, list, status, suspend, resume, delete),
+                             tenant-address, proxy-sync
   tenants/
     <tenant>/
       docker-compose.yml     a copy of deploy/host/tenant/docker-compose.yml
       .env                   this tenant's settings and secrets (chmod 600)
       tenant-profile.yaml    what the instance sets itself up from at its first start
-      suspended              present while the tenant is suspended: it keeps its data and has no route
+      suspended              present while the tenant is suspended: it keeps its data and its
+                             address shows a plain "suspended" page
 ```
 
 ## Tenant addresses
@@ -142,30 +145,76 @@ Tick these off once for the zone. They are settings in Cloudflare, not in the ap
 - Cloudflare gives up on a request that has not started answering within **100 seconds**. No request of the app waits that long: AI actions run as background jobs that the screen polls, calls to the AI gateway that a person waits for give up after 20 or 60 seconds, every MCP call is its own short request answered as JSON, reports are built in memory, and the text of an upload is read in seconds (a 3,000-page PDF of 35 MB takes about 11 seconds).
 - An upload may be at most **100 MB** on the free plan, the same as the app's own limit for one request (one file: 50 MB).
 
-## A tenant by hand
+## The tenant command
 
-`#94` adds one command for this. Until then, and to understand what it does:
+`bin/tenant` does a tenant's whole life the same way every time. It works on the files and containers of this layout only: it never signs in to an instance and never reads its database. Every command takes `--dry-run`, which prints what it would do and changes nothing.
+
+It needs these in `host.env` besides the address pattern: `TENANTS_DIR`, the tenants' email settings (`TENANT_SMTP_HOST`, `TENANT_SMTP_PORT`, `TENANT_SMTP_USER`, `TENANT_SMTP_PASSWORD`, `TENANT_SMTP_FROM`) and, for DNS, the Cloudflare settings. `host.env` is plain `KEY=value` lines as Docker reads them: the value runs to the end of the line, without quotes.
+
+### Create
 
 ```bash
-cd /srv/mcp-audit && host/bin/tenant-address acme
+bin/tenant create acme --title "Acme Audit" --admin-email ina@acme-audit.example
 ```
 
-1. Create `tenants/acme/` with a copy of `host/tenant/docker-compose.yml`.
-2. Write `tenants/acme/.env` from `host/tenant/tenant.env.example`: `TENANT`, `TENANT_HOST` (the address printed above), a backup passphrase of its own, and the email settings. `chmod 600` it. No secret in it is used for another tenant.
-3. Write `tenants/acme/tenant-profile.yaml` (`docs/deployment.md`, An instance set up from a profile) with `sign_in_method: passkey` and the first admin.
-4. Start it and give it a route:
+Optional: `--admin-name "Ina Bērziņa"`, `--version v0.4.0` (the image tag; the host's `MCP_AUDIT_TAG` otherwise), `--sources nis2` (library sources by code; the host's `TENANT_SOURCES` otherwise).
 
-   ```bash
-   cd /srv/mcp-audit/tenants/acme && docker compose up -d
-   ```
+It checks the name (1 to 32 lower-case letters, digits or hyphens; not taken; not a reserved name such as `www`, `mail` or `admin`), then:
 
-   ```bash
-   /srv/mcp-audit/host/bin/proxy-sync
-   ```
+1. writes `tenants/acme/` with the Compose file, an environment file readable by you only, with a **newly generated backup passphrase**, and the profile (`sign_in_method: passkey`, the first admin, the sources);
+2. starts the container and waits until it reports healthy;
+3. adds the route in the internal proxy;
+4. adds the DNS record;
+5. prints the address. The instance itself has emailed the first admin's invitation.
 
-5. Add its DNS record (The DNS token, above). The first admin's invitation was sent when the instance started.
+**If a step fails, what was made is removed** and the error names the step. When the instance refuses to start, for example over an unknown library source, its own last lines are shown. The AI key and budget are skipped until #95 exists, and the command says so.
 
-`bin/proxy-sync` makes the proxy match the tenant directories: a route per tenant, the proxy joined to each tenant's network, routes of tenants that are gone removed. Run it after a tenant is added or removed, and after the proxy container is recreated. A tenant with a file named `suspended` in its directory keeps its data and gets no route.
+### List and status
+
+```bash
+bin/tenant list
+```
+
+```bash
+bin/tenant status acme
+```
+
+`list` shows name, title, address, version, state and creation date. `status` adds the directory, the container's state and health, the data volume and where the address leads.
+
+### Suspend and resume
+
+```bash
+bin/tenant suspend acme
+```
+
+```bash
+bin/tenant resume acme
+```
+
+Suspending stops the instance and makes its address answer `503 This instance is suspended.` The data, the DNS record and the people's passkeys stay. Resuming starts it, waits until it is healthy and sends the address to it again; if it does not come back it stays suspended.
+
+### Delete
+
+```bash
+bin/tenant delete acme --without-export
+```
+
+It asks for the tenant's name to be typed again, then removes the DNS record, the container, **the data volume**, the directory and the route. If the DNS record cannot be removed, nothing is deleted. A line stays in `registry/deleted.tsv`: name, title, address, created and deleted, nothing of the tenant's content.
+
+The final encrypted export comes with #96. Until then the command refuses to delete unless you add `--without-export`, so that deleting without a copy is something you say, not something that happens.
+
+### The registry
+
+`host/registry/` holds one small file per tenant (`acme.meta`: name, title, address, version, state, dates) and `deleted.tsv`. It holds no tenant content and no secrets; the secrets are in each tenant's own `.env`.
+
+### What is the same for every tenant, and what is not
+
+- Each tenant's `.env` has its own backup passphrase and its own address. No tenant has another's.
+- The email account is yours and the same for all tenants; its password is written into each tenant's `.env`, where only you and that tenant's container can read it. The sender shows the tenant's title (`TENANT_SMTP_FROM={title} <audit@example.com>`).
+
+### By hand
+
+To see what the command does, or to repair something: a tenant is its directory (`docker-compose.yml`, `.env`, `tenant-profile.yaml`), started with `docker compose up -d` in it, plus a route and a DNS record. `bin/proxy-sync` makes the proxy match the tenant directories: a route per tenant, the proxy joined to each tenant's network, a suspended page for a tenant with a file named `suspended`, and routes of tenants that are gone removed. Run it after the proxy container is recreated.
 
 ## What confines a tenant
 
@@ -186,7 +235,7 @@ Each tenant has its own database and files, so nothing of one tenant, internal r
 IMAGE=ghcr.io/jurispuce/mcp-audit:main deploy/host/smoke-test.sh
 ```
 
-It checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, and a suspended tenant has no route. CI runs it on every push.
+It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, and that suspend, resume and delete do what they say. CI runs it on every push.
 
 On the real tunnel, check by hand after the first tenant:
 
