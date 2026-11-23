@@ -56,7 +56,17 @@ export const user = sqliteTable(
 		role: text('role', { enum: ['admin', 'auditor'] }).notNull(),
 		active: integer('active', { mode: 'boolean' }).notNull().default(true),
 		/** The first-time welcome was dismissed (#84); set by the person themselves. */
-		welcomed: integer('welcomed', { mode: 'boolean' }).notNull().default(false)
+		welcomed: integer('welcomed', { mode: 'boolean' }).notNull().default(false),
+		/**
+		 * How many passkeys the person has (#87). The passkeys themselves are credentials and live
+		 * outside the snapshots; this count is what puts "Passkey added" in the person's history.
+		 */
+		passkeys: integer('passkeys').notNull().default(0),
+		/**
+		 * Invited by email and not joined yet (#90). Such a person cannot sign in any other way; with
+		 * `active` off, the invitation was withdrawn.
+		 */
+		invited: integer('invited', { mode: 'boolean' }).notNull().default(false)
 	},
 	(t) => [uniqueIndex('user_email').on(t.email)]
 );
@@ -81,7 +91,12 @@ export const session = sqliteTable(
 			.references(() => user.id),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 		expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-		lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull()
+		lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+		/**
+		 * When the person last proved who they are in this session after signing in (#93): a passkey
+		 * asked for again. Empty means the sign-in itself (`createdAt`) is the last proof.
+		 */
+		verifiedAt: integer('verified_at', { mode: 'timestamp_ms' })
 	},
 	(t) => [index('session_user').on(t.userId)]
 );
@@ -695,6 +710,109 @@ export const authThrottle = sqliteTable('auth_throttle', {
 	windowStart: integer('window_start', { mode: 'timestamp_ms' }).notNull(),
 	lockedUntil: integer('locked_until', { mode: 'timestamp_ms' })
 });
+
+/**
+ * Passkeys (#87): WebAuthn public keys a person signs in with. Credentials like password hashes:
+ * not versioned and never copied into revisions. A public key is not a secret, but it is nobody
+ * else's business either. Written only by src/lib/domain/passkeys.ts.
+ */
+export const passkey = sqliteTable(
+	'passkey',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		/** The credential id the authenticator chose, base64url. */
+		credentialId: text('credential_id').notNull(),
+		/** The COSE public key, base64url. */
+		publicKey: text('public_key').notNull(),
+		/** The authenticator's signature counter; 0 for those that do not count. */
+		counter: integer('counter').notNull().default(0),
+		transports: text('transports', { mode: 'json' }),
+		/** Synced between the person's devices by their passkey provider, or bound to one device. */
+		synced: integer('synced', { mode: 'boolean' }).notNull().default(false),
+		name: text('name').notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [uniqueIndex('passkey_credential').on(t.credentialId), index('passkey_user').on(t.userId)]
+);
+
+/**
+ * One-time WebAuthn challenges, kept for the few minutes between asking the browser and checking its
+ * answer. The id is the SHA-256 of a cookie value, so a challenge works only in the browser that
+ * asked for it, and once.
+ */
+export const webauthnChallenge = sqliteTable('webauthn_challenge', {
+	id: text('id').primaryKey(),
+	purpose: text('purpose', { enum: ['register', 'sign_in'] }).notNull(),
+	userId: text('user_id'),
+	challenge: text('challenge').notNull(),
+	expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
+});
+
+/**
+ * One-time sign-in codes sent by email (#88): recovery when a passkey is lost, and the way in for a
+ * device that cannot hold one. The id is the SHA-256 of a cookie value, so a code works only in the
+ * browser that asked for it; the code and the link are stored only as hashes. A row exists for an
+ * address without an account too (user_id null), so the app behaves the same for both.
+ * Written only by src/lib/domain/sign-in-codes.ts.
+ */
+export const signInCode = sqliteTable('sign_in_code', {
+	id: text('id').primaryKey(),
+	userId: text('user_id'),
+	email: text('email').notNull(),
+	codeHash: text('code_hash').notNull(),
+	linkHash: text('link_hash').notNull(),
+	/** Where to go after signing in. */
+	next: text('next'),
+	attempts: integer('attempts').notNull().default(0),
+	createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+	expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
+});
+
+/**
+ * Invitation links sent by email (#90). The id is the SHA-256 of the link's token; the token is
+ * never stored. A person has at most one open invitation: sending again replaces the earlier one.
+ * Rows are kept after use so a dead link can say what happened to it. Access infrastructure like
+ * sessions: not versioned (the person's history carries "Invited" and "Joined"). Written only by
+ * src/lib/domain/invitations.ts.
+ */
+export const invitation = sqliteTable(
+	'invitation',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		/** The address it was sent to; a link stops working when the person's email is changed. */
+		email: text('email').notNull(),
+		invitedBy: text('invited_by').notNull(),
+		state: text('state', { enum: ['open', 'used', 'withdrawn', 'replaced'] }).notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull()
+	},
+	(t) => [index('invitation_user').on(t.userId)]
+);
+
+/**
+ * What the instance tried to send by email (#86): when, to whom, which kind, and whether the mail
+ * server took it. No message text, links or codes. Infrastructure like sessions: not versioned.
+ * Written only by src/lib/domain/email.ts, which keeps the newest few hundred rows.
+ */
+export const emailLog = sqliteTable(
+	'email_log',
+	{
+		id: text('id').primaryKey(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		kind: text('kind').notNull(),
+		recipient: text('recipient').notNull(),
+		status: text('status', { enum: ['sent', 'failed'] }).notNull(),
+		error: text('error')
+	},
+	(t) => [index('email_log_created').on(t.createdAt)]
+);
 
 /**
  * OAuth 2.0 for /mcp (#75): clients registered dynamically (RFC 7591), one-time authorization codes,

@@ -6,6 +6,8 @@ mcp-audit has an MCP server at `/mcp` (Streamable HTTP). Claude uses it to read 
 
 In the app: Settings, Access tokens, Create token. Give it a name that says where it is used, for example "Claude Code on laptop". Copy the token (`mcpa_…`); it is shown once. Make one token per place, so you can revoke one without the others.
 
+A token is a long-lived key to everything you can reach, so creating one needs a proof that it is you no older than 5 minutes. Right after signing in nothing more is asked. Later, the app asks for your passkey again; if you have no passkey, it asks you to sign in again and brings you back to the page. No password is needed for a token on an instance that signs in with passkeys.
+
 The endpoint is the app's address plus `/mcp`, for example `http://audit.example.lan:3000/mcp`. Settings, Access tokens shows it.
 
 ## 2. Claude Code
@@ -70,7 +72,11 @@ This needs the app on a public https address (`docs/public-endpoint.md`): Anthro
 3. Choose Connect. A window opens on mcp-audit: sign in if asked, check the app's name, and choose **Allow access**.
 4. The connector shows the mcp-audit tools. Everything it writes is versioned as "Claude on behalf of <you>", using the name the app registered with.
 
+In the window you sign in the way you do in the app. On an instance that signs in with passkeys that is **Sign in with a passkey**, or **Email me a sign-in code** on a device that has no passkey yet (after the code the app offers to add one, and then returns to **Allow access**). The window always opens as its own window or tab, never inside a frame, so the passkey prompt works.
+
 The connection lasts until you disconnect it in Settings, Access tokens, Connected apps, or an admin deactivates your account. Mobile uses the connectors added on the web.
+
+Each instance is its own authorization server at its own address. A connector, a code or a token made for one instance means nothing to another, so a person with two instances adds two connectors.
 
 ## 3c. ChatGPT as a custom MCP server
 

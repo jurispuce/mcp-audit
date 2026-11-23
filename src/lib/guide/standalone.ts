@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
 	AFTER,
 	CLIENTS,
@@ -9,7 +10,8 @@ import {
 	connectorReady,
 	desktopConfig,
 	fill,
-	rich
+	rich,
+	signInNote
 } from './content.ts';
 
 /**
@@ -24,6 +26,10 @@ import {
 export interface StandaloneOptions {
 	/** The instance's MCP address; empty for a copy that belongs to no instance. */
 	mcpUrl?: string;
+	/** How people sign in on the instance, for the note on the sign-in window; unset for no instance. */
+	signIn?: 'password' | 'passkey';
+	/** What the instance is called (#91), so a person with two instances can tell their guides apart. */
+	instanceName?: string;
 	version?: string;
 	/** Link the app's typefaces from Google Fonts. Off for the download, which must work offline. */
 	webFonts?: boolean;
@@ -145,7 +151,7 @@ ${s.tip ? `<p class="tip">${text(s.tip)}</p>` : ''}
 </article>`;
 }
 
-function clientPanel(c: (typeof CLIENTS)[number], mcp: string): string {
+function clientPanel(c: (typeof CLIENTS)[number], mcp: string, signIn?: 'password' | 'passkey'): string {
 	return `<article class="panel" id="client-${c.key}" data-client="${c.key}" role="tabpanel" aria-labelledby="ctab-${c.key}">
 <header><h3>${esc(c.label)}</h3><span class="badge ${c.needs === 'public' ? 'info' : ''}">${c.needs === 'public' ? 'Needs a public https address' : 'Uses an access token'}</span><p>${esc(c.summary)}</p></header>
 ${c.unverified ? `<p class="note" role="note">${esc(c.unverified)}</p>` : ''}
@@ -155,6 +161,7 @@ ${c.unverified ? `<p class="note" role="note">${esc(c.unverified)}</p>` : ''}
 				`<li>${text(st.text)}${st.code ? `<div class="code"><pre data-tpl="${esc(st.code)}">${esc(fill(st.code, mcp))}</pre><button class="btn" type="button" data-copy>Copy</button></div>` : ''}</li>`
 		)
 		.join('')}</ol>
+${c.needs === 'public' ? `<p class="sign-in">${text(signInNote(signIn))}</p>` : ''}
 <ul class="notes">${c.notes.map((n) => `<li>${text(n)}</li>`).join('')}</ul>
 </article>`;
 }
@@ -260,15 +267,25 @@ function script(): string {
 })();`;
 }
 
+/**
+ * The policy a browser needs to show the guide as a page (#100): its own styles, and the one script
+ * it carries, named by its hash. Nothing is loaded from anywhere.
+ */
+export function guidePolicy(): string {
+	const hash = createHash('sha256').update(script()).digest('base64');
+	return `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+}
+
 export function guideParts(opts: StandaloneOptions = {}): { head: string; body: string } {
 	const mcp = (opts.mcpUrl ?? '').trim();
 	const shown = mcp || ADDRESS_PLACEHOLDER;
-	const head = `<title>${GUIDE_TITLE}</title>
+	const name = (opts.instanceName ?? '').trim() || 'mcp-audit';
+	const head = `<title>${name === 'mcp-audit' ? GUIDE_TITLE : `${esc(name)} Guide`}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 ${opts.webFonts ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">\n' : ''}<style>${CSS}</style>`;
 	const body = `<div class="wrap">
 <header class="top">
-<p class="eyebrow">mcp-audit · audit planning and running, with AI that proposes and an auditor who decides</p>
+<p class="eyebrow">${esc(name)} · audit planning and running, with AI that proposes and an auditor who decides</p>
 <h1>Run an audit in five steps</h1>
 <p class="lede">${esc(GUIDE_INTRO)}</p>
 <ul class="rules">${RULES.map((r) => `<li><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></li>`).join('')}</ul>
@@ -297,7 +314,7 @@ ${opts.webFonts ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css
 		(c) =>
 			`<button class="btn" type="button" role="tab" id="ctab-${c.key}" data-client-tab="${c.key}" aria-controls="client-${c.key}" aria-selected="false">${esc(c.label)}</button>`
 	).join('')}</div>
-<div>${CLIENTS.map((c) => clientPanel(c, shown)).join('\n')}</div>
+<div>${CLIENTS.map((c) => clientPanel(c, shown, opts.signIn)).join('\n')}</div>
 </section>
 
 <section id="after" aria-labelledby="after-h">

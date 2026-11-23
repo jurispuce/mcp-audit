@@ -1,6 +1,8 @@
 /** Paths reachable without signing in. Everything else needs a session (or a token on /mcp). */
 const PUBLIC_PATHS = [
 	/^\/login\/?$/,
+	// Sign-in with a one-time code sent by email (#88).
+	/^\/login\/code\/?$/,
 	/^\/setup\/?$/,
 	/^\/health\/?$/,
 	/^\/manifest\.webmanifest$/,
@@ -11,6 +13,14 @@ const PUBLIC_PATHS = [
 	// /oauth/authorize is not here: the person approving must be signed in.
 	/^\/\.well-known\//,
 	/^\/oauth\/(token|register|revoke)\/?$/,
+	// Signing in with a passkey (#87): nobody is signed in yet when the browser asks.
+	/^\/api\/passkeys\/sign-in\/(options|verify)\/?$/,
+	// Joining by an invitation link (#90): the link is the key.
+	/^\/join\/?$/,
+	/^\/api\/passkeys\/join\/(options|verify)\/?$/,
+	// The guide with this instance's own MCP address (#100): linked from the first admin's welcome,
+	// before they have joined. It holds nothing but the instance's name and address.
+	/^\/welcome\/guide\/?$/,
 	/^\/_app\//
 ];
 
@@ -21,6 +31,14 @@ export function isPublicPath(
 ): boolean {
 	if (testSeedEnabled && pathname.startsWith('/api/test/')) return true;
 	return PUBLIC_PATHS.some((p) => p.test(pathname));
+}
+
+/**
+ * The operator's numbers (#98) are asked for with the instance's operator token, not by a signed-in
+ * person: the route checks the token itself, on every request.
+ */
+export function isOperatorPath(pathname: string): boolean {
+	return /^\/api\/operator\/status\/?$/.test(pathname);
 }
 
 /** API-style paths answer 401 JSON instead of redirecting to the login page. */

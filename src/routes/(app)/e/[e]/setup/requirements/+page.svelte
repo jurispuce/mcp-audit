@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import AutoSubmit from '#lib/components/AutoSubmit.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -16,7 +17,7 @@
 	let filter = $state('');
 </script>
 
-<svelte:head><title>Requirements · Set-up · mcp-audit</title></svelte:head>
+<svelte:head><title>Requirements · Set-up · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={form as { message?: string; success?: string } | null} />
 

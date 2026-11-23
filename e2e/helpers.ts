@@ -1,4 +1,11 @@
-import { expect, test as base, type APIRequestContext, type Page } from '@playwright/test';
+import {
+	expect,
+	test as base,
+	type APIRequestContext,
+	type Browser,
+	type BrowserContext,
+	type Page
+} from '@playwright/test';
 
 /**
  * Playwright's test, with page.goto waiting until the page has hydrated: buttons that only open a
@@ -6,6 +13,11 @@ import { expect, test as base, type APIRequestContext, type Page } from '@playwr
  */
 export const test = base.extend({
 	page: async ({ page }, use) => {
+		// The app runs under a Content-Security-Policy (#99): anything it blocks fails the test.
+		const blocked: string[] = [];
+		page.on('console', (m) => {
+			if (/Content Security Policy|Content-Security-Policy/i.test(m.text())) blocked.push(m.text());
+		});
 		const goto = page.goto.bind(page);
 		page.goto = async (url, options) => {
 			const res = await goto(url, options);
@@ -20,6 +32,7 @@ export const test = base.extend({
 			return res;
 		};
 		await use(page);
+		expect(blocked, 'blocked by the Content-Security-Policy').toEqual([]);
 	}
 });
 export { expect };
@@ -27,6 +40,8 @@ export { expect };
 export const PASSWORD = 'test-password-123';
 export const ADMIN = 'admin@example.test';
 export const AUDITOR = 'auditor@example.test';
+/** On the instance without passwords: invited by email at start, and never seeded. */
+export const FIRST_ADMIN = { name: 'Fia First', email: 'first@example.test' };
 
 export interface SeedResult {
 	users: { id: string; email: string; role: string }[];
@@ -93,3 +108,124 @@ export async function postForm(page: Page, path: string, form: Record<string, st
 		.origin;
 	return page.request.post(path, { form, headers: { origin } });
 }
+
+export interface TestMail {
+	to: string;
+	from: string;
+	subject: string;
+	text: string;
+	html: string;
+	kind: string | null;
+}
+
+const MAIL_URL = process.env.E2E_MAIL_URL ?? 'http://127.0.0.1:2526';
+
+/** The emails the app sent to an address, newest last (read from e2e/fake-smtp.mjs). */
+export async function mailTo(request: APIRequestContext, address: string): Promise<TestMail[]> {
+	const res = await request.get(`${MAIL_URL}/messages?to=${encodeURIComponent(address.toLowerCase())}`);
+	expect(res.ok(), await res.text()).toBeTruthy();
+	return (await res.json()) as TestMail[];
+}
+
+/** Wait for the next email of a kind to an address. */
+export async function waitForMail(
+	request: APIRequestContext,
+	address: string,
+	kind: string,
+	after = 0
+): Promise<TestMail> {
+	let found: TestMail | undefined;
+	await expect
+		.poll(
+			async () => {
+				found = (await mailTo(request, address)).filter((m) => m.kind === kind)[after];
+				return !!found;
+			},
+			{ message: `a ${kind} email to ${address}`, timeout: 10_000 }
+		)
+		.toBe(true);
+	return found!;
+}
+
+/** A software authenticator in the browser, so a test can make and use passkeys. */
+export async function virtualAuthenticator(context: BrowserContext, page: Page) {
+	const cdp = await context.newCDPSession(page);
+	await cdp.send('WebAuthn.enable');
+	await cdp.send('WebAuthn.addVirtualAuthenticator', {
+		options: {
+			protocol: 'ctap2',
+			transport: 'internal',
+			hasResidentKey: true,
+			hasUserVerification: true,
+			isUserVerified: true,
+			automaticPresenceSimulation: true
+		}
+	});
+}
+
+/** The invitation link in an email (#90). */
+export const joinLink = (mail: TestMail) => /(https?:\/\/\S+\/join\?t=[\w-]+)/.exec(mail.text)![1]!;
+
+/** An admin invites a person on Settings, Users; resolves to the email that went out. */
+export async function invite(page: Page, origin: string, name: string, email: string): Promise<TestMail> {
+	await page.goto(`${origin}/settings/users`);
+	await page.getByRole('button', { name: 'Invite user' }).click();
+	await page.getByLabel('Name').fill(name);
+	await page.getByLabel('Email').fill(email);
+	await page.getByRole('button', { name: 'Send invitation', exact: true }).click();
+	await expect(page.getByRole('status')).toContainText(`Invitation sent to ${email}`);
+	return waitForMail(page.request, email, 'invitation');
+}
+
+/**
+ * A person of their own for a test, added by the admin and past the one-time password, so tests
+ * that send email or change sign-in do not share a mailbox or lock-outs with the seeded users.
+ */
+export async function addUser(
+	browser: Browser,
+	name = 'Nora New'
+): Promise<{ name: string; email: string; password: string }> {
+	const email = `${unique('person')}@example.test`;
+	const password = 'own-password-123';
+	const context = await browser.newContext();
+	const page = await context.newPage();
+	await loginAs(page, ADMIN);
+	await page.goto('/settings/users');
+	await page.getByRole('button', { name: 'Add user' }).click();
+	await page.getByLabel('Name').fill(name);
+	await page.getByLabel('Email').fill(email);
+	await page.getByRole('button', { name: 'Add user' }).click();
+	const temp = (await page.getByTestId('one-time-password').locator('.au-secret').textContent())!.trim();
+	await context.clearCookies();
+	await signIn(page, email, temp);
+	await page.getByLabel('Current password').fill(temp);
+	await page.getByLabel('New password', { exact: true }).fill(password);
+	await page.getByLabel('Repeat new password').fill(password);
+	await page.getByRole('button', { name: 'Change password' }).click();
+	await expect(page).toHaveURL('/');
+	await context.close();
+	return { name, email, password };
+}
+
+/** A person who joined by invitation, in a browser of their own. */
+export async function joined(browser: Browser, admin: Page, name: string, how: 'passkey' | 'without') {
+	const email = `${unique('tenant')}@example.test`;
+	await loginAs(admin, ADMIN);
+	const link = joinLink(await invite(admin, '', name, email));
+	const context = await browser.newContext();
+	const page = await context.newPage();
+	if (how === 'passkey') await virtualAuthenticator(context, page);
+	await page.goto(link);
+	await page
+		.getByRole('button', { name: how === 'passkey' ? 'Create passkey and join' : 'Join without a passkey' })
+		.click();
+	await expect(page).toHaveURL('/');
+	return { context, page, email };
+}
+
+/**
+ * A second instance, for checks across instances (#99): the one set up from a tenant profile. The
+ * tests of the instance without passwords treat it as another tenant.
+ */
+export const OTHER_INSTANCE =
+	process.env.E2E_PROFILE_URL ?? (process.env.E2E_BASE_URL ? undefined : 'http://localhost:4176');

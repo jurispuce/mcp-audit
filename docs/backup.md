@@ -64,6 +64,10 @@ docker compose start app
 - If the backup is from an older version of the app, the newer migrations run when the app starts.
 - The restore checks the passphrase, that the file was not altered, and the database's integrity before it touches the volume.
 
+## Many instances on one server
+
+A tenant host (`docs/hosting-tenants.md`, Backups) does all of this for every tenant with one command a night: a backup with each tenant's own passphrase, old backups removed on a schedule (7 daily, 4 weekly, 6 monthly), a copy off the server, a restore check once a month, and an export for a tenant that leaves. `scripts/backup-retention.mjs` holds the rules for which backups are kept.
+
 ## Test the procedure
 
 `scripts/backup-restore-check.sh` backs up a running container, restores into a fresh volume, starts it and checks that users and files came back. CI runs it on every build; run it yourself after changing anything around storage:

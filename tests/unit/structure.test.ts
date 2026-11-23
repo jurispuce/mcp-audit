@@ -41,10 +41,18 @@ const WRITERS: Record<string, string[]> = {
 	'src/lib/domain/comments.ts': ['comment'],
 	'src/lib/domain/artifacts.ts': ['artifact_text'],
 	'src/lib/domain/library-documents.ts': ['library_document_text'],
-	'src/lib/domain/ai-settings.ts': ['app_setting'],
+	'src/lib/domain/app-settings.ts': ['app_setting'],
 	'src/lib/domain/jobs.ts': ['ai_job'],
 	'src/lib/domain/throttle.ts': ['auth_throttle'],
-	'src/lib/domain/oauth.ts': ['oauth_client', 'oauth_code', 'oauth_token']
+	'src/lib/domain/oauth.ts': ['oauth_client', 'oauth_code', 'oauth_token'],
+	// What was sent by email and whether the mail server took it (#86); never message text.
+	'src/lib/domain/email.ts': ['email_log'],
+	// Passkey public keys and one-time WebAuthn challenges (#87): credentials, like password hashes.
+	'src/lib/domain/passkeys.ts': ['passkey', 'webauthn_challenge'],
+	// One-time sign-in codes sent by email (#88), stored as hashes.
+	'src/lib/domain/sign-in-codes.ts': ['sign_in_code'],
+	// Invitation links sent by email (#90), stored as hashes.
+	'src/lib/domain/invitations.ts': ['invitation']
 };
 
 const SQL_WRITE =

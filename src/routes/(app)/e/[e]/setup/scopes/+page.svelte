@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -29,7 +30,7 @@
 		};
 </script>
 
-<svelte:head><title>Scopes · Set-up · mcp-audit</title></svelte:head>
+<svelte:head><title>Scopes · Set-up · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={result} />
 

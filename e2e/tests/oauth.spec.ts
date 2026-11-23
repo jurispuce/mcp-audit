@@ -1,71 +1,14 @@
-import { auth, type OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
+import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type {
-	OAuthClientInformationMixed,
-	OAuthClientMetadata,
-	OAuthTokens
-} from '@modelcontextprotocol/sdk/shared/auth.js';
 import { ADMIN, expect, loginAs, sampleCopy, seed, test, unique } from '../helpers';
+import { TestProvider, callbackOf } from '../oauth-client';
 
 /**
  * #75: a remote MCP client signs in with OAuth the way claude.ai custom connectors do, using the MCP
  * SDK's own OAuth client: discovery from the 401, dynamic registration, authorization with PKCE on
  * the consent screen, token exchange, tool calls, refresh, and disconnecting in Settings.
  */
-const CALLBACK = 'http://127.0.0.1:43117/callback';
-
-class TestProvider implements OAuthClientProvider {
-	info?: OAuthClientInformationMixed;
-	saved?: OAuthTokens;
-	verifier = '';
-	authorizationUrl?: URL;
-	constructor(private readonly name: string) {}
-	get redirectUrl() {
-		return CALLBACK;
-	}
-	get clientMetadata(): OAuthClientMetadata {
-		return {
-			client_name: this.name,
-			redirect_uris: [CALLBACK],
-			token_endpoint_auth_method: 'none',
-			grant_types: ['authorization_code', 'refresh_token'],
-			response_types: ['code']
-		};
-	}
-	clientInformation() {
-		return this.info;
-	}
-	saveClientInformation(info: OAuthClientInformationMixed) {
-		this.info = info;
-	}
-	tokens() {
-		return this.saved;
-	}
-	saveTokens(tokens: OAuthTokens) {
-		this.saved = tokens;
-	}
-	redirectToAuthorization(url: URL) {
-		this.authorizationUrl = url;
-	}
-	saveCodeVerifier(v: string) {
-		this.verifier = v;
-	}
-	codeVerifier() {
-		return this.verifier;
-	}
-}
-
-/** Where the browser was sent after the click: nothing listens there, the request itself is enough. */
-async function callbackOf(page: import('@playwright/test').Page, click: () => Promise<void>): Promise<URL> {
-	const request = page.waitForRequest((r) => r.url().startsWith(CALLBACK));
-	await click();
-	const url = new URL((await request).url());
-	// The browser then fails to load it (nothing listens); let that settle before the next navigation.
-	await page.waitForURL((u) => u.protocol === 'chrome-error:' || u.href.startsWith(CALLBACK));
-	return url;
-}
-
 test.beforeEach(async ({ page }) => {
 	await seed(page.request);
 	await loginAs(page, ADMIN);

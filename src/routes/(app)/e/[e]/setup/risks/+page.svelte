@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
@@ -69,7 +70,7 @@
 	});
 </script>
 
-<svelte:head><title>Risks · Set-up · mcp-audit</title></svelte:head>
+<svelte:head><title>Risks · Set-up · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={result} />
 

@@ -1,0 +1,64 @@
+# One tenant (#92): one container, one data volume, one network, one environment file.
+# Copied into the tenant's own directory, next to its .env and tenant-profile.yaml; the directory is
+# the Compose project. Nothing is published on the server: only the internal proxy reaches the app.
+
+name: mcp-audit-tenant-${TENANT:?Set TENANT in .env}
+
+services:
+  app:
+    image: ${MCP_AUDIT_IMAGE:-ghcr.io/jurispuce/mcp-audit}:${MCP_AUDIT_TAG:-main}
+    # The name the proxy sends this tenant's address to.
+    container_name: mcp-audit-tenant-${TENANT}
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      # Encryption ends at Cloudflare; the instance knows itself by its https address.
+      ORIGIN: https://${TENANT_HOST:?Set TENANT_HOST in .env}
+      # The visitor's address as the proxy passes it on, taken from Cloudflare.
+      ADDRESS_HEADER: x-client-ip
+      TENANT_PROFILE: /config/tenant-profile.yaml
+    volumes:
+      - data:/data
+      - ./tenant-profile.yaml:/config/tenant-profile.yaml:ro
+    networks:
+      - tenant
+    # Nothing is written outside /data, nothing runs as root, and no extra rights are held.
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: node
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${TENANT_MEMORY:-768m}
+    cpus: ${TENANT_CPUS:-1.0}
+    pids_limit: 256
+    restart: unless-stopped
+    # Checked often at the start, so a new tenant is known to be up within seconds.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      start_interval: 2s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+networks:
+  # This tenant's own network. Besides the app, only the internal proxy and the AI gateway join it,
+  # so one tenant's container cannot open a connection to another's.
+  tenant:
+    name: mcp-audit-tenant-${TENANT}
+
+volumes:
+  data:

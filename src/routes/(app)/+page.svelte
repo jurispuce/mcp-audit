@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -16,7 +17,7 @@
 	const PLAN: Record<string, string> = { draft: 'Plan draft', sent: 'Plan sent', agreed: 'Plan agreed' };
 </script>
 
-<svelte:head><title>Engagements · mcp-audit</title></svelte:head>
+<svelte:head><title>Engagements · {page.data.instance}</title></svelte:head>
 
 <section class="au-screen">
 	<header class="au-screen__head au-row au-between">

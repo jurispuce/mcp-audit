@@ -1,10 +1,11 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import EventList from '#lib/components/run/EventList.svelte';
 	let { data } = $props();
 	const base = $derived(`/e/${data.engagement.id}`);
 </script>
 
-<svelte:head><title>Today · Run · mcp-audit</title></svelte:head>
+<svelte:head><title>Today · Run · {page.data.instance}</title></svelte:head>
 
 {#if data.todays.length}
 	<h2 class="au-section__title">Today, {data.today}</h2>

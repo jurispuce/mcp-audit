@@ -7,6 +7,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from './errors';
 import { generateTemporaryPassword, validatePassword } from './password';
 import { registerEntity } from './registry';
 import { USER_ROLES, type UserRole } from './roles';
+import { assertPasswords } from './sign-in-method';
 import {
 	createEntity,
 	readRow,
@@ -25,6 +26,10 @@ export interface User {
 	active: boolean;
 	/** The first-time welcome was dismissed (#84). */
 	welcomed: boolean;
+	/** How many passkeys the person has (#87). */
+	passkeys: number;
+	/** Invited by email and not joined yet (#90). */
+	invited: boolean;
 	version: number;
 	createdAt: Date;
 	updatedAt: Date;
@@ -40,6 +45,8 @@ export function toUser(row: Row): User {
 		role: row.role as UserRole,
 		active: Number(row.active) === 1,
 		welcomed: Number(row.welcomed) === 1,
+		passkeys: Number(row.passkeys ?? 0),
+		invited: Number(row.invited ?? 0) === 1,
 		version: Number(row.current_version),
 		createdAt: new Date(Number(row.created_at)),
 		updatedAt: new Date(Number(row.updated_at))
@@ -72,18 +79,20 @@ function activeAdminCount(app: AppDatabase): number {
 export const userDefinition: EntityDefinition = registerEntity({
 	type: 'user',
 	table: 'user',
-	columns: ['name', 'email', 'role', 'active', 'welcomed'],
+	columns: ['name', 'email', 'role', 'active', 'welcomed', 'passkeys', 'invited'],
 	fieldLabels: {
 		name: 'Name',
 		email: 'Email',
 		role: 'Role',
 		active: 'Active',
 		welcomed: 'Welcome seen',
+		passkeys: 'Passkeys',
+		invited: 'Invitation open',
 		deleted: 'Deleted'
 	},
 	formatValue(column, value) {
 		if (column === 'role') return value === 'admin' ? 'Admin' : 'Auditor';
-		if (column === 'active' || column === 'deleted' || column === 'welcomed')
+		if (column === 'active' || column === 'deleted' || column === 'welcomed' || column === 'invited')
 			return Number(value) === 1 ? 'Yes' : 'No';
 		return value == null ? '' : String(value);
 	},
@@ -114,6 +123,11 @@ export const userDefinition: EntityDefinition = registerEntity({
 		if ('welcomed' in input)
 			out.welcomed = input.welcomed === true || input.welcomed === 1 || input.welcomed === 'true' ? 1 : 0;
 		else if (!existing) out.welcomed = 0;
+		if ('passkeys' in input) out.passkeys = Math.max(0, Math.trunc(Number(input.passkeys) || 0));
+		else if (!existing) out.passkeys = 0;
+		if ('invited' in input)
+			out.invited = input.invited === true || input.invited === 1 || input.invited === 'true' ? 1 : 0;
+		else if (!existing) out.invited = 0;
 		if (Object.keys(fields).length) throw new ValidationError('Check the highlighted fields.', fields);
 		return out;
 	},
@@ -126,7 +140,9 @@ export const userDefinition: EntityDefinition = registerEntity({
 		const self = existing && existing.id === actor.userId;
 		const ownFields =
 			op.op === 'update' &&
-			Object.keys(op.data).every((k) => k === 'name' || k === 'email' || k === 'welcomed');
+			Object.keys(op.data).every(
+				(k) => k === 'name' || k === 'email' || k === 'welcomed' || k === 'passkeys'
+			);
 		if (self && ownFields) return;
 		throw new ForbiddenError('Only an admin can change other users, roles or access.');
 	},
@@ -171,6 +187,8 @@ export async function createFirstAdmin(
 	app: AppDatabase,
 	input: { name: string; email: string; password: string }
 ): Promise<User> {
+	// Where the instance has no passwords, the first admin is invited by email at start (startup.ts).
+	assertPasswords();
 	validatePassword(input.password);
 	if (countUsers(app) > 0) throw new ForbiddenError('Set-up is already complete.');
 	const id = randomUUID();
@@ -194,6 +212,8 @@ export async function createUser(
 	input: { name: string; email: string; role?: UserRole }
 ): Promise<{ user: User; temporaryPassword: string }> {
 	requireAdmin(app, actor);
+	// Before anything is created: without passwords, people are invited by email (#90).
+	assertPasswords();
 	const temporaryPassword = generateTemporaryPassword();
 	const { row } = createEntity(app, actor, userDefinition, {
 		name: input.name,
@@ -260,7 +280,10 @@ export async function resetPassword(
 	id: string
 ): Promise<{ temporaryPassword: string }> {
 	requireAdmin(app, actor);
+	assertPasswords();
 	const user = getUser(app, id);
+	// An invited person joins by their link; a password handed over would leave the invitation open.
+	if (user.invited) throw new ValidationError('They have not joined yet. Send the invitation again instead.');
 	const temporaryPassword = generateTemporaryPassword();
 	await setPassword(app, id, temporaryPassword, true);
 	revokeSessions(app, id);

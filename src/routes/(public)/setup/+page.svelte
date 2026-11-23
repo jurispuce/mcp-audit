@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -8,7 +9,7 @@
 	const f = $derived((form?.fields ?? {}) as Record<string, string>);
 </script>
 
-<svelte:head><title>Set up · mcp-audit</title></svelte:head>
+<svelte:head><title>Set up · {page.data.instance}</title></svelte:head>
 
 <main class="au-auth">
 	<form class="au-auth__card" method="POST" use:enhance>

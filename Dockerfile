@@ -13,6 +13,10 @@ RUN npm run build && npm prune --omit=dev
 
 # ---- Runtime: only what the server needs
 FROM node:22-bookworm-slim AS runtime
+# Debian's security updates since the base image was made (#99). CI checks that none is pending,
+# and passes the day as APT_REFRESH so this step runs again daily and is not taken from a cache.
+ARG APT_REFRESH=none
+RUN echo "updates as of ${APT_REFRESH}" && apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 ARG APP_VERSION=dev
 LABEL org.opencontainers.image.source="https://github.com/jurispuce/mcp-audit" \
 	org.opencontainers.image.description="Audit planning and running app with an MCP server" \

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ItemCard from '#lib/components/ItemCard.svelte';
@@ -17,7 +18,7 @@
 	};
 </script>
 
-<svelte:head><title>Skills · Settings · mcp-audit</title></svelte:head>
+<svelte:head><title>Skills · Settings · {page.data.instance}</title></svelte:head>
 
 <section class="au-section" aria-labelledby="skills-title">
 	<h2 class="au-section__title" id="skills-title">Skills</h2>

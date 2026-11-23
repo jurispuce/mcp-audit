@@ -37,7 +37,7 @@
 		(removing = on ? [...new Set([...removing, id])] : removing.filter((x) => x !== id));
 </script>
 
-<svelte:head><title>Coverage · Plan · mcp-audit</title></svelte:head>
+<svelte:head><title>Coverage · Plan · {page.data.instance}</title></svelte:head>
 
 <PlanHeader plan={data.plan} engagement={data.engagement} />
 <FormMessage form={form as { message?: string; success?: string } | null} />

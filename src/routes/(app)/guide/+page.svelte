@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import Rich from '#lib/components/guide/Rich.svelte';
@@ -12,7 +13,7 @@
 	const STATE = { done: 'Done', current: 'Next', todo: '' } as const;
 </script>
 
-<svelte:head><title>Audit steps · Guide · mcp-audit</title></svelte:head>
+<svelte:head><title>Audit steps · Guide · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={(form ?? null) as { message?: string; success?: string } | null} />
 

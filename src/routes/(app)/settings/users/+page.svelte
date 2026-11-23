@@ -1,13 +1,16 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ItemCard from '#lib/components/ItemCard.svelte';
 	import StaleNotice from '#lib/components/StaleNotice.svelte';
+	import { formatWhen } from '#lib/format.ts';
 
 	let { data, form } = $props();
 	let editing = $state<string | null>(null);
-	let adding = $state(false);
+	/** Which form is open: an invitation by email (#90), or a user with a one-time password. */
+	let adding = $state<'invite' | 'add' | null>(null);
 	let redoing = $state(false);
 
 	type Result = {
@@ -46,13 +49,13 @@
 			await update();
 			if (r.type === 'success') {
 				editing = null;
-				adding = false;
+				adding = null;
 			}
 		};
 	};
 </script>
 
-<svelte:head><title>Users · Settings · mcp-audit</title></svelte:head>
+<svelte:head><title>Users · Settings · {page.data.instance}</title></svelte:head>
 
 {#if result?.oneTime}
 	<div class="au-alert au-alert--info" role="status" data-testid="one-time-password">
@@ -73,13 +76,37 @@
 <section class="au-section" aria-labelledby="users-title">
 	<div class="au-row au-between">
 		<h2 class="au-section__title" id="users-title">Users</h2>
-		{#if !adding}<button class="au-btn" type="button" onclick={() => (adding = true)}>Add user</button>{/if}
+		{#if !adding}
+			<div class="au-row">
+				{#if data.canInvite}
+					<button class="au-btn" type="button" onclick={() => (adding = 'invite')}>Invite user</button>
+				{/if}
+				{#if data.canAdd}
+					<button
+						class="au-btn {data.canInvite ? 'au-btn--ghost' : ''}"
+						type="button"
+						onclick={() => (adding = 'add')}>Add user</button
+					>
+				{/if}
+			</div>
+		{/if}
 	</div>
+	{#if !data.canInvite && !data.canAdd}
+		<p class="au-muted">
+			New people join by an invitation sent by email. Set up email first (Settings, Email).
+		</p>
+	{/if}
 
 	{#if adding}
-		{@const v = resultAction === 'create' ? (result?.values ?? {}) : {}}
-		{@const f = resultAction === 'create' ? (result?.fields ?? {}) : {}}
-		<form method="POST" action="?/create" class="au-form au-item" use:enhance={after}>
+		{@const action = adding === 'invite' ? 'invite' : 'create'}
+		{@const v = resultAction === action ? (result?.values ?? {}) : {}}
+		{@const f = resultAction === action ? (result?.fields ?? {}) : {}}
+		<form method="POST" action="?/{action}" class="au-form au-item" use:enhance={after}>
+			<p class="au-muted">
+				{adding === 'invite'
+					? 'They get an email with a link that works once, for 7 days, and join with it.'
+					: 'They get a one-time password, shown here once, that you pass on yourself.'}
+			</p>
 			<Field label="Name" name="name" required value={v.name ?? ''} error={f.name} />
 			<Field label="Email" name="email" type="email" required value={v.email ?? ''} error={f.email} />
 			<div class="au-field">
@@ -90,8 +117,10 @@
 				</select>
 			</div>
 			<div class="au-row">
-				<button class="au-btn au-btn--primary" type="submit">Add user</button>
-				<button class="au-btn au-btn--ghost" type="button" onclick={() => (adding = false)}>Cancel</button>
+				<button class="au-btn au-btn--primary" type="submit"
+					>{adding === 'invite' ? 'Send invitation' : 'Add user'}</button
+				>
+				<button class="au-btn au-btn--ghost" type="button" onclick={() => (adding = null)}>Cancel</button>
 			</div>
 		</form>
 	{/if}
@@ -103,12 +132,21 @@
 					ref={user.email}
 					title={user.name}
 					href="?item=user:{user.id}"
-					badge={user.active
-						? {
-								label: user.role === 'admin' ? 'Admin' : 'Auditor',
-								tone: user.role === 'admin' ? 'info' : 'neutral'
-							}
-						: { label: 'Deactivated', tone: 'neutral' }}
+					badge={user.invited
+						? user.active
+							? { label: 'Invited', tone: 'warn' }
+							: { label: 'Invitation withdrawn', tone: 'neutral' }
+						: user.active
+							? {
+									label: user.role === 'admin' ? 'Admin' : 'Auditor',
+									tone: user.role === 'admin' ? 'info' : 'neutral'
+								}
+							: { label: 'Deactivated', tone: 'neutral' }}
+					body={user.invited && user.active
+						? user.invitationUntil && user.invitationUntil > data.now
+							? `Has not joined yet. The link works until ${formatWhen(user.invitationUntil)}.`
+							: 'Has not joined yet. The link no longer works; send the invitation again.'
+						: null}
 					version={user.version}
 					testid="user-{user.email}"
 				>
@@ -173,29 +211,72 @@
 							>
 								Edit user
 							</button>
-							<form method="POST" action="?/reset" use:enhance>
-								<input type="hidden" name="id" value={user.id} />
-								<input type="hidden" name="email" value={user.email} />
-								<button class="au-btn au-btn--ghost" type="submit" disabled={!user.active}
-									>Reset password</button
-								>
-							</form>
-							{#if user.id !== data.user.id}
-								<form
-									method="POST"
-									action="?/active"
-									use:enhance={({ cancel }) => {
-										if (user.active && !confirm(`Deactivate ${user.name}? Their sessions and tokens end.`))
-											cancel();
-									}}
-								>
-									<input type="hidden" name="id" value={user.id} />
-									<input type="hidden" name="base_version" value={user.version} />
-									<input type="hidden" name="active" value={user.active ? 'false' : 'true'} />
-									<button class="au-btn {user.active ? 'au-btn--danger' : ''}" type="submit">
-										{user.active ? 'Deactivate user' : 'Reactivate user'}
-									</button>
-								</form>
+							{#if user.invited}
+								{#if data.canInvite}
+									<form method="POST" action="?/resend" use:enhance>
+										<input type="hidden" name="id" value={user.id} />
+										<button class="au-btn au-btn--ghost" type="submit">Send invitation again</button>
+									</form>
+								{/if}
+								{#if user.active}
+									<form
+										method="POST"
+										action="?/withdraw"
+										use:enhance={({ cancel }) => {
+											if (!confirm(`Withdraw the invitation for ${user.name}? The link stops working.`))
+												cancel();
+										}}
+									>
+										<input type="hidden" name="id" value={user.id} />
+										<button class="au-btn au-btn--danger" type="submit">Withdraw invitation</button>
+									</form>
+								{/if}
+							{:else}
+								{#if data.canAdd}
+									<form method="POST" action="?/reset" use:enhance>
+										<input type="hidden" name="id" value={user.id} />
+										<input type="hidden" name="email" value={user.email} />
+										<button class="au-btn au-btn--ghost" type="submit" disabled={!user.active}
+											>Reset password</button
+										>
+									</form>
+								{/if}
+								{#if user.id !== data.user.id && user.active}
+									<form
+										method="POST"
+										action="?/shutOut"
+										use:enhance={({ cancel }) => {
+											if (
+												!confirm(
+													`End ${user.name}'s sessions and remove their passkeys? Use this when a device is lost. They can sign in again and add a new passkey.`
+												)
+											)
+												cancel();
+										}}
+									>
+										<input type="hidden" name="id" value={user.id} />
+										<button class="au-btn au-btn--ghost" type="submit"
+											>End sessions and remove passkeys</button
+										>
+									</form>
+								{/if}
+								{#if user.id !== data.user.id}
+									<form
+										method="POST"
+										action="?/active"
+										use:enhance={({ cancel }) => {
+											if (user.active && !confirm(`Deactivate ${user.name}? Their sessions and tokens end.`))
+												cancel();
+										}}
+									>
+										<input type="hidden" name="id" value={user.id} />
+										<input type="hidden" name="base_version" value={user.version} />
+										<input type="hidden" name="active" value={user.active ? 'false' : 'true'} />
+										<button class="au-btn {user.active ? 'au-btn--danger' : ''}" type="submit">
+											{user.active ? 'Deactivate user' : 'Reactivate user'}
+										</button>
+									</form>
+								{/if}
 							{/if}
 						{/if}
 					{/snippet}

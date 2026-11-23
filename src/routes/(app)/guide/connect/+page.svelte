@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import CopyBox from '#lib/components/guide/CopyBox.svelte';
 	import Rich from '#lib/components/guide/Rich.svelte';
 	import {
@@ -7,6 +8,7 @@
 		NOT_PUBLIC_NOTE,
 		connectorReady,
 		fill,
+		signInNote,
 		type GuideClient
 	} from '#lib/guide/content.ts';
 
@@ -18,7 +20,7 @@
 	const client = $derived(CLIENTS.find((c) => c.key === key)!);
 </script>
 
-<svelte:head><title>Connect your AI · Guide · mcp-audit</title></svelte:head>
+<svelte:head><title>Connect your AI · Guide · {page.data.instance}</title></svelte:head>
 
 <p class="au-guide-intro">
 	Your own assistant can work on the same records through the MCP connector, under the same rules: what it
@@ -76,6 +78,8 @@
 		</ol>
 		{#if client.needs === 'token'}
 			<div><a class="au-btn au-btn--small" href="/settings/tokens">Open Settings, Access tokens</a></div>
+		{:else}
+			<p class="au-muted" data-testid="sign-in-note"><Rich text={signInNote(data.signIn)} /></p>
 		{/if}
 		<ul class="au-guide-list au-muted">
 			{#each client.notes as note (note)}<li><Rich text={note} /></li>{/each}

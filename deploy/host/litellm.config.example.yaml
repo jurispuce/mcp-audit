@@ -1,0 +1,22 @@
+# The shared AI gateway of a tenant host (#95). Copy to litellm.config.yaml, next to docker-compose.yml.
+# Keys come from the environment (host.env), never from this file.
+# Docs: https://docs.litellm.ai/docs/proxy/configs and https://docs.litellm.ai/docs/proxy/virtual_keys
+model_list:
+  # model_name is what a tenant's instance asks for (TENANT_AI_DEFAULT_MODEL, TENANT_AI_MODELS).
+  # Replace the placeholder with a current model id from Anthropic's model list.
+  - model_name: claude
+    litellm_params:
+      model: anthropic/<model id>
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+general_settings:
+  # The operator's key: it makes, changes and revokes the tenants' keys. No tenant ever holds it.
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Keys, budgets and spend are kept here. A budget is only held to with a database.
+  database_url: os.environ/DATABASE_URL
+  # What the tenants send and what the model answers is not stored: only who spent how much, when.
+  store_prompts_in_spend_logs: false
+
+litellm_settings:
+  # Nor is it passed on to any logging service.
+  turn_off_message_logging: true

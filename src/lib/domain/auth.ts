@@ -1,8 +1,10 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { accountKey, addressKey, assertNotLocked, clearThrottle, POLICIES, recordFailure } from './throttle';
 import type { AppDatabase } from '#lib/db/client.ts';
-import { ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors';
+import { DomainError, ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors';
+import { recordSignIn } from './operator';
 import { dummyPasswordHash, hashPassword, validatePassword, verifyPassword } from './password';
+import { assertPasswords } from './sign-in-method';
 import type { UserRole } from './roles';
 import type { Actor } from './write';
 
@@ -35,6 +37,7 @@ export async function setPassword(
 	mustChange: boolean,
 	now = new Date()
 ): Promise<void> {
+	assertPasswords();
 	const hash = await hashPassword(validatePassword(password));
 	app.sqlite
 		.prepare(
@@ -43,6 +46,23 @@ export async function setPassword(
 			   must_change_password = excluded.must_change_password, updated_at = excluded.updated_at`
 		)
 		.run(userId, hash, mustChange ? 1 : 0, now.getTime());
+}
+
+/** Whether the person has a password at all: someone who joined with a passkey may have none. */
+export function hasPassword(app: AppDatabase, userId: string): boolean {
+	return !!app.sqlite.prepare('SELECT 1 FROM user_credential WHERE user_id = ?').get(userId);
+}
+
+export function countPasswords(app: AppDatabase): number {
+	return (app.sqlite.prepare('SELECT count(*) AS n FROM user_credential').get() as { n: number }).n;
+}
+
+/**
+ * An instance that signs in with passkeys keeps no passwords (#89): called at start in that mode.
+ * Returns how many were deleted. Sessions stay; people sign in next with a passkey or a code by email.
+ */
+export function removeAllPasswords(app: AppDatabase): number {
+	return app.sqlite.prepare('DELETE FROM user_credential').run().changes;
 }
 
 export async function checkPassword(app: AppDatabase, userId: string, password: string): Promise<boolean> {
@@ -90,6 +110,7 @@ export async function login(
 	now = new Date(),
 	address: string | null = null
 ): Promise<{ token: string; expiresAt: Date; user: SessionUser }> {
+	assertPasswords();
 	const normalized = String(email ?? '')
 		.trim()
 		.toLowerCase();
@@ -120,7 +141,59 @@ export function createSession(app: AppDatabase, userId: string, now = new Date()
 	app.sqlite
 		.prepare('INSERT INTO session (id, user_id, created_at, expires_at, last_seen_at) VALUES (?, ?, ?, ?, ?)')
 		.run(sha256(token), userId, now.getTime(), expiresAt.getTime(), now.getTime());
+	// For whoever runs the instance (#98): when someone last signed in, not who.
+	recordSignIn(app, now);
 	return { token, expiresAt };
+}
+
+// ---- A fresh check before something sensitive (#93)
+
+/** How old the last proof of who the person is may be for creating an access token. */
+export const RECHECK_MINUTES = 5;
+
+/** Signing in is a proof; so is a passkey asked for again later (markSessionVerified). */
+export function sessionVerifiedAt(app: AppDatabase, sessionId: string | null | undefined): Date | null {
+	if (!sessionId) return null;
+	const row = app.sqlite
+		.prepare('SELECT COALESCE(verified_at, created_at) AS at FROM session WHERE id = ?')
+		.get(sessionId) as { at: number } | undefined;
+	return row ? new Date(row.at) : null;
+}
+
+export function recentlyVerified(
+	app: AppDatabase,
+	sessionId: string | null | undefined,
+	now = new Date()
+): boolean {
+	const at = sessionVerifiedAt(app, sessionId);
+	return !!at && now.getTime() - at.getTime() <= RECHECK_MINUTES * 60_000;
+}
+
+export function markSessionVerified(app: AppDatabase, sessionId: string, now = new Date()): void {
+	app.sqlite.prepare('UPDATE session SET verified_at = ? WHERE id = ?').run(now.getTime(), sessionId);
+}
+
+export const RECHECK_NEEDED = `It is more than ${RECHECK_MINUTES} minutes since you last proved it is you.`;
+
+/** The last proof is too old for what was asked. The screen asks for the passkey, or a new sign-in. */
+export class RecheckNeededError extends DomainError {
+	override readonly status = 403;
+	override readonly code = 'recheck_needed';
+	constructor() {
+		super(RECHECK_NEEDED);
+	}
+}
+
+/** Test only (the seeded test instance): make a session's last proof look `minutes` old. */
+export function ageSessionForTests(
+	app: AppDatabase,
+	sessionId: string,
+	minutes: number,
+	now = new Date()
+): void {
+	app.sqlite
+		.prepare('UPDATE session SET verified_at = ? WHERE id = ?')
+		.run(now.getTime() - minutes * 60_000, sessionId);
 }
 
 /** The user behind a session cookie, or null. Sessions slide: use keeps them alive for 30 more days. */
@@ -177,6 +250,21 @@ export interface PersonalTokenInfo {
 	createdAt: Date;
 	lastUsedAt: Date | null;
 	revokedAt: Date | null;
+}
+
+/**
+ * What the Settings screen calls: a token is a long-lived key to everything the person can reach, so
+ * creating one needs a proof no older than 5 minutes in this session (#93).
+ */
+export function createPersonalTokenInSession(
+	app: AppDatabase,
+	actor: Actor,
+	sessionId: string | null | undefined,
+	name: string,
+	now = new Date()
+): { token: string; info: PersonalTokenInfo } {
+	if (!recentlyVerified(app, sessionId, now)) throw new RecheckNeededError();
+	return createPersonalToken(app, actor, name, now);
 }
 
 /** Create a token for the signed-in user. The token itself is returned once and never stored. */

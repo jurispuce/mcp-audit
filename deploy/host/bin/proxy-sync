@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Make the internal proxy match the tenants on this server (#92): one route per tenant directory,
+# the proxy joined to each tenant's network, and routes of tenants that are gone removed.
+# Safe to run at any time; run it after a tenant is added or removed, or the proxy is recreated.
+#   bin/proxy-sync
+set -euo pipefail
+here="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+. "$here/bin/lib.sh"
+load_env "$here/host.env"
+tenants_dir="${TENANTS_DIR:?Set TENANTS_DIR in host.env}"
+routes="$here/tenants"
+proxy="${PROXY_CONTAINER:-mcp-audit-proxy}"
+gateway="${GATEWAY_CONTAINER:-mcp-audit-gateway}"
+mkdir -p "$routes"
+
+wanted=()
+for dir in "$tenants_dir"/*/; do
+	[ -f "$dir/.env" ] || continue
+	tenant="$(sed -n 's/^TENANT=//p' "$dir/.env" | head -1)"
+	host="$(sed -n 's/^TENANT_HOST=//p' "$dir/.env" | head -1)"
+	[ -n "$tenant" ] && [ -n "$host" ] || { echo "Skipped $dir: its .env has no TENANT or TENANT_HOST." >&2; continue; }
+	wanted+=("$tenant")
+	if [ -f "$dir/suspended" ]; then
+		# A suspended tenant keeps its directory and data; its address answers with a plain page.
+		printf 'http://%s {\n\theader Cache-Control no-store\n\trespond "This instance is suspended. Ask the person who runs it." 503\n}\n' "$host" > "$routes/$tenant.caddy.new"
+	elif [ -f "$dir/upgrading" ]; then
+		# While a tenant is upgraded (#97) its address says so, and asks to come back shortly.
+		printf 'http://%s {\n\theader Cache-Control no-store\n\theader Retry-After 30\n\trespond "This instance is being upgraded. Try again in a minute." 503\n}\n' "$host" > "$routes/$tenant.caddy.new"
+	else
+		printf 'http://%s {\n\timport tenant mcp-audit-tenant-%s\n}\n' "$host" "$tenant" > "$routes/$tenant.caddy.new"
+	fi
+	mv "$routes/$tenant.caddy.new" "$routes/$tenant.caddy"
+	# The proxy joins the tenant's network; a tenant never joins the proxy's. The same for the AI
+	# gateway, when one runs on this server (#95).
+	network="mcp-audit-tenant-$tenant"
+	if docker network inspect "$network" > /dev/null 2>&1; then
+		docker network connect "$network" "$proxy" 2> /dev/null || true
+		docker network connect "$network" "$gateway" 2> /dev/null || true
+	fi
+done
+
+for file in "$routes"/*.caddy; do
+	[ -e "$file" ] || continue
+	name="$(basename "$file" .caddy)"
+	keep=false
+	for t in "${wanted[@]:-}"; do [ "$t" = "$name" ] && keep=true; done
+	if ! $keep; then
+		rm -f "$file"
+		docker network disconnect "mcp-audit-tenant-$name" "$proxy" 2> /dev/null || true
+		docker network disconnect "mcp-audit-tenant-$name" "$gateway" 2> /dev/null || true
+	fi
+done
+
+if ! out="$(docker exec "$proxy" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1)"; then
+	echo "The proxy did not take the new routes:" >&2
+	echo "$out" >&2
+	exit 1
+fi
+echo "Proxy routes: ${wanted[*]:-none}"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import FindingList from '#lib/components/findings/FindingList.svelte';
@@ -8,7 +9,7 @@
 	const drafts = $derived(data.cards.filter((c) => c.finding?.status === 'draft').length);
 </script>
 
-<svelte:head><title>To approve · Findings · mcp-audit</title></svelte:head>
+<svelte:head><title>To approve · Findings · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={form as { message?: string; success?: string } | null} />
 {#if data.cards.length}

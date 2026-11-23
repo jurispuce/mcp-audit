@@ -3,11 +3,12 @@ import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, validateSession } from '#lib/domain/auth.ts';
 import { issueSetupCode, needsSetup } from '#lib/domain/setup.ts';
 import { failInterruptedJobs } from '#lib/domain/jobs.ts';
-import { ensureInitialAdmin } from '#lib/domain/users.ts';
+import { prepareInstance, StartupError } from '#lib/domain/startup.ts';
 import {
 	allowedWhileChangingPassword,
 	isApiPath,
 	isCrossSiteFormPost,
+	isOperatorPath,
 	isPublicPath
 } from '#lib/server/access.ts';
 import { appDatabase } from '#lib/server/db.ts';
@@ -16,8 +17,14 @@ import { sessionCookieOptions } from '#lib/server/http.ts';
 /** Before the first request: open the database, run migrations, and make sure someone can sign in. */
 export const init: ServerInit = async () => {
 	const app = appDatabase();
-	const created = await ensureInitialAdmin(app);
-	if (created) console.log(`Created the first admin ${created.email} from INITIAL_ADMIN_EMAIL.`);
+	try {
+		await prepareInstance(app);
+	} catch (e) {
+		if (!(e instanceof StartupError)) throw e;
+		// A setting keeps the instance from starting: say which, plainly, and stop.
+		console.error(`\nCannot start.\n${e.message}\n`);
+		process.exit(1);
+	}
 	const interrupted = failInterruptedJobs(app);
 	if (interrupted) console.log(`Closed ${interrupted} AI action(s) the previous run left open.`);
 	if (needsSetup(app)) {
@@ -27,10 +34,15 @@ export const init: ServerInit = async () => {
 	}
 };
 
+const NON_PAGE_CSP = "default-src 'none'; frame-ancestors 'none'";
 const SECURITY_HEADERS: Record<string, string> = {
 	'x-content-type-options': 'nosniff',
 	'referrer-policy': 'same-origin',
 	'x-frame-options': 'DENY',
+	// Pages carry the policy of vite.config.ts (csp). Everything else (JSON, downloads, redirects)
+	// gets this one: nothing in it may load or run anything, so a file that was uploaded can never
+	// act as a page of the app, and nothing opens inside a frame (#93, #99).
+	'content-security-policy': NON_PAGE_CSP,
 	'permissions-policy': 'camera=(self), microphone=(), geolocation=()'
 };
 
@@ -55,8 +67,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.cookies.delete(SESSION_COOKIE, { path: '/' });
 	}
 
-	// /mcp authenticates every request with a personal access token (the route checks it).
-	const tokenAuthenticated = path === '/mcp';
+	// /mcp authenticates every request with a personal access token (the route checks it); the
+	// operator's numbers with the instance's operator token (#98).
+	const tokenAuthenticated = path === '/mcp' || isOperatorPath(path);
 
 	if (!session && !isPublicPath(path) && !tokenAuthenticated) {
 		if (isApiPath(path)) {

@@ -1,17 +1,19 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { ForbiddenError } from './errors';
+import { passwordsAllowed } from './sign-in-method';
 import { countUsers, createFirstAdmin, type User } from './users';
 
 /**
  * First start: while there are no users, /setup creates the first admin. It needs a one-time code
  * printed in the server log, so a stranger who reaches the page first cannot claim the instance.
+ * An instance without passwords (#89) has no such page: its first admin is invited by email at start.
  */
 
 let setupCode: string | null = null;
 
 export function needsSetup(app: AppDatabase): boolean {
-	return countUsers(app) === 0;
+	return passwordsAllowed() && countUsers(app) === 0;
 }
 
 /** Create (once per process) and return the set-up code. */

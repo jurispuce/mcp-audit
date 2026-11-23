@@ -63,6 +63,33 @@ describe('gateway client', () => {
 	});
 });
 
+describe('the environment’s key belongs to the environment’s gateway (#95)', () => {
+	const given = { LITELLM_BASE_URL: 'http://operator-gateway:4000/v1', LITELLM_API_KEY: 'sk-given' };
+
+	it('is used at that gateway, however the address is written', () => {
+		expect(gatewayOf(app, given)).toEqual({ baseUrl: 'http://operator-gateway:4000/v1', apiKey: 'sk-given' });
+		// A tenant's profile saves the same address in the settings: still the same gateway.
+		saveGateway(app, admin, { baseUrl: 'http://Operator-Gateway:4000/' });
+		expect(gatewayOf(app, given)).toEqual({ baseUrl: 'http://Operator-Gateway:4000', apiKey: 'sk-given' });
+		expect(getAiSettings(app, given)).toMatchObject({ hasKey: true, keyFrom: 'environment' });
+	});
+
+	it('is not sent to a gateway an admin sets in its place', () => {
+		saveGateway(app, admin, { baseUrl: 'http://our-own-model:11434' });
+		expect(gatewayOf(app, given)).toEqual({ baseUrl: 'http://our-own-model:11434', apiKey: null });
+		expect(getAiSettings(app, given)).toMatchObject({ hasKey: false, keyFrom: 'none', configured: true });
+		// With a key of their own, that one is used.
+		saveGateway(app, admin, { baseUrl: 'http://our-own-model:11434', apiKey: 'sk-ours' });
+		expect(gatewayOf(app, given)?.apiKey).toBe('sk-ours');
+		expect(JSON.stringify(gatewayOf(app, given))).not.toContain('sk-given');
+	});
+
+	it('stays a default for any address where the environment names no gateway', () => {
+		saveGateway(app, admin, { baseUrl: 'http://litellm:4000' });
+		expect(gatewayOf(app, { LITELLM_API_KEY: 'sk-env' })?.apiKey).toBe('sk-env');
+	});
+});
+
 describe('AI settings (#63)', () => {
 	it('saves the gateway; the key is write-only and environment values are defaults', () => {
 		expect(

@@ -18,6 +18,7 @@ The plan to the MVP lives in GitHub as linked issues: one roadmap issue, seven m
 | 5 | [#6](https://github.com/jurispuce/mcp-audit/issues/6) | Planning | An agreed audit plan with coverage and planned evidence |
 | 6 | [#7](https://github.com/jurispuce/mcp-audit/issues/7) | Execution and conclusion | Events run on a phone, evidence linked, findings approved, reports exported. End of the MVP |
 | 7 | [#8](https://github.com/jurispuce/mcp-audit/issues/8) | In-app AI | The five AI buttons through LiteLLM; public endpoint hardening |
+| 8 | [#85](https://github.com/jurispuce/mcp-audit/issues/85) | External tenants | An isolated, pre-set instance per external audit firm, created with one command; passkey sign-in with email recovery; an AI budget per tenant |
 
 ## Issues in build order
 
@@ -83,8 +84,31 @@ The plan to the MVP lives in GitHub as linked issues: one roadmap issue, seven m
 | 055 | #66 | 7 | The five AI buttons | #64, #65 |
 | 056 | #67 | 7 | Public endpoint readiness | #17, #30, #10 |
 
+## Milestone 8: external tenants
+
+Planned on 2026-11-21 as epic [#85](https://github.com/jurispuce/mcp-audit/issues/85), which holds the decisions and the assumptions still to confirm. No handoff ids: these issues were written in GitHub.
+
+| Issue | Title | Depends on |
+| --- | --- | --- |
+| #86 | Outbound email: SMTP settings, templates and a test send | — |
+| #87 | Passkeys: register and sign in with WebAuthn | — |
+| #88 | Email as recovery and fallback: sign in with a one-time code | #86, #87 |
+| #90 | Invite people by email; they join with a passkey | #86, #87, #88 |
+| #89 | Sign-in method per instance: passkeys or passwords | #87, #88, #90 |
+| #91 | Pre-set instance: a tenant profile applied at first start | #86, #89, #90 |
+| #92 | Tenant host behind the Cloudflare Tunnel: one isolated container per tenant | — |
+| #93 | MCP connections with passkey sign-in: Claude, ChatGPT and tokens | #87, #88, #89 |
+| #94 | Tenant command: create, list, suspend, resume and delete | #91, #92 |
+| #95 | AI through the shared gateway: a key and a monthly budget per tenant | #91, #92, #94 |
+| #96 | Backups per tenant: schedule, restore, export and deletion | #92, #94 |
+| #97 | Upgrades across tenants, with a backup first and rollback | #94, #96 |
+| #98 | Operator overview: health, versions, backups and usage, without reading tenant data | #94, #95, #96 |
+| #99 | Tenant isolation and security review before the first external tenant | #87 to #98 |
+| #100 | Onboarding pack and one pilot tenant with a real external auditor | #86 to #99 |
+
 ## Critical path
 
 - #9 → #11 → #14 → #17 → #18 → #30 → #31 → #33 → #34
 - #35 → #36 → #37 → #42 → #43 → #44
 - #45 → #46 → #49 → #52 → #54 → #55 → #57 → #58 → #59 → #60 → #62
+- Milestone 8, sign-in: #86 and #87 → #88 → #90 → #89 → #91; hosting: #92 → #94 → #96 → #97; then #93 → #99 → #100

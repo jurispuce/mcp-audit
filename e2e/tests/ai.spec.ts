@@ -364,3 +364,83 @@ test('Recheck against new version proposes an update or a removal; the auditor a
 	).toContainText(['Hardware tokens']);
 	await expect(page.getByTestId('review-banner')).toContainText('1 internal requirement needs review');
 });
+
+test('a key with a budget: Settings, AI shows what is left; a used-up budget and a switched-off key are said in words (#95)', async ({
+	page
+}) => {
+	// The gateway's key management, as the person who runs it would use it (the tenant command does).
+	const GATEWAY = 'http://127.0.0.1:4999';
+	const admin = { authorization: 'Bearer sk-master' };
+	const made = await page.request.post(`${GATEWAY}/key/generate`, {
+		headers: admin,
+		data: { key_alias: 'e2e-tenant', max_budget: 0.25, budget_duration: '30d', models: ['fake-tools'] }
+	});
+	const key = ((await made.json()) as { key: string }).key;
+	const setKey = async (value: string) => {
+		await page.goto('/settings/ai');
+		await page.getByLabel('Gateway key').fill(value);
+		await page.getByRole('button', { name: 'Save gateway' }).click();
+		await expect(page.getByRole('status')).toHaveText('Gateway saved.');
+	};
+	const budget = page.getByTestId('ai-budget');
+	const e = await sampleCopy(page.request);
+	const derive = async () => {
+		await page.goto(`/e/${e.id}/setup/auditee`);
+		const box = page.getByTestId('ai-derive_roles');
+		await box.getByRole('button', { name: 'Derive roles from documents', exact: true }).click();
+		await expect(box).toHaveAttribute('data-status', 'failed', { timeout: 20_000 });
+		return box.getByRole('alert');
+	};
+
+	try {
+		// A key without a budget shows no figures.
+		await page.goto('/settings/ai');
+		await expect(budget).toHaveCount(0);
+
+		await setKey(key);
+		await expect(budget).toContainText('$0.00 of $0.25 used');
+		await expect(budget).toContainText('$0.25 left.');
+		await expect(budget).toContainText('Starts again on');
+		await expect(page.locator('body')).not.toContainText(key);
+
+		// The budget runs out in the middle of an action: the button says so, in words.
+		await expect(await derive()).toHaveText(
+			'The AI budget of this instance is used up for now. An admin can see on Settings, AI when it resets; the person who runs the instance can raise it.'
+		);
+		await page.goto('/settings/ai');
+		await expect(budget).toContainText('$0.25 of $0.25 used: the budget is used up');
+		await expect(budget).toContainText('$0.00 left.');
+
+		// The person who runs the gateway raises it: the instance works again, with nothing to do here.
+		await page.request.post(`${GATEWAY}/key/update`, { headers: admin, data: { key, max_budget: 5 } });
+		await page.goto(`/e/${e.id}/setup/auditee`);
+		await runAction(page, 'derive_roles', 'Derive roles from documents');
+
+		// Switched off at the gateway: the button says so and nothing is written, not even in part.
+		await page.request.post(`${GATEWAY}/key/block`, { headers: admin, data: { key } });
+		const other = await sampleCopy(page.request);
+		await page.goto(`/e/${other.id}/setup/auditee`);
+		const box = page.getByTestId('ai-derive_roles');
+		await box.getByRole('button', { name: 'Derive roles from documents', exact: true }).click();
+		await expect(box).toHaveAttribute('data-status', 'failed', { timeout: 20_000 });
+		await expect(box.getByRole('alert')).toHaveText(
+			'AI is switched off for this instance by the person who runs it. Everything else works as usual.'
+		);
+		await page.reload();
+		await expect(page.getByTestId('proposal-bar')).toHaveCount(0);
+		await expect(page.getByTestId('person-Backup administrator')).toHaveCount(0);
+		await page.goto('/settings/ai');
+		await expect(budget).toContainText('AI is switched off for this instance');
+
+		// Everything else works, and a person's own Claude through MCP does not go through the gateway.
+		const token = await createToken(page, unique('budget'));
+		const client = await mcpClient(new URL(page.url()).origin, token);
+		const listed = await call(client, 'list_engagements', {});
+		expect(JSON.stringify(listed)).toContain(other.id);
+		await client.close();
+	} finally {
+		// The settings are instance-wide: put the key of the other tests back.
+		await setKey('sk-test-key');
+	}
+	await expect(budget).toHaveCount(0);
+});

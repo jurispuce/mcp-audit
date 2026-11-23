@@ -1,17 +1,22 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
+	import PasskeySection from '#lib/components/PasskeySection.svelte';
 	import StaleNotice from '#lib/components/StaleNotice.svelte';
 
 	let { data, form } = $props();
 
 	// Which form the last result belongs to: SvelteKit reports the action name in the URL search.
-	let lastAction = $state<'profile' | 'password' | null>(null);
+	let lastAction = $state<'profile' | 'password' | 'passkey' | null>(null);
 	let redoing = $state(false);
 
 	const profileForm = $derived(lastAction === 'profile' ? form : null);
 	const passwordForm = $derived(lastAction === 'password' ? form : null);
+	const passkeyForm = $derived(
+		lastAction === 'passkey' ? (form as { message?: string; success?: string } | null) : null
+	);
 	const conflict = $derived(profileForm?.conflict);
 	const shown = $derived(
 		(conflict
@@ -37,7 +42,7 @@
 	}
 </script>
 
-<svelte:head><title>Account · Settings · mcp-audit</title></svelte:head>
+<svelte:head><title>Account · Settings · {page.data.instance}</title></svelte:head>
 
 {#if data.mustChangePassword}
 	<div class="au-alert au-alert--info" role="status">
@@ -92,39 +97,56 @@
 	</div>
 </section>
 
-<section class="au-section" aria-labelledby="password-title">
-	<h2 class="au-section__title" id="password-title">Password</h2>
-	<FormMessage form={passwordForm} />
-	<form method="POST" action="?/password" class="au-form au-form--stack" use:enhance={track('password')}>
-		<Field
-			label="Current password"
-			name="current"
-			type="password"
-			required
-			autocomplete="current-password"
-			error={wf.current}
-		/>
-		<Field
-			label="New password"
-			name="password"
-			type="password"
-			required
-			minlength={10}
-			autocomplete="new-password"
-			error={wf.password}
-			hint="At least 10 characters"
-		/>
-		<Field
-			label="Repeat new password"
-			name="confirm"
-			type="password"
-			required
-			autocomplete="new-password"
-			error={wf.confirm}
-		/>
-		<div><button class="au-btn" type="submit">Change password</button></div>
-	</form>
-</section>
+<PasskeySection
+	passkeys={data.passkeys}
+	possible={data.passkeysPossible}
+	result={passkeyForm}
+	ontrack={() => (lastAction = 'passkey')}
+/>
+
+{#if data.passwords}
+	<section class="au-section" aria-labelledby="password-title">
+		<h2 class="au-section__title" id="password-title">Password</h2>
+		<FormMessage form={passwordForm} />
+		<form method="POST" action="?/password" class="au-form au-form--stack" use:enhance={track('password')}>
+			{#if data.hasPassword}
+				<Field
+					label="Current password"
+					name="current"
+					type="password"
+					required
+					autocomplete="current-password"
+					error={wf.current}
+				/>
+			{:else}
+				<p class="au-muted">
+					You have no password. Set one if you also want to sign in with your email and a password.
+				</p>
+			{/if}
+			<Field
+				label="New password"
+				name="password"
+				type="password"
+				required
+				minlength={10}
+				autocomplete="new-password"
+				error={wf.password}
+				hint="At least 10 characters"
+			/>
+			<Field
+				label="Repeat new password"
+				name="confirm"
+				type="password"
+				required
+				autocomplete="new-password"
+				error={wf.confirm}
+			/>
+			<div>
+				<button class="au-btn" type="submit">{data.hasPassword ? 'Change password' : 'Set password'}</button>
+			</div>
+		</form>
+	</section>
+{/if}
 
 <section class="au-section au-phone-only" aria-label="Session">
 	<form method="POST" action="/logout"><button class="au-btn" type="submit">Sign out</button></form>
