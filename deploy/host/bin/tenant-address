@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Print a tenant's address from the host's pattern (#92).
+#   bin/tenant-address <tenant>            needs TENANT_ADDRESS_PATTERN (host.env), e.g. mcpaudit-{tenant}.example.com
+set -euo pipefail
+here="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+[ -z "${TENANT_ADDRESS_PATTERN:-}" ] && [ -f "$here/host.env" ] && set -a && . "$here/host.env" && set +a
+
+tenant="${1:-}"
+if ! [[ "$tenant" =~ ^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$ ]]; then
+	echo "A tenant's short name is 1 to 32 lower-case letters, digits or hyphens, not starting or ending with a hyphen: \"$tenant\"" >&2
+	exit 2
+fi
+pattern="${TENANT_ADDRESS_PATTERN:-}"
+if [[ "$pattern" != *"{tenant}"* ]]; then
+	echo "Set TENANT_ADDRESS_PATTERN in host.env, with {tenant} where the name goes, for example mcpaudit-{tenant}.example.com" >&2
+	exit 2
+fi
+host="${pattern//\{tenant\}/$tenant}"
+if ! [[ "$host" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]]; then
+	echo "TENANT_ADDRESS_PATTERN gives \"$host\", which is not a host name." >&2
+	exit 2
+fi
+echo "$host"

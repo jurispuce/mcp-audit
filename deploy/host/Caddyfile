@@ -1,0 +1,42 @@
+# The internal proxy of a tenant host (#92). Cloudflare ends encryption at its edge and the tunnel
+# hands every tenant address to this proxy over plain http on a private Docker network. The proxy
+# sends each name to that tenant's own container, and nothing else is reachable through it.
+#
+# One file per tenant in tenants/ (written by bin/proxy-sync) says which name goes to which container.
+{
+	# No certificates here: nothing listens on a public port.
+	auto_https off
+	admin localhost:2019
+
+	servers {
+		# Only what comes from the tunnel may say who the visitor is. A request from anywhere else,
+		# such as a tenant's own container, is counted under the address it really came from.
+		trusted_proxies static {$EDGE_SUBNET}
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+# One tenant: a name and the container it goes to.
+(tenant) {
+	# Uploads of several documents at once. Cloudflare's own limit is 100 MB on the free plan.
+	request_body {
+		max_size 100MB
+	}
+	header -Server
+	reverse_proxy {args[0]}:3000 {
+		# The visitor's address, for the app's lock-outs and rate limits (ADDRESS_HEADER=x-client-ip).
+		# Set here on every request, so nobody can send their own.
+		header_up X-Client-IP {client_ip}
+		header_up -CF-Connecting-IP
+		header_up -X-Forwarded-For
+		# Answers are passed on as they come; Cloudflare gives up on a request after 100 seconds.
+		flush_interval -1
+	}
+}
+
+import /etc/caddy/tenants/*.caddy
+
+# A name that is no tenant gets an error, never another tenant's instance.
+:80 {
+	respond "No instance at this address." 404
+}

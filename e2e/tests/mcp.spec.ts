@@ -15,6 +15,28 @@ test('the MCP endpoint refuses requests without a valid token', async ({ request
 	expect(bad.status()).toBe(401);
 });
 
+test('no request to /mcp is held open: behind Cloudflare an answer must start within 100 seconds (#92)', async ({
+	page
+}) => {
+	await seed(page.request);
+	await loginAs(page, AUDITOR);
+	const token = await createToken(page, unique('Stream check'));
+	// A client asking for a server-to-client stream gets an answer that ends at once, not a stream
+	// that sits silent: every call is its own request and answers as JSON.
+	const started = Date.now();
+	const res = await page.request.get('/mcp', {
+		headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
+		timeout: 10_000
+	});
+	await res.body();
+	expect(Date.now() - started).toBeLessThan(5_000);
+	const call = await page.request.post('/mcp', {
+		data: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+		headers: { authorization: `Bearer ${token}`, accept: 'application/json, text/event-stream' }
+	});
+	expect(call.headers()['content-type']).toContain('application/json');
+});
+
 test('a library-curator run through MCP shows in the UI as written by Claude on behalf of the user (#30, #34)', async ({
 	page,
 	baseURL

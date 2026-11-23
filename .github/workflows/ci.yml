@@ -110,6 +110,9 @@ jobs:
           E2E_LLM_URL: http://host.docker.internal:4999
           E2E_MAIL_URL: http://127.0.0.1:2526
 
+      - name: Tenant host layout, the proxy and two tenants without Cloudflare (#92)
+        run: IMAGE=mcp-audit:ci deploy/host/smoke-test.sh
+
       - name: Backup and restore on a fresh volume
         run: IMAGE=mcp-audit:ci scripts/backup-restore-check.sh
 

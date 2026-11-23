@@ -1,0 +1,81 @@
+# The host side of a tenant server (#92): one internal proxy, and optionally the Cloudflare Tunnel.
+# Nothing here opens a port to the internet. Tenants are separate Compose projects, one directory
+# each, made from tenant/docker-compose.yml. Read docs/hosting-tenants.md first.
+#
+#   cp host.env.example host.env        then fill it in
+#   docker compose --env-file host.env up -d
+#   bin/proxy-sync                      after a tenant is added, removed or the proxy is recreated
+
+name: ${HOST_PROJECT:-mcp-audit-host}
+
+services:
+  proxy:
+    image: caddy:2
+    container_name: ${PROXY_CONTAINER:-mcp-audit-proxy}
+    environment:
+      EDGE_SUBNET: ${EDGE_SUBNET:-172.31.250.0/24}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./tenants:/etc/caddy/tenants:ro
+      - proxy-data:/data
+      - proxy-config:/config
+    networks:
+      - edge
+    # For a tunnel that runs on the server itself and not in Docker: it reaches the proxy here.
+    # Bound to this machine only; change nothing to publish it.
+    ports:
+      - '127.0.0.1:${PROXY_PORT:-8088}:80'
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+  # The Cloudflare Tunnel, when it is run from here: docker compose --profile tunnel up -d
+  # Its catch-all rule points at http://proxy:80 (see docs/hosting-tenants.md).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    networks:
+      - edge
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+networks:
+  # The tunnel and the proxy only. Tenants are never on it.
+  edge:
+    name: ${EDGE_NETWORK:-mcp-audit-edge}
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:-172.31.250.0/24}
+
+volumes:
+  proxy-data:
+  proxy-config:

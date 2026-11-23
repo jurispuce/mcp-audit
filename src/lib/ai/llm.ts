@@ -45,6 +45,13 @@ export class LlmError extends Error {}
 /** A long agent turn can take minutes; the gateway itself may time out sooner. */
 const DEFAULT_TIMEOUT_MS = 600_000;
 
+/**
+ * Calls a person waits for in a request (Settings, AI), not in a background job. Behind Cloudflare a
+ * request must start answering within 100 seconds (#92), so these give up well before that.
+ */
+export const MODEL_LIST_TIMEOUT_MS = 20_000;
+export const MODEL_CHECK_TIMEOUT_MS = 60_000;
+
 /** `https://gw` and `https://gw/v1` both work: LiteLLM serves the OpenAI paths under /v1. */
 export function endpoint(gw: Gateway, path: string): string {
 	const base = gw.baseUrl.trim().replace(/\/+$/, '');
@@ -140,7 +147,12 @@ export async function chat(
 
 /** Model names the gateway offers, for picking from a list. */
 export async function listGatewayModels(gw: Gateway, opts: { fetch?: FetchLike } = {}): Promise<string[]> {
-	const json = (await request(gw, '/models', { method: 'GET' }, { ...opts, timeoutMs: 20_000 })) as {
+	const json = (await request(
+		gw,
+		'/models',
+		{ method: 'GET' },
+		{ ...opts, timeoutMs: MODEL_LIST_TIMEOUT_MS }
+	)) as {
 		data?: { id?: string }[];
 	};
 	return (json.data ?? [])
@@ -187,7 +199,7 @@ export async function checkToolCalling(
 					}
 				]
 			},
-			{ ...opts, timeoutMs: 60_000 }
+			{ ...opts, timeoutMs: MODEL_CHECK_TIMEOUT_MS }
 		);
 		const call = res.toolCalls.find((c) => c.function.name === CHECK_TOOL);
 		if (!call) return { ok: false, message: 'The model answered without calling the tool.' };

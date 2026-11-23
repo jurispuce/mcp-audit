@@ -214,6 +214,8 @@ Going back to `password` is possible, but the passwords are gone: people sign in
 
 ## An instance set up from a profile
 
+For many such instances on one server, one per audit firm, see `docs/hosting-tenants.md`.
+
 A new instance normally starts empty: someone creates the first admin, loads the library and connects AI by hand. With `TENANT_PROFILE` naming a file, the instance does this itself at its **first start**, so it is ready before its first person arrives.
 
 ```yaml
