@@ -1,3 +1,5 @@
+import { instanceName } from './instance';
+
 /**
  * The emails the instance sends (#86): plain text with a simple HTML part. Each names the instance
  * and its address, so a person with two instances can tell them apart, and holds no secret other
@@ -17,7 +19,7 @@ export function instanceInfo(
 	env: Record<string, string | undefined> = process.env
 ): Instance {
 	return {
-		name: (env.INSTANCE_NAME ?? '').trim() || 'mcp-audit',
+		name: instanceName(env),
 		origin: ((env.ORIGIN ?? '').trim() || requestOrigin).replace(/\/+$/, '')
 	};
 }

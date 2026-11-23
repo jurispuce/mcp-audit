@@ -70,7 +70,7 @@
 	const keepOpen = (name: string) => (openId ? `?event=${openId}&/${name}` : `?/${name}`);
 </script>
 
-<svelte:head><title>Events · Plan · mcp-audit</title></svelte:head>
+<svelte:head><title>Events · Plan · {page.data.instance}</title></svelte:head>
 
 <PlanHeader plan={data.plan} engagement={e} />
 <FormMessage form={result} />

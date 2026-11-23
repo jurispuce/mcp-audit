@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import FindingList from '#lib/components/findings/FindingList.svelte';
@@ -10,7 +11,7 @@
 	const r = $derived(data.report);
 </script>
 
-<svelte:head><title>Conclusions · Findings · mcp-audit</title></svelte:head>
+<svelte:head><title>Conclusions · Findings · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={result} />
 {#if result?.exported}<p>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import { enhance } from '$app/forms';
@@ -46,7 +47,7 @@
 	let selectedLinks = $state<string[]>([]);
 </script>
 
-<svelte:head><title>{ev.title} · Run · mcp-audit</title></svelte:head>
+<svelte:head><title>{ev.title} · Run · {page.data.instance}</title></svelte:head>
 
 <div class="au-event">
 	<a class="au-btn au-btn--ghost au-btn--small" href="{base}/run/events">All events</a>

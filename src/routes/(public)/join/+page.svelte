@@ -26,7 +26,7 @@
 	}
 </script>
 
-<svelte:head><title>Join {data.instance} · mcp-audit</title></svelte:head>
+<svelte:head><title>Join {data.instance}</title></svelte:head>
 
 <main class="au-auth">
 	<div class="au-auth__card">

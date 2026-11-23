@@ -27,6 +27,8 @@ export interface StandaloneOptions {
 	mcpUrl?: string;
 	/** How people sign in on the instance, for the note on the sign-in window; unset for no instance. */
 	signIn?: 'password' | 'passkey';
+	/** What the instance is called (#91), so a person with two instances can tell their guides apart. */
+	instanceName?: string;
 	version?: string;
 	/** Link the app's typefaces from Google Fonts. Off for the download, which must work offline. */
 	webFonts?: boolean;
@@ -267,12 +269,13 @@ function script(): string {
 export function guideParts(opts: StandaloneOptions = {}): { head: string; body: string } {
 	const mcp = (opts.mcpUrl ?? '').trim();
 	const shown = mcp || ADDRESS_PLACEHOLDER;
-	const head = `<title>${GUIDE_TITLE}</title>
+	const name = (opts.instanceName ?? '').trim() || 'mcp-audit';
+	const head = `<title>${name === 'mcp-audit' ? GUIDE_TITLE : `${esc(name)} Guide`}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 ${opts.webFonts ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">\n' : ''}<style>${CSS}</style>`;
 	const body = `<div class="wrap">
 <header class="top">
-<p class="eyebrow">mcp-audit · audit planning and running, with AI that proposes and an auditor who decides</p>
+<p class="eyebrow">${esc(name)} · audit planning and running, with AI that proposes and an auditor who decides</p>
 <h1>Run an audit in five steps</h1>
 <p class="lede">${esc(GUIDE_INTRO)}</p>
 <ul class="rules">${RULES.map((r) => `<li><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></li>`).join('')}</ul>

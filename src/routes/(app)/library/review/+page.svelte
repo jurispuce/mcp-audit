@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ProposedRequirement from '#lib/components/library/ProposedRequirement.svelte';
@@ -22,7 +23,7 @@
 		rows.filter((x) => x.status === 'proposed').map((x) => x.id);
 </script>
 
-<svelte:head><title>Review · Library · mcp-audit</title></svelte:head>
+<svelte:head><title>Review · Library · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={result} />
 

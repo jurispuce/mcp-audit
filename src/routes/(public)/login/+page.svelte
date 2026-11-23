@@ -24,7 +24,7 @@
 	}
 </script>
 
-<svelte:head><title>Sign in · mcp-audit</title></svelte:head>
+<svelte:head><title>Sign in · {page.data.instance}</title></svelte:head>
 
 {#snippet otherWays(primary: boolean)}
 	{#if data.passkeys}

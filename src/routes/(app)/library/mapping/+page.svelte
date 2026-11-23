@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -24,7 +25,7 @@
 			: `?/${name}`;
 </script>
 
-<svelte:head><title>Mapping · Library · mcp-audit</title></svelte:head>
+<svelte:head><title>Mapping · Library · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={form as { message?: string; success?: string } | null} />
 

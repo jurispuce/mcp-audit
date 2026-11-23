@@ -3,7 +3,7 @@ import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { SESSION_COOKIE, validateSession } from '#lib/domain/auth.ts';
 import { issueSetupCode, needsSetup } from '#lib/domain/setup.ts';
 import { failInterruptedJobs } from '#lib/domain/jobs.ts';
-import { prepareSignIn, StartupError } from '#lib/domain/startup.ts';
+import { prepareInstance, StartupError } from '#lib/domain/startup.ts';
 import {
 	allowedWhileChangingPassword,
 	isApiPath,
@@ -17,7 +17,7 @@ import { sessionCookieOptions } from '#lib/server/http.ts';
 export const init: ServerInit = async () => {
 	const app = appDatabase();
 	try {
-		await prepareSignIn(app);
+		await prepareInstance(app);
 	} catch (e) {
 		if (!(e instanceof StartupError)) throw e;
 		// A setting keeps the instance from starting: say which, plainly, and stop.

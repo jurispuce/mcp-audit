@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -46,7 +47,7 @@
 	let selected = $state<string[]>([]);
 </script>
 
-<svelte:head><title>Proposals · {e.name} · mcp-audit</title></svelte:head>
+<svelte:head><title>Proposals · {e.name} · {page.data.instance}</title></svelte:head>
 
 <section class="au-screen">
 	<header class="au-screen__head">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import ArtifactLinker from '#lib/components/run/ArtifactLinker.svelte';
 	let { data, form } = $props();
@@ -11,7 +12,7 @@
 	};
 </script>
 
-<svelte:head><title>Inbox · Run · mcp-audit</title></svelte:head>
+<svelte:head><title>Inbox · Run · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={form as { message?: string; success?: string } | null} />
 <p class="au-muted">Files, transcripts and documents not yet linked to planned evidence.</p>

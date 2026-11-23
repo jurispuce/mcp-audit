@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -14,7 +15,7 @@
 	};
 </script>
 
-<svelte:head><title>Sign in with a code · mcp-audit</title></svelte:head>
+<svelte:head><title>Sign in with a code · {page.data.instance}</title></svelte:head>
 
 <main class="au-auth">
 	<div class="au-auth__card">

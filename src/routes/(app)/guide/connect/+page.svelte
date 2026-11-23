@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import CopyBox from '#lib/components/guide/CopyBox.svelte';
 	import Rich from '#lib/components/guide/Rich.svelte';
 	import {
@@ -19,7 +20,7 @@
 	const client = $derived(CLIENTS.find((c) => c.key === key)!);
 </script>
 
-<svelte:head><title>Connect your AI · Guide · mcp-audit</title></svelte:head>
+<svelte:head><title>Connect your AI · Guide · {page.data.instance}</title></svelte:head>
 
 <p class="au-guide-intro">
 	Your own assistant can work on the same records through the MCP connector, under the same rules: what it

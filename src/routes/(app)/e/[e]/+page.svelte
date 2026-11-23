@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -52,7 +53,7 @@
 	const doneCount = $derived(o.phases.filter((p) => p.done).length);
 </script>
 
-<svelte:head><title>Home · {e.name} · mcp-audit</title></svelte:head>
+<svelte:head><title>Home · {e.name} · {page.data.instance}</title></svelte:head>
 
 <section class="au-screen">
 	<header class="au-screen__head">

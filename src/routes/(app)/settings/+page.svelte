@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -41,7 +42,7 @@
 	}
 </script>
 
-<svelte:head><title>Account · Settings · mcp-audit</title></svelte:head>
+<svelte:head><title>Account · Settings · {page.data.instance}</title></svelte:head>
 
 {#if data.mustChangePassword}
 	<div class="au-alert au-alert--info" role="status">

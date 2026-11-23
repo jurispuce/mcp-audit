@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	let { data } = $props();
 	const groups = $derived([...new Set(data.results.map((r) => r.group))]);
 	/** The snippet marks matches with [ and ]; show them highlighted without rendering HTML. */
@@ -10,7 +11,7 @@
 			);
 </script>
 
-<svelte:head><title>Search · mcp-audit</title></svelte:head>
+<svelte:head><title>Search · {page.data.instance}</title></svelte:head>
 
 <section class="au-screen">
 	<header class="au-screen__head"><h1 class="au-screen__title">Search</h1></header>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -42,7 +43,7 @@
 	const f = $derived((form?.fields ?? {}) as Record<string, string>);
 </script>
 
-<svelte:head><title>Access tokens · Settings · mcp-audit</title></svelte:head>
+<svelte:head><title>Access tokens · Settings · {page.data.instance}</title></svelte:head>
 
 <section class="au-section" aria-labelledby="apps-title">
 	<h2 class="au-section__title" id="apps-title">Connected apps</h2>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { addPasskey, guessPasskeyName, passkeyProblem } from '#lib/passkeys-client.ts';
 
 	let { data } = $props();
@@ -24,7 +25,7 @@
 	}
 </script>
 
-<svelte:head><title>Add a passkey · mcp-audit</title></svelte:head>
+<svelte:head><title>Add a passkey · {page.data.instance}</title></svelte:head>
 
 <main class="au-auth">
 	<form class="au-auth__card" onsubmit={add}>

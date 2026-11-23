@@ -11,7 +11,7 @@ import { getItemHistory } from './items';
 import { completeSetup, issueSetupCode, needsSetup } from './setup';
 import { requestSignInCode } from './sign-in-codes';
 import { NO_PASSWORDS, signInMethod, signInMethodProblem } from './sign-in-method';
-import { StartupError, passkeyModeProblems, prepareSignIn } from './startup';
+import { StartupError, passkeyModeProblems, prepareInstance } from './startup';
 import { createFirstAdmin, createUser, listUsers, resetPassword } from './users';
 import type { Actor } from './write';
 
@@ -45,7 +45,7 @@ const transport: MailTransport = {
 };
 let lines: string[];
 const start = (env: Record<string, string>) =>
-	prepareSignIn(app, { env, deps: { transport }, log: (l) => lines.push(l) });
+	prepareInstance(app, { env, deps: { transport }, log: (l) => lines.push(l) });
 const linkIn = (text: unknown) =>
 	/https:\/\/audit\.example\.test\/join\?t=([\w-]+)/.exec(String(text))?.[1] ?? '';
 
@@ -203,7 +203,7 @@ describe('the check at start', () => {
 				throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
 			}
 		};
-		await prepareSignIn(app, {
+		await prepareInstance(app, {
 			env: PASSKEY,
 			deps: { transport: failing, log: () => {} },
 			log: (l) => lines.push(l)

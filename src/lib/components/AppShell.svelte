@@ -34,7 +34,7 @@
 <a class="au-visually-hidden" href="#main">Skip to content</a>
 <div class="au-app">
 	<nav class="au-rail" aria-label="Main">
-		<span class="au-rail__brand">mcp-audit</span>
+		<span class="au-rail__brand" data-testid="instance-name">{page.data.instance}</span>
 		<a class="au-rail__switch" href={switchHref} data-testid="engagement-switcher">
 			<span class="au-muted">Engagement</span>
 			<strong>{engagement?.name ?? 'Choose an engagement'}</strong>
@@ -85,7 +85,7 @@
 
 	<header class="au-topbar">
 		<a class="au-topbar__name" href={switchHref} data-testid="topbar-switcher"
-			>{engagement?.name ?? 'mcp-audit'}</a
+			>{engagement?.name ?? page.data.instance}</a
 		>
 		{#if engagement}
 			<span class="au-row">

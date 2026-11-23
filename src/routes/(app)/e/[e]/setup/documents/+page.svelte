@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
@@ -78,7 +79,7 @@
 	let selectedInternal = $state<string[]>([]);
 </script>
 
-<svelte:head><title>Documents · Set-up · mcp-audit</title></svelte:head>
+<svelte:head><title>Documents · Set-up · {page.data.instance}</title></svelte:head>
 
 {#snippet newVersionForm(id: string, name: string)}
 	<form

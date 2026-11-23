@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import ProposalBar from '#lib/components/ai/ProposalBar.svelte';
@@ -48,7 +49,7 @@
 	let selectedRoles = $state<string[]>([]);
 </script>
 
-<svelte:head><title>Auditee · Set-up · mcp-audit</title></svelte:head>
+<svelte:head><title>Auditee · Set-up · {page.data.instance}</title></svelte:head>
 
 <FormMessage form={result} />
 

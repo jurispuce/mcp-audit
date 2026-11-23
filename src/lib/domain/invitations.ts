@@ -157,9 +157,22 @@ export async function inviteFirstAdmin(
 	context: InvitationContext,
 	deps: EmailDeps = {}
 ): Promise<InvitationResult> {
-	if (countUsers(app) > 0) throw new ForbiddenError('Set-up is already complete.');
 	if (!emailSettings(deps.env ?? process.env).configured) throw new EmailNotSetUpError();
 	const now = context.now ?? deps.now ?? new Date();
+	const { user, token } = createInvitedFirstAdmin(app, input, now);
+	return {
+		user,
+		problem: await sendFirstAdminInvitation(app, user, token, context.origin, { ...deps, now })
+	};
+}
+
+/** The first half: the person and their link, with nothing sent yet. Runs inside a caller's transaction. */
+export function createInvitedFirstAdmin(
+	app: AppDatabase,
+	input: { name: string; email: string },
+	now = new Date()
+): { user: User; token: string } {
+	if (countUsers(app) > 0) throw new ForbiddenError('Set-up is already complete.');
 	const id = randomUUID();
 	const { row } = createEntity(
 		app,
@@ -170,8 +183,18 @@ export async function inviteFirstAdmin(
 		{ skipAuthorization: true, now }
 	);
 	const user = toUser(row);
-	const token = issue(app, user, user.id, now);
-	return { user, problem: await send(app, user, null, token, context.origin, { ...deps, now }) };
+	return { user, token: issue(app, user, user.id, now) };
+}
+
+/** The second half: the email. Null when the mail server took it, otherwise why not. */
+export function sendFirstAdminInvitation(
+	app: AppDatabase,
+	user: User,
+	token: string,
+	origin: string,
+	deps: EmailDeps = {}
+): Promise<string | null> {
+	return send(app, user, null, token, origin, deps);
 }
 
 /** At a later start, while the first admin has not joined: a new link. Null when there is nobody to send to. */

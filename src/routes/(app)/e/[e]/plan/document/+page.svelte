@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
 	import PlanHeader from '#lib/components/plan/PlanHeader.svelte';
@@ -12,7 +13,7 @@
 	let busy = $state<string | null>(null);
 </script>
 
-<svelte:head><title>Audit plan · Plan · mcp-audit</title></svelte:head>
+<svelte:head><title>Audit plan · Plan · {page.data.instance}</title></svelte:head>
 
 <PlanHeader plan={data.plan} engagement={data.engagement} />
 <FormMessage form={result} />

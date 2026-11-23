@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -54,7 +55,7 @@
 	};
 </script>
 
-<svelte:head><title>Users · Settings · mcp-audit</title></svelte:head>
+<svelte:head><title>Users · Settings · {page.data.instance}</title></svelte:head>
 
 {#if result?.oneTime}
 	<div class="au-alert au-alert--info" role="status" data-testid="one-time-password">

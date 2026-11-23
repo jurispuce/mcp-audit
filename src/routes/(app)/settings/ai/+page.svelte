@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -34,7 +35,7 @@
 		where === 'settings' ? 'saved here' : where === 'environment' ? 'from the environment' : 'not set';
 </script>
 
-<svelte:head><title>AI · Settings · mcp-audit</title></svelte:head>
+<svelte:head><title>AI · Settings · {page.data.instance}</title></svelte:head>
 
 <p class="au-muted">
 	In-app AI reaches models through a LiteLLM gateway, so Claude, other providers and local models all work.

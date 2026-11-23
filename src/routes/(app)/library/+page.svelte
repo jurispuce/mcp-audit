@@ -24,7 +24,7 @@
 	}
 </script>
 
-<svelte:head><title>Library · mcp-audit</title></svelte:head>
+<svelte:head><title>Library · {page.data.instance}</title></svelte:head>
 
 {#snippet node(n: TreeNode)}
 	<li>

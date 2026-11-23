@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	let { data, form } = $props();
 	const error = $derived((form as { error?: string } | null)?.error ?? data.error);
 </script>
 
-<svelte:head><title>Connect an app · mcp-audit</title></svelte:head>
+<svelte:head><title>Connect an app · {page.data.instance}</title></svelte:head>
 
 <main class="au-auth">
 	<div class="au-auth__card" data-testid="oauth-consent">

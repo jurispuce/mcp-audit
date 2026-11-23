@@ -76,9 +76,12 @@ jobs:
           docker run -d --name first -p 3001:3000 -e TEST_SEED_ENABLED=true --read-only --tmpfs /tmp mcp-audit:ci
           # an instance without passwords: people join by invitation with a passkey (#89, #90)
           docker run -d --name passkey -p 3003:3000 -e TEST_SEED_ENABLED=true -e SIGN_IN_METHOD=passkey -e ORIGIN=http://localhost:3003 -e INITIAL_ADMIN_EMAIL=first@example.test -e "INITIAL_ADMIN_NAME=Fia First" -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
+          # an instance that sets itself up from a tenant profile at its first start (#91)
+          node e2e/tenant-profile.mjs http://host.docker.internal:4999 > tenant-profile.json
+          docker run -d --name profile -p 3004:3000 -e TEST_SEED_ENABLED=true -e ORIGIN=http://localhost:3004 -e TENANT_PROFILE=/config/tenant-profile.json -v "$PWD/tenant-profile.json:/config/tenant-profile.json:ro" -e SMTP_HOST=host.docker.internal -e SMTP_PORT=2525 -e "SMTP_FROM=mcp-audit tests <audit@example.test>" --add-host=host.docker.internal:host-gateway --read-only --tmpfs /tmp mcp-audit:ci
           # 'prod' uses .env.example as shipped, including its empty settings such as ORIGIN=
           docker run -d --name prod  -p 3002:3000 --env-file .env.example -e BACKUP_PASSPHRASE= --read-only --tmpfs /tmp mcp-audit:ci
-          for port in 3000 3001 3002 3003; do
+          for port in 3000 3001 3002 3003 3004; do
             for i in $(seq 1 60); do curl -sf "http://127.0.0.1:$port/health" > /dev/null && break; sleep 1; done
           done
 
@@ -103,6 +106,7 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:3000
           E2E_FIRST_START_URL: http://127.0.0.1:3001
           E2E_PASSKEY_MODE_URL: http://localhost:3003
+          E2E_PROFILE_URL: http://localhost:3004
           E2E_LLM_URL: http://host.docker.internal:4999
           E2E_MAIL_URL: http://127.0.0.1:2526
 
@@ -111,7 +115,7 @@ jobs:
 
       - name: Container logs
         if: failure()
-        run: docker logs app; docker logs first; docker logs passkey
+        run: docker logs app; docker logs first; docker logs passkey; docker logs profile
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

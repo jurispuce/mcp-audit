@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import AiAction from '#lib/components/ai/AiAction.svelte';
 	import { enhance } from '$app/forms';
 	import FormMessage from '#lib/components/FormMessage.svelte';
@@ -45,7 +46,7 @@
 	const waiting = $derived(data.waiting.imports + data.waiting.changes + data.waiting.links);
 </script>
 
-<svelte:head><title>Import · Library · mcp-audit</title></svelte:head>
+<svelte:head><title>Import · Library · {page.data.instance}</title></svelte:head>
 
 {#if result?.report}
 	{@const r = result.report}

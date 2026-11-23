@@ -1,10 +1,11 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import EventList from '#lib/components/run/EventList.svelte';
 	let { data } = $props();
 	const base = $derived(`/e/${data.engagement.id}`);
 </script>
 
-<svelte:head><title>All events · Run · mcp-audit</title></svelte:head>
+<svelte:head><title>All events · Run · {page.data.instance}</title></svelte:head>
 
 {#if data.events.length}
 	<EventList events={data.events} {base} label="Events" />

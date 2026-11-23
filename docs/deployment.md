@@ -129,7 +129,8 @@ All settings are environment variables in `.env`. Only the Compose ones (`BIND_A
 | `BACKUP_PASSPHRASE`                                                                | empty             | Required for backup and restore. At least 12 characters.                                                                                                      |
 | `LITELLM_BASE_URL`, `LITELLM_API_KEY`                                              | empty             | Default AI gateway address and key for the in-app AI actions. Settings, AI overrides them. See "In-app AI" below.                                             |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | empty             | Mail server for invitations, sign-in codes and security notices. `SMTP_HOST` and `SMTP_FROM` switch email on. See "Email" below.                              |
-| `INSTANCE_NAME`                                                                    | `mcp-audit`       | What this instance is called in emails, so a person with two instances can tell them apart.                                                                   |
+| `INSTANCE_NAME`                                                                    | `mcp-audit`       | What this instance is called in the shell, in page titles, in emails and in the downloaded guide, so a person with two instances can tell them apart.         |
+| `TENANT_PROFILE`                                                                   | empty             | Path of a profile file a new instance sets itself up from at its first start. See "An instance set up from a profile" below.                                  |
 | `TZ`                                                                               | `Europe/Riga`     | Time zone for logs and report dates.                                                                                                                          |
 | `TEST_SEED_ENABLED`                                                                | `false`           | Test environments only: seed data and a password-free test login. Never in production.                                                                        |
 | `DATA_DIR`                                                                         | `/data`           | Where the database and files live inside the container. Leave as is.                                                                                          |
@@ -210,6 +211,52 @@ SMTP_HOST=…            # and the other email settings, see Email
 4. People who are signed in stay signed in. At their next sign-in each person asks for a code by email and is offered to add a passkey.
 
 Going back to `password` is possible, but the passwords are gone: people sign in with a passkey or a code by email and set a new password on Settings → Account, or an admin resets it. Keep email working until everyone has one.
+
+## An instance set up from a profile
+
+A new instance normally starts empty: someone creates the first admin, loads the library and connects AI by hand. With `TENANT_PROFILE` naming a file, the instance does this itself at its **first start**, so it is ready before its first person arrives.
+
+```yaml
+# tenant-profile.yaml (JSON works too)
+instance_name: Baltic Audit
+sign_in_method: passkey # optional: password or passkey
+first_admin:
+  name: Ina Admin
+  email: ina@baltic-audit.example
+library_sources: # optional: sources that ship with the app, by code
+  - nis2
+ai: # optional
+  base_url: https://llm.example.com
+  api_key: sk-…
+  default_model: claude-sonnet
+  web_search: false
+```
+
+Mount the file into the container and name it, next to the email settings and `ORIGIN`:
+
+```yaml
+# docker-compose.yml, under the app service
+volumes:
+  - ./tenant-profile.yaml:/config/tenant-profile.yaml:ro
+environment:
+  TENANT_PROFILE: /config/tenant-profile.yaml
+```
+
+At the first start the instance:
+
+- loads the listed library sources;
+- saves the AI gateway and its key, switches web search for research on or off, runs the tool-calling check on the default model and, when it passes, lets that model run the AI actions;
+- creates the first admin and sends their invitation by email. There is no set-up page and no code in the log, whatever the sign-in method;
+- takes its name and, where the profile gives one, its sign-in method from the profile.
+
+What to know:
+
+- **It is applied once**, in one step: everything, or on a problem nothing. What was applied, and when, is kept in the database and written to the log; the key is in neither. A restart applies nothing again, and **a later edit of the file is not read**, so it never overwrites what the instance's admin has changed since.
+- **A profile with an error stops the start.** The log names every field that is wrong (`first_admin.email: is missing`, `library_sources.1: "iso27001" is not a source that ships with the app`), and nothing is created.
+- It needs the email settings and `ORIGIN`: the first admin's link goes out by email and is built from the address. Until the first admin has joined, each restart sends a new link.
+- If the gateway does not answer at the first start, the instance starts all the same, says so in the log, and tries the model's check again at each start until it has passed once. An admin can also run it on Settings → AI.
+- `INSTANCE_NAME` and `SIGN_IN_METHOD` in the environment win over the profile where they are set. To rename an instance later, set `INSTANCE_NAME`.
+- A profile named for an instance that already has people is not applied; the log says so.
 
 ## Passkeys
 
