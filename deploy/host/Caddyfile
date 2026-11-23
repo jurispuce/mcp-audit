@@ -23,6 +23,10 @@
 		max_size 100MB
 	}
 	header -Server
+	# The operator's numbers (#98) are asked for on the server itself, inside the tenant's own
+	# container. Through the tunnel the address does not exist.
+	@operator path /api/operator/*
+	respond @operator "Not found" 404
 	reverse_proxy {args[0]}:3000 {
 		# The visitor's address, for the app's lock-outs and rate limits (ADDRESS_HEADER=x-client-ip).
 		# Set here on every request, so nobody can send their own.

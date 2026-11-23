@@ -30,6 +30,14 @@ export function isPublicPath(
 	return PUBLIC_PATHS.some((p) => p.test(pathname));
 }
 
+/**
+ * The operator's numbers (#98) are asked for with the instance's operator token, not by a signed-in
+ * person: the route checks the token itself, on every request.
+ */
+export function isOperatorPath(pathname: string): boolean {
+	return /^\/api\/operator\/status\/?$/.test(pathname);
+}
+
 /** API-style paths answer 401 JSON instead of redirecting to the login page. */
 export function isApiPath(pathname: string): boolean {
 	return pathname.startsWith('/api/') || pathname === '/mcp' || pathname.startsWith('/mcp/');

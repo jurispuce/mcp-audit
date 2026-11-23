@@ -7,7 +7,7 @@
 #   bin/tenant ai      <name> [--budget <amount>] [--off] [--on]
 #   bin/tenant upgrade <name> [--to <version>]     bin/tenant upgrade --all [--to <version>]
 #   bin/tenant list
-#   bin/tenant status  <name>
+#   bin/tenant status  <name>            bin/tenant status --all
 #   bin/tenant suspend <name>
 #   bin/tenant resume  <name>
 #   bin/tenant delete  <name> [--without-export]
@@ -228,6 +228,8 @@ cmd_create() {
 			echo "MCP_AUDIT_TAG=$version"
 			echo "# This tenant's own passphrase for backups. No other tenant has it."
 			echo "BACKUP_PASSPHRASE=$(secret)"
+			echo "# What the operator's overview asks this instance its numbers with (counts and dates only)."
+			echo "OPERATOR_TOKEN=$(secret)"
 			echo "SMTP_HOST=$TENANT_SMTP_HOST"
 			echo "SMTP_PORT=${TENANT_SMTP_PORT:-587}"
 			[ -n "${TENANT_SMTP_SECURE:-}" ] && echo "SMTP_SECURE=$TENANT_SMTP_SECURE"
@@ -332,8 +334,19 @@ cmd_list() {
 }
 
 cmd_status() {
-	local name=""
-	for a in "$@"; do [ "$a" = "--dry-run" ] || name="$a"; done
+	local name="" all=false
+	for a in "$@"; do
+		case "$a" in
+			--dry-run) ;;
+			--all) all=true ;;
+			*) name="$a" ;;
+		esac
+	done
+	if $all; then
+		[ -z "$name" ] || die "Give a tenant's name or --all, not both."
+		cmd_status_all
+		return
+	fi
 	[ -n "$name" ] || usage
 	need_known "$name"
 	local c; c="$(container "$name")"
@@ -349,6 +362,16 @@ cmd_status() {
 	echo "Directory:  $(tenant_dir "$name")"
 	echo "Container:  $c, $(docker inspect -f '{{.State.Status}}{{if .State.Health}}, {{.State.Health.Status}}{{end}}, image {{.Config.Image}}' "$c" 2> /dev/null || echo 'not there')"
 	echo "Data:       volume ${c}_data"
+	local numbers
+	numbers="$(instance_numbers "$name")"
+	case "$numbers" in
+		"ok "*)
+			# shellcheck disable=SC2086
+			set -- $numbers
+			echo "People:     $2$([ "$3" -gt 0 ] && echo " (+$3 invited)"), last sign-in $(short_time "$6" never)"
+			echo "Holds:      $4 engagement(s), $(human_bytes "$5"), last change $(short_time "$7" never)"
+			;;
+	esac
 	echo "AI:         $(ai_line "$name")"
 	echo "Route:      $([ -f "$HOST_DIR/tenants/$name.caddy" ] && { grep -q 'is suspended' "$HOST_DIR/tenants/$name.caddy" && echo 'the suspended page' || { grep -q 'being upgraded' "$HOST_DIR/tenants/$name.caddy" && echo 'the "being upgraded" page' || echo 'to the instance'; }; } || echo 'none')"
 }
@@ -469,6 +492,8 @@ cmd_delete() {
 . "$here/bin/tenant-ai.sh"
 # shellcheck disable=SC1091
 . "$here/bin/tenant-upgrade.sh"
+# shellcheck disable=SC1091
+. "$here/bin/tenant-overview.sh"
 
 command="${1:-}"
 [ $# -gt 0 ] && shift

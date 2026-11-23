@@ -37,6 +37,12 @@ export function makeHost(extraEnv: string[] = []) {
 	chmodSync(path.join(REPO, 'tests/fixtures/fake-docker.sh'), 0o755);
 	symlinkSync(path.join(REPO, 'tests/fixtures/fake-docker.sh'), path.join(root, 'bin/docker'));
 	writeFileSync(log, '');
+	// How full the disks are is the test's to say, not the machine's: 41% unless FAKE_DF_PERCENT is set.
+	writeFileSync(
+		path.join(root, 'bin/df'),
+		'#!/usr/bin/env bash\nprintf \'Filesystem 1024-blocks Used Available Capacity Mounted on\\n/dev/fake 1000 410 590 %s%% /srv\\n\' "${FAKE_DF_PERCENT:-41}"\n'
+	);
+	chmodSync(path.join(root, 'bin/df'), 0o755);
 
 	const base = [
 		'TENANT_ADDRESS_PATTERN=mcpaudit-{tenant}.example.test',

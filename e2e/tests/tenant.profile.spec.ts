@@ -1,5 +1,5 @@
 import { expect, joinLink, loginAs, mailTo, test, virtualAuthenticator } from '../helpers';
-import { PROFILE_ADMIN, PROFILE_INSTANCE } from '../tenant-profile.mjs';
+import { OPERATOR_TOKEN, PROFILE_ADMIN, PROFILE_INSTANCE } from '../tenant-profile.mjs';
 
 /**
  * #91: an instance started with TENANT_PROFILE and nothing else about itself in its settings. By the
@@ -60,4 +60,51 @@ test('an instance set up from a profile is ready when its first admin joins', as
 	await expect(page.getByRole('button', { name: 'Add user' })).toHaveCount(0);
 	const guide = await (await page.request.get('/guide/download')).text();
 	expect(guide).toContain(`<title>${PROFILE_INSTANCE} Guide</title>`);
+});
+
+/**
+ * #98: whoever runs the instance asks it for its numbers with the instance's operator token. No
+ * person's sign-in gives them, and they hold counts and dates only.
+ */
+test('the operator endpoint gives numbers to the operator token only, and no content', async ({
+	page,
+	playwright,
+	baseURL
+}) => {
+	const anonymous = await playwright.request.newContext({ baseURL });
+	const url = '/api/operator/status';
+	const missing = await anonymous.get(url);
+	expect(missing.status()).toBe(401);
+	expect(await missing.json()).toEqual({
+		message: 'The operator token is missing or wrong.',
+		code: 'unauthenticated'
+	});
+	expect((await anonymous.get(url, { headers: { authorization: 'Bearer wrong-token' } })).status()).toBe(401);
+
+	// A signed-in admin of the instance is not the operator: their session opens nothing here.
+	await loginAs(page, PROFILE_ADMIN.email);
+	expect((await page.request.get(url)).status()).toBe(401);
+
+	const res = await anonymous.get(url, { headers: { authorization: `Bearer ${OPERATOR_TOKEN}` } });
+	expect(res.status()).toBe(200);
+	expect(res.headers()['cache-control']).toBe('no-store');
+	const body = (await res.json()) as Record<string, unknown>;
+	expect(Object.keys(body).sort()).toEqual([
+		'database_bytes',
+		'engagements',
+		'files_bytes',
+		'invited',
+		'last_activity',
+		'last_sign_in',
+		'users',
+		'version'
+	]);
+	expect(body.users).toBeGreaterThanOrEqual(1);
+	// The admin signed in a moment ago: the time is there, the person is not.
+	expect(String(body.last_sign_in)).toMatch(/^\d{4}-\d\d-\d\dT/);
+	const text = JSON.stringify(body);
+	expect(text).not.toContain(PROFILE_ADMIN.name);
+	expect(text).not.toContain(PROFILE_ADMIN.email);
+	expect(text).not.toContain(PROFILE_INSTANCE);
+	await anonymous.dispose();
 });

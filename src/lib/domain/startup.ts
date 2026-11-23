@@ -3,6 +3,7 @@ import type { AppDatabase } from '#lib/db/client.ts';
 import { countPasswords, removeAllPasswords } from './auth';
 import { checkMailServer, emailSettings, type EmailDeps } from './email';
 import { inviteFirstAdmin, resendFirstAdminInvitation, sendFirstAdminInvitation } from './invitations';
+import { operatorTokenProblem } from './operator';
 import { passkeysPossible } from './passkeys';
 import { signInMethod, signInMethodProblem } from './sign-in-method';
 import {
@@ -95,6 +96,8 @@ export async function prepareInstance(app: AppDatabase, options: StartupOptions 
 
 	const unknown = signInMethodProblem(env);
 	if (unknown) throw new StartupError(unknown);
+	const weak = operatorTokenProblem(env);
+	if (weak) throw new StartupError(weak);
 	const passkeys = signInMethod(env) === 'passkey';
 	const origin = val(env, 'ORIGIN');
 

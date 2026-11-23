@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { tenantProfile } from './tenant-profile.mjs';
+import { OPERATOR_TOKEN, tenantProfile } from './tenant-profile.mjs';
 
 /**
  * End-to-end tests run against a real server with a fresh data directory.
@@ -136,7 +136,9 @@ export default defineConfig({
 					server('profile', 4176, {
 						...MAIL_ENV,
 						ORIGIN: 'http://localhost:4176',
-						TENANT_PROFILE: profileFile
+						TENANT_PROFILE: profileFile,
+						// As a tenant has it (#98): the operator asks the instance its numbers with this.
+						OPERATOR_TOKEN
 					})
 				])
 	]

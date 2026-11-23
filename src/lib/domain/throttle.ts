@@ -102,6 +102,6 @@ export function clearThrottle(app: AppDatabase, key: string): void {
 
 export const accountKey = (email: string) => `account:${email.trim().toLowerCase()}`;
 export const addressKey = (
-	kind: 'login' | 'token' | 'setup' | 'oauth' | 'register',
+	kind: 'login' | 'token' | 'setup' | 'oauth' | 'register' | 'operator',
 	address: string | null | undefined
 ) => `${kind}:${address || 'unknown'}`;

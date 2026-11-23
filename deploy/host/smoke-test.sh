@@ -7,7 +7,9 @@
 # address comes from the tunnel's header and from nowhere else, the containers run confined, each
 # tenant has its own key and budget at the AI gateway (#95; a scripted stand-in for LiteLLM), and
 # an upgrade backs up first and a failed one is rolled back (#97; test images made from $IMAGE), and
-# that suspend, resume and delete do what they say. Everything it starts is removed at the end.
+# the operator's overview reports a stopped tenant and a missing backup and nothing of a tenant's
+# content (#98), and that suspend, resume and delete do what they say. Everything it starts is
+# removed at the end.
 set -euo pipefail
 
 image="${IMAGE:-mcp-audit:ci}"
@@ -72,6 +74,7 @@ AI_GATEWAY_MASTER_KEY=sk-smoke-master
 AI_GATEWAY_NETWORK=$gateway_net
 TENANT_AI_DEFAULT_MODEL=fake-tools
 TENANT_AI_BUDGET=5
+DISK_ALERT_PERCENT=101
 ENV
 tenant() { "$work/host/bin/tenant" "$@"; }
 
@@ -309,6 +312,36 @@ tenant upgrade --all --to v9.9.1 > "$work/upgrade-all.out" 2>&1 && all_good=pass
 [ "$all_good" = passed ] || sed 's/^/    /' "$work/upgrade-all.out"
 check "a good version reaches every tenant, the operator's first" bash -c "[ $all_good = passed ] && grep -q 'one tenant at a time: smoke-copy smoke-a smoke-b' '$work/upgrade-all.out' && grep -q '\"smoke-a\" is already on v9.9.1' '$work/upgrade-all.out'"
 check "all report the new version" bash -c "[ '$(version_at "$host_b")' = v9.9.1 ] && [ '$(version_at "$host_copy")' = v9.9.1 ]"
+
+say "The operator's overview: numbers, and nothing of a tenant's content"
+overview="$(tenant status --all 2>&1)" && overview_rc=0 || overview_rc=$?
+echo "$overview" | sed 's/^/    /'
+check "all is well, and the command says so (exit 0)" bash -c "[ $overview_rc = 0 ] && echo \"$overview\" | grep -q '^All well\.$'"
+check "each tenant is shown up, with its version and a backup" bash -c "[ \"\$(echo \"$overview\" | grep -c -E '^smoke-(a|b|copy) +up +v9\.9\.1 .* 20[0-9-]+ [0-9:]+ +ok ')\" = 3 ]"
+check "with the people it has and how much it holds" bash -c "echo \"$overview\" | grep -q -E '^smoke-a .* [0-9.]+ (kB|MB) +0 \(\+1 invited\) +never '"
+token_of() { sed -n 's/^OPERATOR_TOKEN=//p' "$work/tenants/$1/.env"; }
+# Ask an instance's operator endpoint from inside its own container: prints the status and the fields.
+numbers='const [,t]=process.argv; fetch("http://127.0.0.1:3000/api/operator/status",{headers:t?{authorization:"Bearer "+t}:{}}).then(async r=>{const j=await r.json();console.log(r.status,Object.keys(j).sort().join(","),JSON.stringify(j))}).catch(()=>console.log("unreachable"))'
+own="$(docker exec mcp-audit-tenant-smoke-a node -e "$numbers" "$(token_of smoke-a)")"
+check "an instance answers its own operator token with the listed fields only" bash -c "echo '$own' | grep -q '^200 database_bytes,engagements,files_bytes,invited,last_activity,last_sign_in,users,version '"
+check "and with no name, address or title in it" bash -c "! echo '$own' | grep -q -i -e smoke -e '@' -e admin"
+check "another tenant's token is refused (401)" bash -c "docker exec mcp-audit-tenant-smoke-a node -e '$numbers' '$(token_of smoke-b)' | grep -q '^401 '"
+check "so is no token (401)" bash -c "docker exec mcp-audit-tenant-smoke-a node -e '$numbers' | grep -q '^401 '"
+check "the tenants' operator tokens differ" bash -c "[ -n '$(token_of smoke-a)' ] && [ '$(token_of smoke-a)' != '$(token_of smoke-b)' ]"
+check "through the tunnel the endpoint does not exist, even with the token (404)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_a' -H 'authorization: Bearer $(token_of smoke-a)' http://127.0.0.1:$port/api/operator/status)\" = 404 ]"
+# A stopped tenant and a tenant without a backup.
+docker stop mcp-audit-tenant-smoke-copy > /dev/null
+mv "$work/backups/smoke-b" "$work/backups-of-b-aside"
+overview="$(tenant status --all 2>&1)" && overview_rc=0 || overview_rc=$?
+check "a stopped tenant and a missing backup end the command with a non-zero exit code (got $overview_rc)" bash -c "[ $overview_rc != 0 ]"
+check "the stopped tenant is named" bash -c "echo \"$overview\" | grep -q -- '- smoke-copy: the instance is not up (exited'"
+check "the missing backup is named" bash -c "echo \"$overview\" | grep -q -- '- smoke-b: it has no backup\.'"
+check "the tenant that is well is not" bash -c "! echo \"$overview\" | grep -q -- '- smoke-a:'"
+mv "$work/backups-of-b-aside" "$work/backups/smoke-b"
+docker start mcp-audit-tenant-smoke-copy > /dev/null
+for _ in $(seq 1 60); do via_proxy "$host_copy" /health | grep -q '"status":"ok"' && break; sleep 1; done
+check "a disk that is nearly full is reported too" bash -c "DISK_ALERT_PERCENT=1 '$work/host/bin/tenant' status --all | grep -q -- '- The disk at .* is [0-9]*% full'"
+check "and all is well again" "$work/host/bin/tenant" status --all
 
 say "Suspend and resume a tenant"
 tenant suspend smoke-b > /dev/null

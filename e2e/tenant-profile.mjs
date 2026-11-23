@@ -2,6 +2,8 @@
 //   node e2e/tenant-profile.mjs <gateway address>     prints it as JSON, for CI to mount into a container
 export const PROFILE_ADMIN = { name: 'Tia Tenant-Admin', email: 'tenant-admin@example.test' };
 export const PROFILE_INSTANCE = 'Baltic Audit';
+/** The operator token the profile instance is started with (#98). Test value only. */
+export const OPERATOR_TOKEN = 'e2e-operator-token-0123456789abcdef0123456789';
 
 /** @param {string} gateway The AI gateway's address, as the instance reaches it. */
 export function tenantProfile(gateway) {

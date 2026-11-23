@@ -8,6 +8,7 @@ import {
 	allowedWhileChangingPassword,
 	isApiPath,
 	isCrossSiteFormPost,
+	isOperatorPath,
 	isPublicPath
 } from '#lib/server/access.ts';
 import { appDatabase } from '#lib/server/db.ts';
@@ -63,8 +64,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.cookies.delete(SESSION_COOKIE, { path: '/' });
 	}
 
-	// /mcp authenticates every request with a personal access token (the route checks it).
-	const tokenAuthenticated = path === '/mcp';
+	// /mcp authenticates every request with a personal access token (the route checks it); the
+	// operator's numbers with the instance's operator token (#98).
+	const tokenAuthenticated = path === '/mcp' || isOperatorPath(path);
 
 	if (!session && !isPublicPath(path) && !tokenAuthenticated) {
 		if (isApiPath(path)) {

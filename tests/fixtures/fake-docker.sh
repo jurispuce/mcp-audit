@@ -7,6 +7,7 @@
 #   FAKE_DOCKER_UNHEALTHY_TAG=<regex>  the same, for containers whose "<container>:<version>" matches
 #   FAKE_DOCKER_NO_IMAGE=<regex> an image whose name matches is not on this machine
 #   FAKE_DOCKER_REPORTS=<version>  what every instance's health page says its version is
+#   FAKE_DOCKER_NUMBERS=<line>   what every instance's operator endpoint answers (see tenant-overview.sh)
 set -euo pipefail
 echo "$*" >> "$FAKE_DOCKER_LOG"
 mkdir -p "$FAKE_DOCKER_STATE"
@@ -59,6 +60,16 @@ fi
 # ---- Upgrades (#97): which version a started container runs, and what it says of itself
 if [ "$1" = exec ] && [[ "$*" == *"/health"* ]]; then
 	if [ -n "${FAKE_DOCKER_REPORTS:-}" ]; then echo "$FAKE_DOCKER_REPORTS"; else cat "$FAKE_DOCKER_STATE/version-$2" 2> /dev/null || exit 1; fi
+	exit 0
+fi
+# ---- The operator's overview (#98): what an instance says of itself, and where Docker keeps data
+if [ "$1" = exec ] && [[ "$*" == *"/api/operator/status"* ]]; then
+	up "$2" || exit 1
+	echo "${FAKE_DOCKER_NUMBERS:-ok 3 1 2 5242880 2026-11-22T08:30:00.000Z 2026-11-22T09:15:00.000Z $(cat "$FAKE_DOCKER_STATE/version-$2" 2> /dev/null)}"
+	exit 0
+fi
+if [ "$1 ${2:-}" = "info -f" ]; then
+	echo /var/lib/docker
 	exit 0
 fi
 if [ "$1 ${2:-}" = "image inspect" ]; then

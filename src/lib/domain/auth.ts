@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { accountKey, addressKey, assertNotLocked, clearThrottle, POLICIES, recordFailure } from './throttle';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { DomainError, ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from './errors';
+import { recordSignIn } from './operator';
 import { dummyPasswordHash, hashPassword, validatePassword, verifyPassword } from './password';
 import { assertPasswords } from './sign-in-method';
 import type { UserRole } from './roles';
@@ -140,6 +141,8 @@ export function createSession(app: AppDatabase, userId: string, now = new Date()
 	app.sqlite
 		.prepare('INSERT INTO session (id, user_id, created_at, expires_at, last_seen_at) VALUES (?, ?, ?, ?, ?)')
 		.run(sha256(token), userId, now.getTime(), expiresAt.getTime(), now.getTime());
+	// For whoever runs the instance (#98): when someone last signed in, not who.
+	recordSignIn(app, now);
 	return { token, expiresAt };
 }
 
