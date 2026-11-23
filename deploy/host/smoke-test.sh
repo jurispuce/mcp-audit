@@ -6,6 +6,7 @@
 # instance, an unknown name is refused, one tenant's container cannot reach another's, the visitor's
 # address comes from the tunnel's header and from nowhere else, the containers run confined, each
 # tenant has its own key and budget at the AI gateway (#95; a scripted stand-in for LiteLLM), and
+# an upgrade backs up first and a failed one is rolled back (#97; test images made from $IMAGE), and
 # that suspend, resume and delete do what they say. Everything it starts is removed at the end.
 set -euo pipefail
 
@@ -17,6 +18,7 @@ proxy=mcp-audit-proxy-smoke
 gateway=mcp-audit-gateway-smoke
 gateway_net=mcp-audit-gateway-smoke
 repo="$(cd "$src/../.." && pwd)"
+repo_image="${image%:*}"
 tenants=(smoke-a smoke-b)
 # Made later from a backup of smoke-a; removed with the others at the end.
 copies=(smoke-copy)
@@ -40,6 +42,7 @@ cleanup() {
 	docker volume rm -f mcp-audit-check-smoke-a smoke-export-check > /dev/null 2>&1 || true
 	[ -d "$work/host" ] && (cd "$work/host" && docker compose --env-file host.env down -v --remove-orphans > /dev/null 2>&1) || true
 	docker network rm "$gateway_net" > /dev/null 2>&1 || true
+	docker rmi "$repo_image:v9.9.1" "$repo_image:v9.9.2" > /dev/null 2>&1 || true
 	rm -rf "$work"
 }
 trap cleanup EXIT
@@ -242,6 +245,70 @@ check "nightly backs up every tenant and copies off the server" "$work/host/bin/
 check "each tenant has a backup from tonight" bash -c "[ \"\$(ls '$work/backups/smoke-b' | wc -l)\" = 1 ] && [ \"\$(ls '$work/backups/smoke-a' | wc -l)\" = 3 ]"
 check "the copy off the server has them" bash -c "[ \"\$(ls '$work/offsite/smoke-a' | wc -l)\" = 3 ]"
 check "the status for the operator says no failures" grep -q '^failures=0$' "$work/host/registry/nightly.status"
+
+say "An instance that is not answering shows a plain page, not an error"
+docker stop mcp-audit-tenant-smoke-b > /dev/null
+check "its address says it is restarting (503)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login)\" = 503 ] && curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login | grep -q 'This instance is restarting'"
+docker start mcp-audit-tenant-smoke-b > /dev/null
+for _ in $(seq 1 60); do via_proxy "$host_b" /health | grep -q '"status":"ok"' && break; sleep 1; done
+check "and answers again once it is up" bash -c "curl -s --max-time 10 -H 'Host: $host_b' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-b</title>'"
+
+say "Upgrade a tenant: a backup first, a page meanwhile, the new version after"
+# Two versions made from the image under test: one that works, and one that damages the data
+# and then fails to start, as a bad release with a bad migration would.
+# Made from a container of the image, without a build, so no builder has to find a local image.
+version_image() { # version_image <version> [<command as a JSON list>]
+	local c
+	c="$(docker create "$image")"
+	docker commit -c "ENV APP_VERSION=$1" ${2:+-c "CMD $2"} "$c" "$repo_image:$1" > /dev/null
+	docker rm "$c" > /dev/null
+}
+version_image v9.9.1
+damage='const D=require("better-sqlite3");const db=new D("/data/app.db");db.prepare("UPDATE \"user\" SET name = ?").run("Broken by the upgrade");console.log("damaged:",db.prepare("SELECT name FROM \"user\" LIMIT 1").get().name);process.exit(1)'
+version_image v9.9.2 "[\"node\",\"-e\",$(printf '%s' "$damage" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/')]"
+version_at() { via_proxy "$1" /health | sed -n 's/.*"version":"\([^"]*\)".*/\1/p'; }
+name_before="$(admin_name "$ca")"
+backups_before="$(ls "$work/backups/smoke-a" | wc -l)"
+# What a visitor sees while it runs: every answer's status, twice a second.
+seen="$work/seen-during-upgrade"
+( while [ ! -e "$work/upgrade-done" ]; do
+	printf '%s %s\n' "$(curl -s -o "$work/page" -w '%{http_code}' --max-time 5 -H "Host: $host_a" "http://127.0.0.1:$port/login")" "$(head -c 60 "$work/page" | tr '\n' ' ')" >> "$seen"
+	sleep 0.3
+done ) &
+watcher=$!
+tenant upgrade smoke-a --to v9.9.1 > "$work/upgrade.out" 2>&1 && upgraded=yes || upgraded=no
+touch "$work/upgrade-done"; wait "$watcher" 2> /dev/null || true
+check "the upgrade succeeds" bash -c "[ $upgraded = yes ]"
+[ "$upgraded" = yes ] || sed 's/^/    /' "$work/upgrade.out"
+check "the instance reports the new version (v9.9.1, got $(version_at "$host_a"))" bash -c "[ '$(version_at "$host_a")' = v9.9.1 ]"
+check "list shows it" bash -c "'$work/host/bin/tenant' list | grep -q 'smoke-a .* v9.9.1 '"
+check "a backup was made first" bash -c "[ \"\$(ls '$work/backups/smoke-a' | wc -l)\" = $((backups_before + 1)) ]"
+check "its data is as it was" bash -c "[ \"$(admin_name "$ca")\" = \"$name_before\" ]"
+check "a visitor saw the \"being upgraded\" page meanwhile" grep -q '^503 This instance is being upgraded' "$seen"
+check "and nothing but the instance or that page (no error)" bash -c "! grep -v -e '^200 ' -e '^503 This instance is being upgraded' '$seen' | grep -q ."
+check "the address leads to the instance again" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-a</title>'"
+
+say "A version that fails is rolled back, with the data as before"
+tenant upgrade smoke-a --to v9.9.2 > "$work/upgrade-bad.out" 2>&1 && bad=passed || bad=failed
+check "the upgrade fails and says why" bash -c "[ $bad = failed ] && grep -q 'The upgrade of \"smoke-a\" to v9.9.2 failed: version v9.9.2 did not become healthy' '$work/upgrade-bad.out'"
+check "the failed version had changed the data before it stopped" grep -q 'damaged: Broken by the upgrade' "$work/upgrade-bad.out"
+check "the tenant is back on the old version" bash -c "grep -q '\"smoke-a\" is back on v9.9.1' '$work/upgrade-bad.out' && '$work/host/bin/tenant' list | grep -q 'smoke-a .* v9.9.1 '"
+for _ in $(seq 1 30); do [ "$(version_at "$host_a")" = v9.9.1 ] && break; sleep 1; done
+check "it answers on the old version (got $(version_at "$host_a"))" bash -c "[ '$(version_at "$host_a")' = v9.9.1 ]"
+check "what the failed version did to the data is gone" bash -c "[ \"$(admin_name "$ca")\" = \"$name_before\" ]"
+check "nothing of the failed upgrade is left in the volume" bash -c "! docker exec $ca sh -c 'ls /data | grep -q pre-restore'"
+check "the address leads to the instance again" bash -c "curl -s --max-time 10 -H 'Host: $host_a' http://127.0.0.1:$port/login | grep -q '<title>Sign in · Tenant smoke-a</title>'"
+
+say "Upgrade all: the operator's own first, and stop at the first failure"
+echo "OPERATOR_TENANT=smoke-copy" >> "$work/host/host.env"
+tenant upgrade --all --to v9.9.2 > "$work/upgrade-all-bad.out" 2>&1 && all_bad=passed || all_bad=failed
+check "it stops at the operator's own instance" bash -c "[ $all_bad = failed ] && grep -q 'Stopped at \"smoke-copy\". Upgraded before it: none. Not reached, still on their version: smoke-a smoke-b.' '$work/upgrade-all-bad.out'"
+check "which is back on its version and answers" bash -c "'$work/host/bin/tenant' list | grep -q 'smoke-copy .* ${image##*:} ' && curl -s --max-time 10 -H 'Host: $host_copy' http://127.0.0.1:$port/health | grep -q '\"status\":\"ok\"'"
+check "the tenants after it were not touched" bash -c "'$work/host/bin/tenant' list | grep -q 'smoke-b .* ${image##*:} ' && [ \"\$(docker inspect -f '{{.Config.Image}}' mcp-audit-tenant-smoke-b)\" = '$image' ]"
+tenant upgrade --all --to v9.9.1 > "$work/upgrade-all.out" 2>&1 && all_good=passed || all_good=failed
+[ "$all_good" = passed ] || sed 's/^/    /' "$work/upgrade-all.out"
+check "a good version reaches every tenant, the operator's first" bash -c "[ $all_good = passed ] && grep -q 'one tenant at a time: smoke-copy smoke-a smoke-b' '$work/upgrade-all.out' && grep -q '\"smoke-a\" is already on v9.9.1' '$work/upgrade-all.out'"
+check "all report the new version" bash -c "[ '$(version_at "$host_b")' = v9.9.1 ] && [ '$(version_at "$host_copy")' = v9.9.1 ]"
 
 say "Suspend and resume a tenant"
 tenant suspend smoke-b > /dev/null

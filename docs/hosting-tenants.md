@@ -39,8 +39,8 @@ Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before t
     host.env                 the host's settings (chmod 600)
     tenants/<tenant>.caddy   one route per tenant, written by bin/proxy-sync
     registry/                which tenants exist: names, addresses, versions, states, dates
-    bin/                     tenant (create, list, status, suspend, resume, delete, ai, backup,
-                             restore, export, nightly), tenant-address, proxy-sync
+    bin/                     tenant (create, list, status, suspend, resume, delete, ai, upgrade,
+                             backup, restore, export, nightly), tenant-address, proxy-sync
   backups/<tenant>/          one encrypted backup per night, <tenant>-YYYYMMDDTHHMMSSZ.mcpa
   exports/                   archives for tenants that leave
   tenants/
@@ -51,6 +51,8 @@ Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before t
       tenant-profile.yaml    what the instance sets itself up from at its first start
       suspended              present while the tenant is suspended: it keeps its data and its
                              address shows a plain "suspended" page
+      upgrading              present while the tenant is upgraded: its address shows a plain
+                             "being upgraded" page
 ```
 
 ## Tenant addresses
@@ -184,7 +186,7 @@ bin/tenant list
 bin/tenant status acme
 ```
 
-`list` shows name, title, address, version, state and creation date. `status` adds the directory, the container's state and health, the data volume, where the address leads, and what the tenant has used of its AI budget (`AI: $3.10 of $20.00 used, $16.90 left, resets 2026-12-01`).
+`list` shows name, title, address, version, state and creation date, and marks the tenants that are behind the version the host is on (see Upgrades). `status` adds the directory, the container's state and health, the data volume, where the address leads, and what the tenant has used of its AI budget (`AI: $3.10 of $20.00 used, $16.90 left, resets 2026-12-01`).
 
 ### Suspend and resume
 
@@ -289,6 +291,54 @@ For the onboarding pack (#100). When a person presses an AI button on an engagem
 - **Nothing is sent** for an engagement where AI is switched off, and nothing before someone presses an AI button.
 - **Not through your gateway at all:** a person's own Claude or ChatGPT connected through MCP (that is between their AI provider and the instance), and a tenant that set a gateway of its own.
 
+## Upgrades
+
+Each tenant runs **the version named in its own `.env`** (`MCP_AUDIT_TAG`) and stays on it until you upgrade it: restarting, resuming or restoring a tenant never changes its version. `MCP_AUDIT_TAG` in `host.env` is the version the host is on: what a new tenant gets, and where an upgrade goes when you name no version. Use released versions such as `v0.4.0`; `main` and `latest` are names that move, and the command says so when it meets one.
+
+```bash
+bin/tenant list
+```
+
+shows each tenant's version, with `(behind)` where it is older than the host's, and how many are behind.
+
+### One tenant
+
+```bash
+bin/tenant upgrade acme --to v0.4.0
+```
+
+1. fetches the image, and stops with nothing changed if it cannot;
+2. puts a plain **"being upgraded" page** at the tenant's address (`503`, with a hint to come back in half a minute), so nobody works in the instance meanwhile;
+3. makes a **backup** (the same kind as every night, in `backups/acme/`);
+4. stops the container, starts the new version and waits until it reports healthy. The new version applies its database changes as it starts;
+5. asks the instance which version it is, and expects the one named;
+6. sends the address to the instance again.
+
+**If the new version does not start, is not healthy, or reports another version**, the command says what failed, shows the instance's last lines, and puts the tenant back: the old version, and **the backup made in step 3**. That backup is restored every time, not only when something looks wrong: **database changes only go forwards**, so data that a newer version has touched cannot be given back to the older one. Nothing is lost by it, because the page of step 2 was up before the backup was made. The tenant then answers on the old version as if the upgrade had not been tried.
+
+If the tenant cannot be put back either, the command says so, leaves the "being upgraded" page up and names the backup to restore (`bin/tenant restore acme --from <backup>`).
+
+### All tenants
+
+Set the new version in `host.env` (`MCP_AUDIT_TAG=v0.4.0`), then:
+
+```bash
+bin/tenant upgrade --all
+```
+
+It goes **one tenant at a time**, each as above:
+
+1. **your own instance first**, when it is a tenant on this host: name it with `OPERATOR_TENANT` in `host.env`. If your own instance runs elsewhere, upgrade it first as `docs/deployment.md` describes and see that it works; the command reminds you;
+2. then the others, by name.
+
+It **stops at the first failure**. That tenant is put back, the ones before it stay on the new version, and the ones after it are not touched: no backup, no restart, the version they had. A suspended tenant is left as it is; upgrade it after it is resumed. A tenant already on the version is skipped. `--dry-run` prints the order and the steps.
+
+A good order for a release: your own instance, then one tenant you know well (`bin/tenant upgrade <name>`), then `--all`.
+
+### A restart is a page too
+
+While an instance is not answering for any other reason (the server restarted, a restore is running), its address says "This instance is restarting. Try again in a moment." with `503`, not a bare error.
+
 ## Backups
 
 Each tenant is backed up with the app's own encrypted backup (`docs/backup.md`), using **that tenant's own passphrase**, generated when the tenant was created. One tenant's backup cannot be opened with another's passphrase. Backups are made and restored inside the tenant's own image; nothing on the server opens one.
@@ -389,7 +439,7 @@ Each tenant has its own database and files, so nothing of one tenant, internal r
 IMAGE=ghcr.io/jurispuce/mcp-audit:main deploy/host/smoke-test.sh
 ```
 
-It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, each tenant has its own key and budget at an AI gateway (a scripted stand-in for LiteLLM: spend on one tenant does not show on the other, a key that is off or over budget is refused, a deleted tenant's key is revoked), and that suspend, resume and delete do what they say. CI runs it on every push.
+It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, each tenant has its own key and budget at an AI gateway (a scripted stand-in for LiteLLM: spend on one tenant does not show on the other, a key that is off or over budget is refused, a deleted tenant's key is revoked), that an upgrade backs up first and shows the "being upgraded" page, that a version which damages the data and fails to start is rolled back with the data as before, that `--all` stops at the first failure, and that suspend, resume and delete do what they say. CI runs it on every push.
 
 On the real tunnel, check by hand after the first tenant:
 

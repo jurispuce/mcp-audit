@@ -5,6 +5,7 @@
 #                            [--admin-name "<name>"] [--version <tag>] [--sources nis2,...]
 #                            [--ai-budget <amount>]
 #   bin/tenant ai      <name> [--budget <amount>] [--off] [--on]
+#   bin/tenant upgrade <name> [--to <version>]     bin/tenant upgrade --all [--to <version>]
 #   bin/tenant list
 #   bin/tenant status  <name>
 #   bin/tenant suspend <name>
@@ -32,7 +33,7 @@ registry="$HOST_DIR/registry"
 default_image=ghcr.io/jurispuce/mcp-audit
 
 die() { echo "$*" >&2; exit 1; }
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # ---- The registry: one small file per tenant. Names, addresses, versions, states and dates only;
@@ -52,7 +53,9 @@ need_known() { known "$1" || die "There is no tenant \"$1\". See: bin/tenant lis
 
 tenant_dir() { echo "${TENANTS_DIR:?Set TENANTS_DIR in host.env}/${1:?}"; }
 container() { echo "mcp-audit-tenant-$1"; }
-compose() { (cd "$(tenant_dir "$1")" && shift && docker compose "$@"); }
+# A tenant's own environment file says which version it runs. The host's own setting is taken out
+# of the way first: Compose would let it win over the file, and start every tenant on the host's version.
+compose() { (cd "$(tenant_dir "$1")" && shift && env -u MCP_AUDIT_TAG -u TENANT -u TENANT_HOST docker compose "$@"); }
 # Run a command without its chatter; when it fails, show what it said.
 quiet() {
 	local out
@@ -172,6 +175,7 @@ cmd_create() {
 
 	local host dir; host="$("$HOST_DIR/bin/tenant-address" "$name")"; dir="$(tenant_dir "$name")"
 	say "Creating tenant \"$name\" ($title) at https://$host, version $version"
+	moving_note "$version"
 	if $dry; then
 		if ai_set_up; then begin "make an AI key at the gateway with a budget of \$$ai_budget per $(ai_period)"; else say "  skipped: the AI key (no AI gateway in host.env)"; fi
 		begin "write $dir with an environment file (new secrets) and a profile"
@@ -304,14 +308,27 @@ cmd_create() {
 # ---- list and status
 cmd_list() {
 	[ "${1:-}" = "--dry-run" ] && shift
-	printf '%-18s %-28s %-40s %-10s %-10s %s\n' NAME TITLE ADDRESS VERSION STATE CREATED
-	local f name
+	printf '%-18s %-28s %-40s %-18s %-10s %s\n' NAME TITLE ADDRESS VERSION STATE CREATED
+	local f name version note behind=0 others=0
 	for f in "$registry"/*.meta; do
 		[ -e "$f" ] || continue
 		name="$(basename "$f" .meta)"
-		printf '%-18s %-28s %-40s %-10s %-10s %s\n' "$name" "$(meta_get "$name" title)" "https://$(meta_get "$name" host)" \
-			"$(meta_get "$name" version)" "$(meta_get "$name" state)" "$(meta_get "$name" created | cut -c1-10)"
+		version="$(meta_get "$name" version)"
+		note="$(version_note "$version")"
+		case "$note" in
+			behind) behind=$((behind + 1)) ;;
+			ahead | differs) others=$((others + 1)) ;;
+		esac
+		printf '%-18s %-28s %-40s %-18s %-10s %s\n' "$name" "$(meta_get "$name" title)" "https://$(meta_get "$name" host)" \
+			"$version${note:+ ($note)}" "$(meta_get "$name" state)" "$(meta_get "$name" created | cut -c1-10)"
 	done
+	# Against the version this host is on (MCP_AUDIT_TAG in host.env): what new tenants get.
+	if [ "$behind" -gt 0 ]; then
+		echo "Behind $(host_version): $behind. Upgrade them with: bin/tenant upgrade --all"
+	fi
+	if [ "$others" -gt 0 ]; then
+		echo "Not on $(host_version), the version in host.env: $others."
+	fi
 }
 
 cmd_status() {
@@ -323,7 +340,9 @@ cmd_status() {
 	echo "Tenant:     $name"
 	echo "Title:      $(meta_get "$name" title)"
 	echo "Address:    https://$(meta_get "$name" host)"
-	echo "Version:    $(meta_get "$name" version)"
+	local note; note="$(version_note "$(meta_get "$name" version)")"
+	echo "Version:    $(meta_get "$name" version)${note:+ ($note; the host is on $(host_version))}"
+	[ -n "$(meta_get "$name" upgraded)" ] && echo "Upgraded:   $(meta_get "$name" upgraded)"
 	echo "State:      $(meta_get "$name" state)"
 	echo "Created:    $(meta_get "$name" created)"
 	[ -n "$(meta_get "$name" suspended)" ] && echo "Suspended:  $(meta_get "$name" suspended)"
@@ -331,7 +350,7 @@ cmd_status() {
 	echo "Container:  $c, $(docker inspect -f '{{.State.Status}}{{if .State.Health}}, {{.State.Health.Status}}{{end}}, image {{.Config.Image}}' "$c" 2> /dev/null || echo 'not there')"
 	echo "Data:       volume ${c}_data"
 	echo "AI:         $(ai_line "$name")"
-	echo "Route:      $([ -f "$HOST_DIR/tenants/$name.caddy" ] && { grep -q 'respond' "$HOST_DIR/tenants/$name.caddy" && echo 'the suspended page' || echo 'to the instance'; } || echo 'none')"
+	echo "Route:      $([ -f "$HOST_DIR/tenants/$name.caddy" ] && { grep -q 'is suspended' "$HOST_DIR/tenants/$name.caddy" && echo 'the suspended page' || { grep -q 'being upgraded' "$HOST_DIR/tenants/$name.caddy" && echo 'the "being upgraded" page' || echo 'to the instance'; }; } || echo 'none')"
 }
 
 # ---- suspend and resume
@@ -448,11 +467,13 @@ cmd_delete() {
 . "$here/bin/tenant-backups.sh"
 # shellcheck disable=SC1091
 . "$here/bin/tenant-ai.sh"
+# shellcheck disable=SC1091
+. "$here/bin/tenant-upgrade.sh"
 
 command="${1:-}"
 [ $# -gt 0 ] && shift
 case "$command" in
-	create | suspend | resume | delete | backup | restore | export | check-backup | nightly | ai)
+	create | suspend | resume | delete | backup | restore | export | check-backup | nightly | ai | upgrade)
 		# One change at a time on this host.
 		mkdir -p "$registry"
 		exec 9> "$registry/.lock"

@@ -24,6 +24,9 @@ for dir in "$tenants_dir"/*/; do
 	if [ -f "$dir/suspended" ]; then
 		# A suspended tenant keeps its directory and data; its address answers with a plain page.
 		printf 'http://%s {\n\theader Cache-Control no-store\n\trespond "This instance is suspended. Ask the person who runs it." 503\n}\n' "$host" > "$routes/$tenant.caddy.new"
+	elif [ -f "$dir/upgrading" ]; then
+		# While a tenant is upgraded (#97) its address says so, and asks to come back shortly.
+		printf 'http://%s {\n\theader Cache-Control no-store\n\theader Retry-After 30\n\trespond "This instance is being upgraded. Try again in a minute." 503\n}\n' "$host" > "$routes/$tenant.caddy.new"
 	else
 		printf 'http://%s {\n\timport tenant mcp-audit-tenant-%s\n}\n' "$host" "$tenant" > "$routes/$tenant.caddy.new"
 	fi

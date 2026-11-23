@@ -344,7 +344,7 @@ describe('tenant list and status', () => {
 			/^acme\s+acme audit\s+https:\/\/mcpaudit-acme\.example\.test\s+v1\.2\.3\s+active\s+\d{4}-\d\d-\d\d$/
 		);
 		expect(rows[2]).toMatch(
-			/^bolt\s+bolt audit\s+https:\/\/mcpaudit-bolt\.example\.test\s+v2\.0\.0\s+suspended\s+\d{4}-\d\d-\d\d$/
+			/^bolt\s+bolt audit\s+https:\/\/mcpaudit-bolt\.example\.test\s+v2\.0\.0 \(ahead\)\s+suspended\s+\d{4}-\d\d-\d\d$/
 		);
 
 		const status = tenant(['status', 'acme']).out;

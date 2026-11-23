@@ -32,6 +32,13 @@
 		# Answers are passed on as they come; Cloudflare gives up on a request after 100 seconds.
 		flush_interval -1
 	}
+	# An instance that is not answering (it is restarting, or being restored) gets a plain page
+	# and not a bare error. What the instance itself answers is passed on untouched.
+	handle_errors 502 503 504 {
+		header Cache-Control no-store
+		header Retry-After 15
+		respond "This instance is restarting. Try again in a moment." 503
+	}
 }
 
 import /etc/caddy/tenants/*.caddy
