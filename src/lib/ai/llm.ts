@@ -42,6 +42,36 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 /** Raised for anything the gateway or model got wrong, with a message a person can act on. */
 export class LlmError extends Error {}
 
+/**
+ * Refusals that are about this instance's allowance at the gateway, not about the request (#95):
+ * said in words, because the person pressing an AI button can do nothing about a status code.
+ */
+export const AI_BUDGET_USED_UP =
+	'The AI budget of this instance is used up for now. An admin can see on Settings, AI when it resets; the person who runs the instance can raise it.';
+export const AI_SWITCHED_OFF =
+	'AI is switched off for this instance by the person who runs it. Everything else works as usual.';
+
+/**
+ * Whether a gateway's refusal is one of those. LiteLLM marks a used-up budget with the type
+ * `budget_exceeded` (status 422 in LiteLLM 1.110; 400 or 429 in other versions), and answers 401
+ * "Key is blocked" for a key that was switched off.
+ */
+export function allowanceProblem(
+	status: number,
+	error: { message?: string; type?: string; litellm_error_type?: string } | string | undefined
+): string | null {
+	const e = typeof error === 'string' ? { message: error } : (error ?? {});
+	const said = e.message ?? '';
+	if (
+		e.type === 'budget_exceeded' ||
+		e.litellm_error_type === 'budget_exceeded' ||
+		/budget has been exceeded|exceeded (?:the |its |your )?(?:max(?:imum)? )?budget/i.test(said)
+	)
+		return AI_BUDGET_USED_UP;
+	if (status === 401 && /\bblocked\b/i.test(said)) return AI_SWITCHED_OFF;
+	return null;
+}
+
 /** A long agent turn can take minutes; the gateway itself may time out sooner. */
 const DEFAULT_TIMEOUT_MS = 600_000;
 
@@ -85,9 +115,12 @@ async function request(
 	if (!res.ok) {
 		let detail = text.slice(0, 300);
 		try {
-			const body = JSON.parse(text) as { error?: { message?: string } | string };
+			const body = JSON.parse(text) as { error?: { message?: string; type?: string } | string };
+			const allowance = allowanceProblem(res.status, body.error);
+			if (allowance) throw new LlmError(allowance);
 			detail = typeof body.error === 'string' ? body.error : (body.error?.message ?? detail);
-		} catch {
+		} catch (e) {
+			if (e instanceof LlmError) throw e;
 			// not JSON: keep the text
 		}
 		const hint = res.status === 401 || res.status === 403 ? ' Check the gateway key.' : '';
@@ -97,6 +130,49 @@ async function request(
 		return JSON.parse(text);
 	} catch {
 		throw new LlmError('The AI gateway answered with something that is not JSON.');
+	}
+}
+
+/** What a gateway key has used of its budget (#95). LiteLLM answers this for the key that asks. */
+export interface KeyUsage {
+	spend: number;
+	/** Null: no limit on this key. */
+	budget: number | null;
+	/** When the spend goes back to zero, if the gateway says. */
+	resetsAt: string | null;
+	blocked: boolean;
+}
+
+/**
+ * Ask the gateway what this key has used. Null when there is no key, the gateway is not LiteLLM, or
+ * it does not say: the figure is a courtesy, never something an action waits for.
+ */
+export async function keyUsage(gw: Gateway, opts: { fetch?: FetchLike } = {}): Promise<KeyUsage | null> {
+	if (!gw.apiKey) return null;
+	const root = gw.baseUrl.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+	try {
+		const res = await (opts.fetch ?? fetch)(`${root}/key/info`, {
+			headers: headers(gw),
+			signal: AbortSignal.timeout(4_000)
+		});
+		const body = (await res.json().catch(() => ({}))) as {
+			info?: Record<string, unknown>;
+			error?: { message?: string } | string;
+		};
+		// A key that is switched off is refused here as well: say so, without figures.
+		if (allowanceProblem(res.status, body.error) === AI_SWITCHED_OFF)
+			return { spend: 0, budget: null, resetsAt: null, blocked: true };
+		if (!res.ok) return null;
+		const info = body.info;
+		if (!info || typeof info.spend !== 'number') return null;
+		return {
+			spend: info.spend,
+			budget: typeof info.max_budget === 'number' ? info.max_budget : null,
+			resetsAt: typeof info.budget_reset_at === 'string' ? info.budget_reset_at : null,
+			blocked: info.blocked === true
+		};
+	} catch {
+		return null;
 	}
 }
 

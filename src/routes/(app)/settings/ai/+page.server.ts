@@ -5,6 +5,7 @@ import {
 	assignModels,
 	checkModel,
 	gatewayModels,
+	gatewayUsage,
 	getAiSettings,
 	removeModel,
 	saveGateway,
@@ -16,11 +17,13 @@ import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, uiActor } from '#lib/server/http.ts';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals }) => {
+export const load: PageServerLoad = async ({ locals }) => {
 	const app = appDatabase();
 	if (!isAdmin(app, uiActor(locals))) error(403, { message: 'Only an admin can change AI settings.' });
 	return {
 		settings: getAiSettings(app),
+		// What the gateway key has used of its budget, where the gateway says (#95).
+		usage: await gatewayUsage(app),
 		actions: AI_ACTION_KEYS.map((key) => ({
 			key,
 			label: AI_ACTIONS[key].label,

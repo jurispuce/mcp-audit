@@ -142,7 +142,7 @@ The AI buttons (Derive roles, Extract requirements, Extract risks, Draft plan, P
 
 1. Run a gateway. To run it next to the app, copy `litellm.config.example.yaml` to `litellm.config.yaml`, list your models in it, put the provider keys it names in `.env` (for example `ANTHROPIC_API_KEY`), and uncomment the `litellm` service in `docker-compose.yml`. Then `docker compose up -d`.
 2. Sign in as an admin and open **Settings, AI**:
-   - **Gateway**: the address, for example `http://litellm:4000` for the Compose service, and the gateway key (`LITELLM_MASTER_KEY`). The key is write-only: it is never shown again. `LITELLM_BASE_URL` and `LITELLM_API_KEY` in `.env` work as defaults.
+   - **Gateway**: the address, for example `http://litellm:4000` for the Compose service, and the gateway key (`LITELLM_MASTER_KEY`). The key is write-only: it is never shown again. `LITELLM_BASE_URL` and `LITELLM_API_KEY` in `.env` work as defaults; where both are set, that key is sent to that address only. For a key with a budget (LiteLLM's key management), the screen shows what is used, what is left and when it starts again.
    - **Models**: add each model by the name the gateway uses, or load the list from the gateway. Adding a model runs the tool-calling check: every AI action is an agent loop that calls tools, so a model that fails the check is listed with the reason and cannot be used.
    - **Model per action**: a default, and optionally a different model per button.
 3. Per engagement, on Home, **Edit details**: "AI may work on this engagement" switches AI off entirely; "Model for in-app AI" limits the engagement to one checked model, for example a local one for confidential material.

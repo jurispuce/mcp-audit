@@ -200,13 +200,13 @@ cmd_restore() {
 	begin "restore $(basename "$file")"
 	if ! restore_into "$name" "$file" "$pass" --force; then
 		echo "The backup was not restored; the data is as it was." >&2
-		if [ "$was" != suspended ]; then quiet compose "$name" up -d && wait_healthy "$name" || true; fi
+		if [ "$was" != suspended ]; then start_container "$name" && wait_healthy "$name" || true; fi
 		event "$name" restore-failed "$(basename "$file")"
 		exit 1
 	fi
 	if [ "$was" != suspended ]; then
 		begin "start the container and wait until it is healthy"
-		quiet compose "$name" up -d
+		start_container "$name"
 		wait_healthy "$name" || die "\"$name\" was restored but did not come back healthy. The state before is in $(basename "$before")."
 		# The restore keeps the replaced data aside in the volume; the backup made above holds it too.
 		docker exec "$(container "$name")" sh -c 'rm -rf /data/pre-restore-*' > /dev/null 2>&1 || true

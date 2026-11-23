@@ -1,5 +1,12 @@
 import type { AppDatabase } from '#lib/db/client.ts';
-import { checkToolCalling, listGatewayModels, type FetchLike, type Gateway } from '#lib/ai/llm.ts';
+import {
+	checkToolCalling,
+	keyUsage,
+	listGatewayModels,
+	type FetchLike,
+	type Gateway,
+	type KeyUsage
+} from '#lib/ai/llm.ts';
 import { readSetting, saveSetting } from './app-settings';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors';
 import { requireAdmin } from './users';
@@ -105,12 +112,28 @@ interface StoredGateway {
 	apiKey?: string | null;
 }
 
+const sameAddress = (a: string, b: string) => {
+	const plain = (u: string) => u.trim().replace(/\/+$/, '').replace(/\/v1$/, '').toLowerCase();
+	return plain(a) === plain(b);
+};
+
+/**
+ * The environment's key, for the address in use. Where the environment names a gateway too, its key
+ * belongs to that gateway and is sent nowhere else (#95): an admin who points the instance at a
+ * gateway of their own does not send it the key the instance was given.
+ */
+function envKeyFor(baseUrl: string, env: Env): string {
+	const key = env.LITELLM_API_KEY?.trim() ?? '';
+	const envUrl = env.LITELLM_BASE_URL?.trim();
+	return key && (!envUrl || sameAddress(envUrl, baseUrl)) ? key : '';
+}
+
 /** The gateway to call: saved settings first, then the environment defaults. Server-side only. */
 export function gatewayOf(app: AppDatabase, env: Env = process.env): Gateway | null {
 	const saved = readSetting<StoredGateway>(app, KEYS.gateway, {});
 	const baseUrl = saved.baseUrl?.trim() || env.LITELLM_BASE_URL?.trim() || '';
 	if (!baseUrl) return null;
-	return { baseUrl, apiKey: saved.apiKey?.trim() || env.LITELLM_API_KEY?.trim() || null };
+	return { baseUrl, apiKey: saved.apiKey?.trim() || envKeyFor(baseUrl, env) || null };
 }
 
 function modelsOf(app: AppDatabase): AiModel[] {
@@ -127,7 +150,7 @@ export function getAiSettings(app: AppDatabase, env: Env = process.env): AiSetti
 	const savedUrl = saved.baseUrl?.trim();
 	const envUrl = env.LITELLM_BASE_URL?.trim();
 	const savedKey = saved.apiKey?.trim();
-	const envKey = env.LITELLM_API_KEY?.trim();
+	const envKey = envKeyFor(savedUrl || envUrl || '', env);
 	return {
 		baseUrl: savedUrl || envUrl || '',
 		baseUrlFrom: savedUrl ? 'settings' : envUrl ? 'environment' : 'none',
@@ -138,6 +161,18 @@ export function getAiSettings(app: AppDatabase, env: Env = process.env): AiSetti
 		webSearch: readSetting<{ webSearch?: boolean }>(app, KEYS.research, {}).webSearch === true,
 		configured: !!(savedUrl || envUrl)
 	};
+}
+
+/**
+ * What the instance's gateway key has used of its budget, where the gateway tells (#95). An instance
+ * on someone else's gateway (a tenant on the operator's) sees here how much AI it has left.
+ */
+export async function gatewayUsage(
+	app: AppDatabase,
+	opts: { fetch?: FetchLike; env?: Env } = {}
+): Promise<KeyUsage | null> {
+	const gw = gatewayOf(app, opts.env);
+	return gw ? keyUsage(gw, opts) : null;
 }
 
 /** Models that passed the tool-calling check: the only ones that may run an action. */

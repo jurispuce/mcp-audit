@@ -16,7 +16,7 @@ visitor ─ https ─▶ Cloudflare ─ tunnel ─▶ internal proxy ─ http �
 - **The server opens no inbound ports.** The Cloudflare Tunnel connects outwards and hands every tenant address to one internal proxy (Caddy, `deploy/host/Caddyfile`).
 - **The proxy sends each name to that tenant's container.** A name that is no tenant gets `404 No instance at this address.`, never another tenant's instance.
 - **Encryption ends at Cloudflare.** The tunnel, the proxy and the containers speak plain http on private Docker networks. Each instance knows itself by its https address (`ORIGIN`).
-- **Each tenant is its own Compose project in its own directory:** one container, one data volume, one network, one environment file. A tenant's network is shared only with the proxy (and later the AI gateway), so one tenant's container cannot open a connection to another's.
+- **Each tenant is its own Compose project in its own directory:** one container, one data volume, one network, one environment file. A tenant's network is shared only with the proxy and the AI gateway, so one tenant's container cannot open a connection to another's.
 - **The visitor's address** comes from Cloudflare's `CF-Connecting-IP` header. The proxy believes that header only from the tunnel and passes the address on as `X-Client-IP`, which is all the app reads. Anything else that reaches the proxy, such as a tenant's own container, is counted under the address it really came from. Lock-outs and rate limits therefore count per person, not per tunnel.
 
 Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before they start.
@@ -33,12 +33,13 @@ Cloudflare sees tenant traffic unencrypted at its edge. Tell tenants so before t
 ```
 /srv/mcp-audit/
   host/                      a copy of deploy/host/
-    docker-compose.yml       the proxy, and optionally the tunnel
+    docker-compose.yml       the proxy, and optionally the tunnel and the AI gateway
     Caddyfile
+    litellm.config.yaml      the AI gateway's models, when it runs from here
     host.env                 the host's settings (chmod 600)
     tenants/<tenant>.caddy   one route per tenant, written by bin/proxy-sync
     registry/                which tenants exist: names, addresses, versions, states, dates
-    bin/                     tenant (create, list, status, suspend, resume, delete, backup,
+    bin/                     tenant (create, list, status, suspend, resume, delete, ai, backup,
                              restore, export, nightly), tenant-address, proxy-sync
   backups/<tenant>/          one encrypted backup per night, <tenant>-YYYYMMDDTHHMMSSZ.mcpa
   exports/                   archives for tenants that leave
@@ -160,17 +161,18 @@ It needs these in `host.env` besides the address pattern: `TENANTS_DIR`, the ten
 bin/tenant create acme --title "Acme Audit" --admin-email ina@acme-audit.example
 ```
 
-Optional: `--admin-name "Ina Bērziņa"`, `--version v0.4.0` (the image tag; the host's `MCP_AUDIT_TAG` otherwise), `--sources nis2` (library sources by code; the host's `TENANT_SOURCES` otherwise).
+Optional: `--admin-name "Ina Bērziņa"`, `--version v0.4.0` (the image tag; the host's `MCP_AUDIT_TAG` otherwise), `--sources nis2` (library sources by code; the host's `TENANT_SOURCES` otherwise), `--ai-budget 50` (US dollars per period; the host's `TENANT_AI_BUDGET` otherwise, see AI for tenants below).
 
 It checks the name (1 to 32 lower-case letters, digits or hyphens; not taken; not a reserved name such as `www`, `mail` or `admin`), then:
 
-1. writes `tenants/acme/` with the Compose file, an environment file readable by you only, with a **newly generated backup passphrase**, and the profile (`sign_in_method: passkey`, the first admin, the sources);
-2. starts the container and waits until it reports healthy;
-3. adds the route in the internal proxy;
-4. adds the DNS record;
-5. prints the address. The instance itself has emailed the first admin's invitation.
+1. makes the tenant's **own key at the AI gateway**, with its budget (skipped, and said so, when `host.env` names no gateway);
+2. writes `tenants/acme/` with the Compose file, an environment file readable by you only, with a **newly generated backup passphrase** and the AI key, and the profile (`sign_in_method: passkey`, the first admin, the sources, the gateway's address and the model);
+3. makes the container, lets the proxy and the AI gateway join its network, starts it and waits until it reports healthy;
+4. adds the route in the internal proxy;
+5. adds the DNS record;
+6. prints the address. The instance itself has emailed the first admin's invitation, and has checked its AI model through the gateway, so the AI buttons work from the first sign-in.
 
-**If a step fails, what was made is removed** and the error names the step. When the instance refuses to start, for example over an unknown library source, its own last lines are shown. The AI key and budget are skipped until #95 exists, and the command says so.
+**If a step fails, what was made is removed**, the AI key included, and the error names the step. When the instance refuses to start, for example over an unknown library source, its own last lines are shown.
 
 ### List and status
 
@@ -182,7 +184,7 @@ bin/tenant list
 bin/tenant status acme
 ```
 
-`list` shows name, title, address, version, state and creation date. `status` adds the directory, the container's state and health, the data volume and where the address leads.
+`list` shows name, title, address, version, state and creation date. `status` adds the directory, the container's state and health, the data volume, where the address leads, and what the tenant has used of its AI budget (`AI: $3.10 of $20.00 used, $16.90 left, resets 2026-12-01`).
 
 ### Suspend and resume
 
@@ -205,15 +207,87 @@ bin/tenant delete acme
 It asks for the tenant's name to be typed again, then:
 
 1. makes a **final export** (see Export, below) and prints its passphrase;
-2. removes the DNS record, the container, **the data volume**, the directory and the route;
+2. **revokes the tenant's key at the AI gateway**, then removes the DNS record, the container, **the data volume**, the directory and the route;
 3. keeps the tenant's **backups for 30 days** (`DELETED_BACKUPS_DAYS`), with the passphrase that opens them stored apart from them; the nightly run removes both after that;
 4. writes a line to `registry/deleted.tsv`: name, title, address, created, deleted, and until when the backups are kept. Nothing of the tenant's content.
 
-If the export fails or the DNS record cannot be removed, nothing is deleted. `--without-export` skips the export, for a tenant that was never used. Within the 30 days a backup can still be brought back as a new tenant (`bin/tenant restore acme --from latest --as acme-back`).
+If the export fails, or the key cannot be revoked, or the DNS record cannot be removed, nothing is deleted. `--without-export` skips the export, for a tenant that was never used. Within the 30 days a backup can still be brought back as a new tenant (`bin/tenant restore acme --from latest --as acme-back`).
 
 ### The registry
 
 `host/registry/` holds one small file per tenant (`acme.meta`: name, title, address, version, state, dates, the last backup and restore check), `deleted.tsv`, `events.tsv` (what was done on this host and when: backups, restores, exports, deletions, backups removed) and `nightly.status` (the last nightly run and what failed in it). It holds no tenant content and no secrets; the secrets are in each tenant's own `.env`.
+
+## AI for tenants
+
+Tenants use one gateway of yours for the in-app AI buttons: LiteLLM with key management. Each tenant has **its own key with its own budget**, so one tenant cannot spend another's, and you see who used what. The key is made, changed and revoked with the tenant, by the tenant command.
+
+### The gateway
+
+To run it on this server, from the host's Compose file:
+
+1. Copy `litellm.config.example.yaml` to `litellm.config.yaml` and name the models. It keeps keys, budgets and spend in its own database, and is set **not to store what is asked or answered**.
+2. In `host.env` set `AI_GATEWAY_URL=http://mcp-audit-gateway:4000/v1`, `AI_GATEWAY_NETWORK=mcp-audit-gateway`, a master key (`AI_GATEWAY_MASTER_KEY`, starting with `sk-`), `AI_GATEWAY_DB_PASSWORD`, `AI_GATEWAY_SALT_KEY` (set once, never change), the provider's key (`ANTHROPIC_API_KEY`) and `TENANT_AI_DEFAULT_MODEL` (a `model_name` of the config).
+3. Start it, and let it join the tenants that already exist:
+
+```bash
+docker compose --env-file host.env --profile gateway up -d
+```
+
+```bash
+bin/proxy-sync
+```
+
+The gateway is **not published** on the server and not reachable from the internet. It joins each tenant's network, as the proxy does; a tenant's container is never on the gateway's own network, where its database is. A tenant reaches the gateway and nothing through it: the smoke test checks that one tenant still cannot reach another. The provider's key and the master key are in `host.env` only; no tenant holds either.
+
+A gateway that runs elsewhere works the same: set `AI_GATEWAY_URL` to its address (and `AI_GATEWAY_ADMIN_URL` if its key management is at another one) and leave `AI_GATEWAY_NETWORK` empty. With `AI_GATEWAY_URL` empty, tenants are created without AI.
+
+The key management was tried against LiteLLM 1.110.2. The gateway's own Compose service has not been started in a test; check it once on the server with `docker compose --env-file host.env --profile gateway ps`.
+
+### A key and a budget per tenant
+
+`tenant create` makes the key with:
+
+- **a budget** in US dollars: `--ai-budget`, or `TENANT_AI_BUDGET` (20 unless set);
+- **the period** after which the spend starts again: `TENANT_AI_BUDGET_PERIOD` (`30d` unless set). LiteLLM 1.110 starts a `30d` budget again at midnight UTC on the 1st of each month; the instance and `tenant status` show the date the gateway gives;
+- **the models** it may use: `TENANT_AI_MODELS` (comma-separated; all of the gateway's when empty).
+
+The key is written into the tenant's `.env` (`LITELLM_API_KEY`, with `LITELLM_BASE_URL`), readable by you and that tenant's container only. It is not in the profile, not in the registry and never on a command line. `tenant delete` revokes it; a copy made with `restore --as` gets a key of its own.
+
+A tenant created while `host.env` named no gateway has no key; the command does not add one later.
+
+### Change the budget, switch AI off and on
+
+```bash
+bin/tenant ai acme --budget 50
+```
+
+```bash
+bin/tenant ai acme --off
+```
+
+```bash
+bin/tenant ai acme --on
+```
+
+A new budget holds at once and keeps what was already spent in the period. Switching off blocks the key at the gateway; nothing in the instance changes, and `--on` brings it back. `tenant status acme` shows the spend against the budget, and says `USED UP` or `SWITCHED OFF`. The gateway writes spend down within about a minute, so the figure can be that far behind.
+
+### What the tenant sees
+
+- An admin sees on **Settings, AI** how much of the budget is used, how much is left and when it starts again.
+- When the budget is used up, an AI button answers: "The AI budget of this instance is used up for now. An admin can see on Settings, AI when it resets; the person who runs the instance can raise it." When the key is off: "AI is switched off for this instance by the person who runs it. Everything else works as usual."
+- A refused action writes nothing. If the budget runs out in the middle of an action, what the action had proposed until then stays as proposals for a person to review, each complete; nothing is accepted by itself.
+- Everything else in the instance works as before. A person's own Claude or ChatGPT through MCP does not go through the gateway and is not affected by the budget.
+- A tenant's admin can put **a gateway of their own** on Settings, AI, for example a local model. Your budget then no longer applies to them, and the key you gave the instance is not sent to their gateway.
+
+### Which data passes through the gateway and the model provider
+
+For the onboarding pack (#100). When a person presses an AI button on an engagement:
+
+- **Sent to the model, through the gateway:** the instructions of the action, and what the action reads of that engagement while it works: for example the text of the auditee's documents, requirements, notes, evidence and findings. The model's answers come back the same way. This goes to the provider of the model you configured (in the example config, Anthropic), under your agreement with that provider; state its terms on retention and on training in the onboarding pack.
+- **Kept by the gateway:** for each request, which tenant's key, which model, when, how many tokens and what it cost. **Not** what was asked or answered (`store_prompts_in_spend_logs: false` and `turn_off_message_logging: true` in `litellm.config.yaml`; on LiteLLM 1.110.2 the stored rows held no text of either).
+- **Web search**, where it is on for the tenant (`TENANT_AI_WEB_SEARCH`), sends the model's search questions to the provider's search.
+- **Nothing is sent** for an engagement where AI is switched off, and nothing before someone presses an AI button.
+- **Not through your gateway at all:** a person's own Claude or ChatGPT connected through MCP (that is between their AI provider and the instance), and a tenant that set a gateway of its own.
 
 ## Backups
 
@@ -289,7 +363,7 @@ It writes `exports/acme-export-<time>.tar`: one encrypted file with the tenant's
 
 ### What is the same for every tenant, and what is not
 
-- Each tenant's `.env` has its own backup passphrase and its own address. No tenant has another's.
+- Each tenant's `.env` has its own backup passphrase, its own address and its own AI key. No tenant has another's.
 - The email account is yours and the same for all tenants; its password is written into each tenant's `.env`, where only you and that tenant's container can read it. The sender shows the tenant's title (`TENANT_SMTP_FROM={title} <audit@example.com>`).
 
 ### By hand
@@ -300,8 +374,8 @@ To see what the command does, or to repair something: a tenant is its directory 
 
 Set in `deploy/host/tenant/docker-compose.yml`, the same for every tenant:
 
-- its own network, on which only the proxy (and the AI gateway) also sit; nothing published on the server;
-- its own data volume and its own `.env`, with its own `ORIGIN`, backup passphrase and (later) gateway key;
+- its own network, on which only the proxy and the AI gateway also sit; nothing published on the server;
+- its own data volume and its own `.env`, with its own `ORIGIN`, backup passphrase and AI gateway key;
 - memory and CPU limits, a limit on processes, restart on failure, logs rotated at 5 × 10 MB;
 - a read-only filesystem apart from `/data` and `/tmp`, no root, no extra kernel rights.
 
@@ -315,7 +389,7 @@ Each tenant has its own database and files, so nothing of one tenant, internal r
 IMAGE=ghcr.io/jurispuce/mcp-audit:main deploy/host/smoke-test.sh
 ```
 
-It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, and that suspend, resume and delete do what they say. CI runs it on every push.
+It creates the tenants with `bin/tenant` and checks that each name reaches its own instance, an unknown name is refused, one tenant's container cannot reach the other's by name or by address, the visitor's address is taken from the tunnel's header and from nowhere else, the containers run confined, each tenant has its own key and budget at an AI gateway (a scripted stand-in for LiteLLM: spend on one tenant does not show on the other, a key that is off or over budget is refused, a deleted tenant's key is revoked), and that suspend, resume and delete do what they say. CI runs it on every push.
 
 On the real tunnel, check by hand after the first tenant:
 

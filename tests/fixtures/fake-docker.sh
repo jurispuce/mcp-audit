@@ -31,6 +31,17 @@ if [[ "$*" == *"scripts/restore.mjs"* ]]; then
 	[ "$1" = compose ] && [ ! -f "$FAKE_DOCKER_STATE/$into" ] && echo stopped > "$FAKE_DOCKER_STATE/$into"
 	exit 0
 fi
+if [[ "$*" == *"scripts/gateway-keys.mjs"* ]]; then
+	# The real helper (#95), run here against the test's scripted gateway. Its settings and a
+	# tenant's key come in the environment, as they would in the container.
+	args=()
+	seen=false
+	for a in "$@"; do
+		if $seen; then args+=("$a"); fi
+		[ "$a" = scripts/gateway-keys.mjs ] && seen=true
+	done
+	exec node "$FAKE_DOCKER_REPO/scripts/gateway-keys.mjs" "${args[@]}"
+fi
 if [[ "$*" == *"scripts/backup-retention.mjs"* ]]; then
 	# The real rules, run here: the fake only stands in for the container around them.
 	args=()
@@ -54,7 +65,10 @@ case "$1 ${2:-}" in
 		;;
 	"rm -f") rm -f "${FAKE_DOCKER_STATE:?}/${3:?}" ;;
 	"volume rm") : ;;
-	"compose up") echo up > "$FAKE_DOCKER_STATE/mcp-audit-tenant-$(basename "$PWD")" ;;
+	"compose up")
+		state="$FAKE_DOCKER_STATE/mcp-audit-tenant-$(basename "$PWD")"
+		if [[ "$*" == *--no-start* ]]; then [ -f "$state" ] || echo created > "$state"; else echo up > "$state"; fi
+		;;
 	"compose stop") echo stopped > "$FAKE_DOCKER_STATE/mcp-audit-tenant-$(basename "$PWD")" ;;
 	"compose down") rm -f "$FAKE_DOCKER_STATE/mcp-audit-tenant-$(basename "$PWD")" ;;
 	"inspect -f")

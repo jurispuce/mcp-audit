@@ -3,6 +3,8 @@
 #
 #   bin/tenant create <name> --title "<firm>" --admin-email <email>
 #                            [--admin-name "<name>"] [--version <tag>] [--sources nis2,...]
+#                            [--ai-budget <amount>]
+#   bin/tenant ai      <name> [--budget <amount>] [--off] [--on]
 #   bin/tenant list
 #   bin/tenant status  <name>
 #   bin/tenant suspend <name>
@@ -30,7 +32,7 @@ registry="$HOST_DIR/registry"
 default_image=ghcr.io/jurispuce/mcp-audit
 
 die() { echo "$*" >&2; exit 1; }
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # ---- The registry: one small file per tenant. Names, addresses, versions, states and dates only;
@@ -63,7 +65,17 @@ quiet() {
 remove_container() {
 	local network; network="$(container "$1")"
 	docker network disconnect "$network" "${PROXY_CONTAINER:-mcp-audit-proxy}" > /dev/null 2>&1 || true
+	docker network disconnect "$network" "${GATEWAY_CONTAINER:-mcp-audit-gateway}" > /dev/null 2>&1 || true
 	if [ -d "$(tenant_dir "$1")" ]; then quiet compose "$1" down -v --remove-orphans; fi
+}
+# Start a tenant's container. Its network is made first and the proxy and the AI gateway join it,
+# so the instance can reach the gateway from its first moment (it checks its AI model as it starts).
+start_container() {
+	local network; network="$(container "$1")"
+	quiet compose "$1" up --no-start
+	docker network connect "$network" "${PROXY_CONTAINER:-mcp-audit-proxy}" > /dev/null 2>&1 || true
+	docker network connect "$network" "${GATEWAY_CONTAINER:-mcp-audit-gateway}" > /dev/null 2>&1 || true
+	quiet compose "$1" up -d
 }
 
 # ---- Steps that can be undone, for create
@@ -129,6 +141,7 @@ dns_set_up() { [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:
 # ---- create
 cmd_create() {
 	local name="" title="" admin_email="" admin_name="" version="${MCP_AUDIT_TAG:-main}" sources="${TENANT_SOURCES:-}"
+	local ai_budget=""
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			--title) title="${2:-}"; shift 2 ;;
@@ -136,6 +149,7 @@ cmd_create() {
 			--admin-name) admin_name="${2:-}"; shift 2 ;;
 			--version) version="${2:-}"; shift 2 ;;
 			--sources) sources="${2:-}"; shift 2 ;;
+			--ai-budget) ai_budget="${2:-}"; shift 2 ;;
 			--dry-run) dry=true; shift ;;
 			-*) die "Unknown option $1" ;;
 			*) [ -z "$name" ] || die "One tenant at a time: \"$name\" and \"$1\""; name="$1"; shift ;;
@@ -150,25 +164,31 @@ cmd_create() {
 	[[ "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || die "--version is not an image tag: \"$version\""
 	[[ -z "$sources" || "$sources" =~ ^[a-z0-9-]+(,[a-z0-9-]+)*$ ]] || die "--sources is a comma-separated list of source codes, for example nis2: \"$sources\""
 	[ -n "${TENANT_SMTP_HOST:-}" ] && [ -n "${TENANT_SMTP_FROM:-}" ] || die "Set TENANT_SMTP_HOST and TENANT_SMTP_FROM in host.env: a tenant's first admin is invited by email."
+	[ -n "$ai_budget" ] || ai_budget="${TENANT_AI_BUDGET:-20}"
+	check_ai_budget "$ai_budget"
+	if ai_set_up; then
+		[ -n "${TENANT_AI_DEFAULT_MODEL:-}" ] || die "Set TENANT_AI_DEFAULT_MODEL in host.env: the model a new tenant's AI buttons use."
+	fi
 
 	local host dir; host="$("$HOST_DIR/bin/tenant-address" "$name")"; dir="$(tenant_dir "$name")"
 	say "Creating tenant \"$name\" ($title) at https://$host, version $version"
 	if $dry; then
+		if ai_set_up; then begin "make an AI key at the gateway with a budget of \$$ai_budget per $(ai_period)"; else say "  skipped: the AI key (no AI gateway in host.env)"; fi
 		begin "write $dir with an environment file (new secrets) and a profile"
 		[ -z "${restore_file:-}" ] || begin "restore $(basename "$restore_file") of \"$restore_source\" into its data"
 		begin "start the container $(container "$name") and wait until it is healthy"
 		begin "add the route in the internal proxy"
 		if dns_set_up; then begin "add the DNS record $host"; else say "  skipped: the DNS record (no Cloudflare settings in host.env)"; fi
-		say "  skipped: the AI key and budget (#95 is not built yet)"
 		say "Nothing was changed (--dry-run)."
 		return 0
 	fi
 
-	local made_dir=false started=false routed=false dns_added=false
+	local made_dir=false started=false routed=false dns_added=false ai_key=""
 	undo() {
 		trap - ERR
 		local failed="$step"
 		echo "Create failed at: $failed. Removing what was made." >&2
+		if [ -n "$ai_key" ]; then TENANT_AI_KEY="$ai_key" gateway revoke > /dev/null 2>&1 || echo "  The AI key could not be revoked; revoke \"mcp-audit-tenant-$name\" at the gateway by hand." >&2; fi
 		if $dns_added; then dns remove "$host" > /dev/null 2>&1 || echo "  The DNS record $host could not be removed; remove it by hand." >&2; fi
 		if $started; then remove_container "$name" > /dev/null 2>&1 || true; fi
 		if $made_dir; then rm -rf "${dir:?}"; fi
@@ -180,6 +200,14 @@ cmd_create() {
 
 	# From here on, any step that fails removes what was made so far.
 	trap undo ERR
+
+	if ai_set_up; then
+		begin "make an AI key at the gateway with a budget of \$$ai_budget per $(ai_period)"
+		ai_key="$(gateway create "$name" --budget "$ai_budget" --period "$(ai_period)" ${TENANT_AI_MODELS:+--models "$TENANT_AI_MODELS"})"
+		[[ "$ai_key" =~ ^[A-Za-z0-9_-]+$ ]]
+	else
+		say "  skipped: the AI key (no AI gateway in host.env)"
+	fi
 
 	begin "write $dir with an environment file (new secrets) and a profile"
 	mkdir -p "$(dirname "$dir")"
@@ -202,6 +230,12 @@ cmd_create() {
 			[ -n "${TENANT_SMTP_USER:-}" ] && echo "SMTP_USER=$TENANT_SMTP_USER"
 			[ -n "${TENANT_SMTP_PASSWORD:-}" ] && echo "SMTP_PASSWORD=$TENANT_SMTP_PASSWORD"
 			echo "SMTP_FROM=$(sender "$title")"
+			if [ -n "$ai_key" ]; then
+				echo "# This tenant's own key at the AI gateway, with its own budget. No other tenant has it."
+				echo "# The instance sends it to this gateway only, not to one its admin sets in its place."
+				echo "LITELLM_BASE_URL=$AI_GATEWAY_URL"
+				echo "LITELLM_API_KEY=$ai_key"
+			fi
 			[ -n "${TENANT_MEMORY:-}" ] && echo "TENANT_MEMORY=$TENANT_MEMORY"
 			[ -n "${TENANT_CPUS:-}" ] && echo "TENANT_CPUS=$TENANT_CPUS"
 			echo "TZ=${TZ:-Europe/Riga}"
@@ -220,6 +254,8 @@ cmd_create() {
 			local s
 			for s in ${sources//,/ }; do echo "  - $s"; done
 		fi
+		# Where the gateway is and which model to use. The key itself is in the environment file.
+		if [ -n "$ai_key" ]; then ai_profile; fi
 	} > "$dir/tenant-profile.yaml"
 	# The container reads it as its own user; it holds no secret.
 	chmod 644 "$dir/tenant-profile.yaml"
@@ -229,6 +265,10 @@ cmd_create() {
 	meta_set "$name" version "$version"
 	meta_set "$name" state creating
 	meta_set "$name" created "$(now)"
+	if [ -n "$ai_key" ]; then
+		meta_set "$name" ai_budget "$ai_budget"
+		meta_set "$name" ai on
+	fi
 
 	if [ -n "${restore_file:-}" ]; then
 		# A copy of another tenant, from one of its backups: the data goes in before the first start.
@@ -240,7 +280,7 @@ cmd_create() {
 
 	begin "start the container $(container "$name") and wait until it is healthy"
 	started=true
-	quiet compose "$name" up -d
+	start_container "$name"
 	wait_healthy "$name"
 
 	begin "add the route in the internal proxy"
@@ -254,7 +294,6 @@ cmd_create() {
 	else
 		say "  skipped: the DNS record (no Cloudflare settings in host.env). Add it by hand: $host"
 	fi
-	say "  skipped: the AI key and budget (#95 is not built yet)"
 
 	trap - ERR
 	meta_set "$name" state active
@@ -291,6 +330,7 @@ cmd_status() {
 	echo "Directory:  $(tenant_dir "$name")"
 	echo "Container:  $c, $(docker inspect -f '{{.State.Status}}{{if .State.Health}}, {{.State.Health.Status}}{{end}}, image {{.Config.Image}}' "$c" 2> /dev/null || echo 'not there')"
 	echo "Data:       volume ${c}_data"
+	echo "AI:         $(ai_line "$name")"
 	echo "Route:      $([ -f "$HOST_DIR/tenants/$name.caddy" ] && { grep -q 'respond' "$HOST_DIR/tenants/$name.caddy" && echo 'the suspended page' || echo 'to the instance'; } || echo 'none')"
 }
 
@@ -321,7 +361,7 @@ cmd_resume() {
 	begin "start the container $(container "$name") and wait until it is healthy"
 	begin "send its address to the instance again"
 	if $dry; then say "Nothing was changed (--dry-run)."; return 0; fi
-	quiet compose "$name" up -d
+	start_container "$name"
 	wait_healthy "$name" || die "\"$name\" stays suspended: its address still shows the suspended page."
 	rm -f "$(tenant_dir "$name")/suspended"
 	meta_set "$name" state active
@@ -350,8 +390,8 @@ cmd_delete() {
 		if $without_export; then say "  skipped: the final export (--without-export)"; else begin "make a final encrypted export in $(exports_dir)"; fi
 		begin "remove the DNS record $host"
 		begin "remove the container $(container "$name") and its data volume"
+		[ -z "$(ai_key_of "$name")" ] || begin "revoke its key at the AI gateway"
 		begin "remove $(tenant_dir "$name") and the route in the internal proxy"
-		say "  skipped: the AI key (#95 is not built yet)"
 		begin "keep its backups for $days days, then remove them"
 		begin "keep a record of the deletion, without tenant content"
 		say "Nothing was changed (--dry-run)."
@@ -372,6 +412,12 @@ cmd_delete() {
 		begin "remove the DNS record $host"
 		dns remove "$host" > /dev/null || die "The DNS record could not be removed, so nothing was deleted. Try again, or remove it by hand first."
 	fi
+	if [ -n "$(ai_key_of "$name")" ]; then
+		# A key left behind could still be used, and charged, after the tenant is gone.
+		begin "revoke its key at the AI gateway"
+		ai_set_up || die "The tenant has a key at the AI gateway, but AI_GATEWAY_URL and AI_GATEWAY_MASTER_KEY are not in host.env, so it cannot be revoked. Nothing was deleted."
+		gateway_for "$name" revoke > /dev/null || die "The key at the AI gateway could not be revoked, so nothing was deleted. Try again."
+	fi
 	begin "remove the container $(container "$name") and its data volume"
 	remove_container "$name"
 	begin "remove $(tenant_dir "$name") and the route in the internal proxy"
@@ -391,7 +437,6 @@ cmd_delete() {
 	rm -rf "${gone:?}"
 	rm -f "$(meta_file "$name")"
 	"$HOST_DIR/bin/proxy-sync" > /dev/null
-	say "  skipped: the AI key (#95 is not built yet)"
 	begin "keep a record of the deletion, without tenant content"
 	[ -f "$registry/deleted.tsv" ] || printf 'name\ttitle\taddress\tcreated\tdeleted\tbackups_kept_until\n' > "$registry/deleted.tsv"
 	printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$title" "https://$host" "$created" "$(now)" "$until" >> "$registry/deleted.tsv"
@@ -401,11 +446,13 @@ cmd_delete() {
 
 # shellcheck disable=SC1091
 . "$here/bin/tenant-backups.sh"
+# shellcheck disable=SC1091
+. "$here/bin/tenant-ai.sh"
 
 command="${1:-}"
 [ $# -gt 0 ] && shift
 case "$command" in
-	create | suspend | resume | delete | backup | restore | export | check-backup | nightly)
+	create | suspend | resume | delete | backup | restore | export | check-backup | nightly | ai)
 		# One change at a time on this host.
 		mkdir -p "$registry"
 		exec 9> "$registry/.lock"

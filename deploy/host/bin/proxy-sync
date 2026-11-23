@@ -11,6 +11,7 @@ load_env "$here/host.env"
 tenants_dir="${TENANTS_DIR:?Set TENANTS_DIR in host.env}"
 routes="$here/tenants"
 proxy="${PROXY_CONTAINER:-mcp-audit-proxy}"
+gateway="${GATEWAY_CONTAINER:-mcp-audit-gateway}"
 mkdir -p "$routes"
 
 wanted=()
@@ -27,10 +28,12 @@ for dir in "$tenants_dir"/*/; do
 		printf 'http://%s {\n\timport tenant mcp-audit-tenant-%s\n}\n' "$host" "$tenant" > "$routes/$tenant.caddy.new"
 	fi
 	mv "$routes/$tenant.caddy.new" "$routes/$tenant.caddy"
-	# The proxy joins the tenant's network; a tenant never joins the proxy's.
+	# The proxy joins the tenant's network; a tenant never joins the proxy's. The same for the AI
+	# gateway, when one runs on this server (#95).
 	network="mcp-audit-tenant-$tenant"
 	if docker network inspect "$network" > /dev/null 2>&1; then
 		docker network connect "$network" "$proxy" 2> /dev/null || true
+		docker network connect "$network" "$gateway" 2> /dev/null || true
 	fi
 done
 
@@ -42,6 +45,7 @@ for file in "$routes"/*.caddy; do
 	if ! $keep; then
 		rm -f "$file"
 		docker network disconnect "mcp-audit-tenant-$name" "$proxy" 2> /dev/null || true
+		docker network disconnect "mcp-audit-tenant-$name" "$gateway" 2> /dev/null || true
 	fi
 done
 

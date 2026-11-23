@@ -127,7 +127,7 @@ describe('tenant create', () => {
 		expect(again.code).not.toBe(0);
 		expect(again.err).toContain('There is already a tenant "acme" (active).');
 		// Refusals touch nothing: only the one real create called docker.
-		expect(dockerCalls().filter((c) => c.startsWith('compose up'))).toHaveLength(1);
+		expect(dockerCalls().filter((c) => c === 'compose up -d')).toHaveLength(1);
 		expect(readdirSync(tenantsDir)).toEqual(['acme']);
 	});
 
@@ -170,7 +170,7 @@ describe('tenant create', () => {
 		expect(r.code).toBe(0);
 		expect(r.out).toContain('Tenant "acme" is running at https://mcpaudit-acme.example.test');
 		expect(r.out).toContain("The instance has emailed the first admin's invitation to Ina@Acme.example.test");
-		expect(r.out).toContain('skipped: the AI key and budget (#95 is not built yet)');
+		expect(r.out).toContain('skipped: the AI key (no AI gateway in host.env)');
 
 		const dir = path.join(tenantsDir, 'acme');
 		// Readable by the operator only; the profile is read by the container and holds no secret.
@@ -203,7 +203,13 @@ describe('tenant create', () => {
 		// In order: start, wait, route, DNS. The command never runs anything inside the instance.
 		const calls = dockerCalls();
 		const at = (re: RegExp) => calls.findIndex((c) => re.test(c));
-		expect(at(/^compose up -d$/)).toBe(0);
+		// The container is made, the proxy and the AI gateway join its network, and only then it starts.
+		expect(at(/^compose up --no-start$/)).toBe(0);
+		expect(at(/^network connect mcp-audit-tenant-acme mcp-audit-proxy$/)).toBeGreaterThan(0);
+		expect(at(/^network connect mcp-audit-tenant-acme mcp-audit-gateway$/)).toBeGreaterThan(0);
+		expect(at(/^compose up -d$/)).toBeGreaterThan(
+			at(/^network connect mcp-audit-tenant-acme mcp-audit-gateway$/)
+		);
 		expect(at(/^inspect -f .* mcp-audit-tenant-acme$/)).toBeGreaterThan(0);
 		expect(at(/caddy reload/)).toBeGreaterThan(at(/^inspect/));
 		expect(at(/cloudflare-dns\.mjs add mcpaudit-acme\.example\.test$/)).toBeGreaterThan(at(/caddy reload/));

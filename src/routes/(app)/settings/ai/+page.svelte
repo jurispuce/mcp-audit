@@ -3,8 +3,11 @@
 	import { enhance } from '$app/forms';
 	import Field from '#lib/components/Field.svelte';
 	import FormMessage from '#lib/components/FormMessage.svelte';
+	import { formatWhen } from '#lib/format.ts';
 
 	let { data, form } = $props();
+	/** LiteLLM counts spend and budgets in US dollars. */
+	const money = (n: number) => `$${n.toFixed(2)}`;
 	type Result = {
 		action?: string;
 		message?: string;
@@ -69,6 +72,34 @@
 		{/if}
 		<div class="au-row"><button class="au-btn au-btn--primary" type="submit">Save gateway</button></div>
 	</form>
+	{#if data.usage}
+		{@const u = data.usage}
+		<div
+			class="au-alert {u.blocked || (u.budget !== null && u.spend >= u.budget)
+				? 'au-alert--warn'
+				: 'au-alert--info'}"
+			data-testid="ai-budget"
+		>
+			<p class="au-alert__title">
+				{#if u.blocked}
+					AI is switched off for this instance
+				{:else if u.budget === null}
+					{money(u.spend)} used with this key; no limit is set
+				{:else}
+					{money(u.spend)} of {money(u.budget)} used{u.spend >= u.budget ? ': the budget is used up' : ''}
+				{/if}
+			</p>
+			<p>
+				{#if u.blocked}
+					The person who runs the gateway switched it off. Everything else works as usual.
+				{:else}
+					{#if u.budget !== null}{money(Math.max(0, u.budget - u.spend))} left.{/if}
+					{#if u.resetsAt}Starts again on {formatWhen(u.resetsAt)}.{/if}
+					The figures come from the gateway and can be a minute behind; whoever runs it sets the budget.
+				{/if}
+			</p>
+		</div>
+	{/if}
 </section>
 
 <section class="au-section" aria-labelledby="models-title">
