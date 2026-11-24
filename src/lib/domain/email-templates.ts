@@ -30,7 +30,17 @@ export interface EmailContent {
 	html: string;
 }
 
-type Block = string | { link: { href: string; label: string } } | { code: string } | { small: string };
+type Block =
+	| string
+	| { link: { href: string; label: string } }
+	/** The one thing the email asks for: a large button, with the address to copy under it (#103). */
+	| { action: { href: string; label: string } }
+	| { code: string }
+	| { small: string }
+	/** A small line that ends in a plain link, for what is secondary to the action. */
+	| { smallLink: { text: string; href: string } }
+	/** Separates the action from what is worth knowing afterwards. */
+	| { divider: true };
 
 const esc = (s: string) =>
 	s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -45,9 +55,15 @@ function compose(instance: Instance, subject: string, heading: string, blocks: B
 				? [b, '']
 				: 'link' in b
 					? [`${b.link.label}:`, b.link.href, '']
-					: 'code' in b
-						? [`    ${b.code}`, '']
-						: [b.small, '']
+					: 'action' in b
+						? [`${b.action.label}: open this address in your browser`, b.action.href, '']
+						: 'code' in b
+							? [`    ${b.code}`, '']
+							: 'smallLink' in b
+								? [`${b.smallLink.text} ${b.smallLink.href}`, '']
+								: 'divider' in b
+									? ['', '']
+									: [b.small, '']
 		),
 		'--',
 		footer
@@ -62,9 +78,15 @@ ${blocks
 			? `<p style="margin:0 0 16px">${esc(b)}</p>`
 			: 'link' in b
 				? `<p style="margin:0 0 16px"><a href="${esc(b.link.href)}" style="display:inline-block;padding:10px 16px;background:#1f5fbf;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600">${esc(b.link.label)}</a></p><p style="margin:0 0 16px;font-size:13px;color:#4f5966;word-break:break-all">${esc(b.link.href)}</p>`
-				: 'code' in b
-					? `<p style="margin:0 0 16px;font:600 28px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:4px">${esc(b.code)}</p>`
-					: `<p style="margin:0 0 16px;font-size:13px;color:#4f5966">${esc(b.small)}</p>`
+				: 'action' in b
+					? `<p style="margin:8px 0 16px"><a href="${esc(b.action.href)}" style="display:inline-block;padding:14px 40px;background:#1f5fbf;color:#ffffff;border-radius:8px;text-decoration:none;font-size:18px;font-weight:700">${esc(b.action.label)}</a></p><p style="margin:0 0 16px;font-size:13px;color:#4f5966">If the button does not work, copy this address into your browser:<br><span style="color:#14181d;word-break:break-all">${esc(b.action.href)}</span></p>`
+					: 'code' in b
+						? `<p style="margin:0 0 16px;font:600 28px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:4px">${esc(b.code)}</p>`
+						: 'smallLink' in b
+							? `<p style="margin:0 0 12px;font-size:13px;color:#4f5966">${esc(b.smallLink.text)} <a href="${esc(b.smallLink.href)}" style="color:#1f5fbf">${esc(b.smallLink.href)}</a></p>`
+							: 'divider' in b
+								? `<hr style="margin:24px 0 16px;border:0;border-top:1px solid #d5d9df">`
+								: `<p style="margin:0 0 16px;font-size:13px;color:#4f5966">${esc(b.small)}</p>`
 	)
 	.join('\n')}
 <p style="margin:16px 0 0;padding-top:12px;border-top:1px solid #d5d9df;font-size:13px;color:#4f5966">${esc(footer)}</p>
@@ -87,18 +109,13 @@ export function invitationEmail(
 	instance: Instance,
 	input: { inviteeName: string; inviterName: string; link: string; days: number }
 ): EmailContent {
-	return compose(
-		instance,
-		tagged(instance, `${input.inviterName} invited you`),
-		`You are invited to ${instance.name}`,
-		[
-			`Hello ${input.inviteeName}, ${input.inviterName} invited you to ${instance.name}, where audits are planned and run.`,
-			{ link: { href: input.link, label: 'Join' } },
-			{
-				small: `The link works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask ${input.inviterName} to send the invitation again.`
-			}
-		]
-	);
+	return compose(instance, tagged(instance, `${input.inviterName} invited you`), `Join ${instance.name}`, [
+		`Hello ${input.inviteeName}, ${input.inviterName} invited you to ${instance.name}, where audits are planned and run. Press Join to set up how you sign in.`,
+		{ action: { href: input.link, label: 'Join' } },
+		{
+			small: `The link works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask ${input.inviterName} to send the invitation again.`
+		}
+	]);
 }
 
 /** What an instance set up from a profile tells its first admin about itself (#100). */
@@ -111,10 +128,6 @@ export interface SetUpForYou {
 	operator: { name: string; contact: string | null } | null;
 }
 
-/** mcp-audit in three sentences, for someone who has never seen it. */
-export const WHAT_IT_IS =
-	'mcp-audit is an app for planning and running audits: the requirements of laws and standards, the auditee’s documents, the plan, the meetings, the evidence and the findings are kept in one place. An AI can do the reading and the drafting, and everything it writes is a proposal that an auditor accepts or rejects. Every change is kept in a history, so it is always clear who decided what.';
-
 function list(items: string[]): string {
 	if (items.length <= 1) return items[0] ?? '';
 	return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
@@ -122,29 +135,33 @@ function list(items: string[]): string {
 
 /**
  * The first admin of an instance without passwords (#89): nobody invited them; the instance was set up
- * for them. Where it was set up from a profile (a tenant), the email is also their welcome (#100):
- * what the app is, where their instance is, what is already there and what to do first.
+ * for them. Where it was set up from a profile (a tenant), the email is also their welcome (#100).
+ * Joining is the one thing it asks for, so it comes first and alone (#103); what is set up, the guide
+ * and who runs the instance follow, small.
  */
 export function firstAdminEmail(
 	instance: Instance,
 	input: { name: string; link: string; days: number; setUp?: SetUpForYou | null }
 ): EmailContent {
-	const small = {
-		small: `The link works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask whoever set the instance up to restart it: a new link is sent at each start until you have joined.`
-	};
 	const s = input.setUp;
+	const days = `${input.days} ${input.days === 1 ? 'day' : 'days'}`;
+	const by = s?.operator ? ` by ${s.operator.name}` : '';
+	const how = !s || s.passkeys ? 'create your passkey and sign in' : 'set up how you sign in';
+	const join: Block[] = [
+		`Hello ${input.name}, ${instance.name} was set up with you as its first admin${by}. Press Join to ${how}.`,
+		{ action: { href: input.link, label: 'Join' } },
+		{
+			small: s?.operator
+				? `The link works once and for ${days}. If it has expired, ask ${s.operator.name} for a new one.`
+				: `The link works once and for ${days}. If it has expired, ask whoever set the instance up to restart it: a new link is sent at each start until you have joined.`
+		}
+	];
 	if (!s)
-		return compose(
-			instance,
-			tagged(instance, 'Your instance is ready'),
-			`${instance.name} is ready for you`,
-			[
-				`Hello ${input.name}, ${instance.name} was set up with you as its first admin. Join to create your passkey; then invite your colleagues on Settings, Users.`,
-				{ link: { href: input.link, label: 'Join' } },
-				small
-			]
-		);
-	const by = s.operator ? ` by ${s.operator.name}` : '';
+		return compose(instance, tagged(instance, 'Your instance is ready'), `Join ${instance.name}`, [
+			...join,
+			{ divider: true },
+			{ small: 'After you join, invite your colleagues on Settings, Users.' }
+		]);
 	const there = [
 		s.sources.length
 			? `the library holds ${list(s.sources)}`
@@ -154,21 +171,26 @@ export function firstAdminEmail(
 			? 'people sign in with a passkey (the fingerprint, face or PIN of their own device), or with a code sent by email'
 			: 'people sign in with their email and a password'
 	];
-	return compose(instance, tagged(instance, 'Your instance is ready'), `${instance.name} is ready for you`, [
-		`Hello ${input.name}, ${instance.name} was set up with you as its first admin${by}.`,
-		WHAT_IT_IS,
-		`${instance.name} is your own instance, at ${instance.origin}. Nobody else works in it. Already set up: ${there.join('; ')}.`,
-		`First, join with the link below${s.passkeys ? ' and create your passkey' : ''}. Then invite your colleagues on Settings, Users, and create your first engagement. The guide shows the five steps of an audit and how to connect your own Claude or ChatGPT to this instance:`,
-		{ link: { href: `${instance.origin}/welcome/guide`, label: 'Guide' } },
-		{ link: { href: input.link, label: 'Join' } },
+	return compose(instance, tagged(instance, 'Your instance is ready'), `Join ${instance.name}`, [
+		...join,
+		{ divider: true },
+		{
+			small: `${instance.name} is your own mcp-audit instance for planning and running audits, at ${instance.origin}. Nobody else works in it. Already set up: ${there.join('; ')}.`
+		},
+		{ small: 'After you join, invite your colleagues on Settings, Users, and create your first engagement.' },
+		{
+			smallLink: {
+				text: 'The guide shows the steps of an audit and how to connect your own Claude or ChatGPT:',
+				href: `${instance.origin}/welcome/guide`
+			}
+		},
 		...(s.operator
 			? [
-					`Questions about the instance, your data or the AI budget go to ${s.operator.name}${s.operator.contact ? ` (${s.operator.contact})` : ''}, who runs it for you.`
+					{
+						small: `Questions about the instance, your data or the AI budget go to ${s.operator.name}${s.operator.contact ? ` (${s.operator.contact})` : ''}, who runs it for you.`
+					}
 				]
-			: []),
-		{
-			small: `The link to join works once and for ${input.days} ${input.days === 1 ? 'day' : 'days'}. If it has expired, ask ${s.operator?.name ?? 'whoever set the instance up'} for a new one.`
-		}
+			: [])
 	]);
 }
 

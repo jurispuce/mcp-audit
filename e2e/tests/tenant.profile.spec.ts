@@ -17,9 +17,13 @@ test('an instance set up from a profile is ready when its first admin joins', as
 	const mail = invitations.at(-1)!;
 	expect(mail.subject).toBe(`Your instance is ready (${PROFILE_INSTANCE})`);
 	expect(mail.text).toContain(`${PROFILE_INSTANCE} was set up with you as its first admin`);
+	// Joining comes first and alone (#103): the join address is the first address in the email.
+	expect(mail.text.startsWith(`Join ${PROFILE_INSTANCE}\n`)).toBe(true);
+	expect(mail.text.indexOf('/join?t=')).toBeLessThan(mail.text.indexOf('/welcome/guide'));
 	// The invitation is also the welcome (#100): what the app is, what is set up, the guide, who runs it.
-	expect(mail.text).toContain('mcp-audit is an app for planning and running audits');
-	expect(mail.text).toContain(`${PROFILE_INSTANCE} is your own instance, at ${new URL(baseURL!).origin}`);
+	expect(mail.text).toContain(
+		`${PROFILE_INSTANCE} is your own mcp-audit instance for planning and running audits, at ${new URL(baseURL!).origin}`
+	);
 	expect(mail.text).toContain('the AI buttons are ready to use, within a budget');
 	expect(mail.text).toContain(`${new URL(baseURL!).origin}/welcome/guide`);
 	expect(mail.text).toContain(
