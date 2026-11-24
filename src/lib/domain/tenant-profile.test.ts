@@ -8,7 +8,6 @@ import { fakeLlmFetch } from '../../../e2e/fake-llm.mjs';
 import './entities';
 import { getAiSettings, removeModel, saveResearch } from './ai-settings';
 import type { MailTransport } from './email';
-import { WHAT_IT_IS } from './email-templates';
 import { joinWithoutPasskey, readInvitation } from './invitations';
 import { getItemHistory } from './items';
 import { getSourceByCode, listSources } from './library';
@@ -73,40 +72,44 @@ afterEach(() => {
 describe('the first admin’s welcome (#100)', () => {
 	const OPERATOR = { name: 'Peak Audit Hosting', contact: 'hosting@peak.example.test' };
 
-	it('says what the app is, where the instance is, what is set up, what to do first, and who runs it', async () => {
+	it('asks to join first, then says where the instance is, what is set up and who runs it', async () => {
 		write({ ...PROFILE, operator: OPERATOR });
 		await start();
 		const text = String(sent[0]!.text);
+		const html = String(sent[0]!.html);
 		expect(String(sent[0]!.subject)).toBe('Your instance is ready (Baltic Audit)');
+		expect(text.startsWith('Join Baltic Audit\n')).toBe(true);
 		expect(text).toContain(
-			'Hello Tia Tenant, Baltic Audit was set up with you as its first admin by Peak Audit Hosting.'
+			'Hello Tia Tenant, Baltic Audit was set up with you as its first admin by Peak Audit Hosting. Press Join to create your passkey and sign in.'
 		);
-		// What mcp-audit is, in three sentences.
-		expect(text).toContain(WHAT_IT_IS);
-		expect(WHAT_IT_IS.split(/(?<=\.)\s+/)).toHaveLength(3);
-		// The tenant's own address, and what is already there.
+		// The join address is the first address in the email, under a line that says what to do with it (#103).
+		expect(text).toContain('Join: open this address in your browser\nhttps://baltic.example.test/join?t=');
+		expect(text.indexOf('/join?t=')).toBeLessThan(text.indexOf('/welcome/guide'));
+		expect(readInvitation(app, linkIn(text), T0)).toMatchObject({ state: 'open', first: true });
+		// One button, Join; the guide is a plain link after it.
+		expect(html.match(/display:inline-block/g)).toHaveLength(1);
+		expect(html).toContain('If the button does not work, copy this address into your browser:');
+		expect(html.indexOf('/join?t=')).toBeLessThan(
+			html.indexOf('href="https://baltic.example.test/welcome/guide"')
+		);
+		// What is worth knowing afterwards: the tenant's own address, what is there, the guide, the operator.
 		expect(text).toContain(
-			'Baltic Audit is your own instance, at https://baltic.example.test. Nobody else works in it.'
+			'Baltic Audit is your own mcp-audit instance for planning and running audits, at https://baltic.example.test. Nobody else works in it.'
 		);
 		expect(text).toContain(
 			'Already set up: the library holds NIS 2 Directive (EU) 2022/2555; the AI buttons are ready to use, within a budget; people sign in with a passkey'
 		);
-		// The first things to do, and the guide with this instance's own address.
-		expect(text).toContain('First, join with the link below and create your passkey.');
 		expect(text).toContain(
-			'Then invite your colleagues on Settings, Users, and create your first engagement.'
+			'After you join, invite your colleagues on Settings, Users, and create your first engagement.'
 		);
-		expect(text).toContain('Guide:\nhttps://baltic.example.test/welcome/guide');
+		expect(text).toContain('connect your own Claude or ChatGPT: https://baltic.example.test/welcome/guide');
 		expect(text).toContain(
 			'Questions about the instance, your data or the AI budget go to Peak Audit Hosting (hosting@peak.example.test), who runs it for you.'
 		);
-		// The link to join is still there, and still works.
-		expect(readInvitation(app, linkIn(text), T0)).toMatchObject({ state: 'open', first: true });
-		expect(String(sent[0]!.html)).toContain('href="https://baltic.example.test/welcome/guide"');
 		// The record of what was applied names the operator; a later start sends the same welcome.
 		expect(appliedProfile(app)).toMatchObject({ operator: OPERATOR });
 		await start({ ...ENV, TENANT_PROFILE: file }, new Date(T0.getTime() + 3_600_000));
-		expect(String(sent[1]!.text)).toContain(WHAT_IT_IS);
+		expect(String(sent[1]!.text)).toContain('Press Join to create your passkey and sign in.');
 	});
 
 	it('without an operator, AI or sources in the profile, says only what is true', async () => {

@@ -74,7 +74,14 @@ describe('templates (#86)', () => {
 			days: 7
 		});
 		expect(inv.subject).toBe('Ada invited you (Baltic Audit)');
-		expect(inv.text).toContain('https://audit.example.test/join/abc');
+		// Join is the one step, and the only button, with the address to copy under it (#103).
+		expect(inv.text.startsWith('Join Baltic Audit\n')).toBe(true);
+		expect(inv.text).toContain('Press Join to set up how you sign in.');
+		expect(inv.text).toContain(
+			'Join: open this address in your browser\nhttps://audit.example.test/join/abc'
+		);
+		expect(inv.html.match(/display:inline-block/g)).toHaveLength(1);
+		expect(inv.html).toContain('If the button does not work, copy this address into your browser:');
 		expect(inv.text).toContain('works once and for 7 days');
 		expect(inv.html).toContain('href="https://audit.example.test/join/abc"');
 		expect(inv.text).toContain('Sent by Baltic Audit at https://audit.example.test.');
