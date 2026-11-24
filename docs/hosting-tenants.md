@@ -317,14 +317,12 @@ A tenant's first admin gets an invitation from software they have never seen. Th
 
 **1. Before you start,** fill in the facts about yourself in `host.env` (`OPERATOR_NAME`, `OPERATOR_CONTACT`, `OPERATOR_HOSTING`, `OPERATOR_BACKUP_COPY`, `OPERATOR_EMAIL_SERVICE`, `OPERATOR_MODEL_PROVIDER`). They are the same for every tenant.
 
-**2. `bin/tenant create`** makes the instance, and the instance emails the first admin. That email is the invitation and the welcome in one:
+**2. `bin/tenant create`** makes the instance, and the instance emails the first admin. That email is the invitation, and leads with it: one sentence and the **Join** button, which works once and for 7 days. Below a line, in small type:
 
-- what mcp-audit is, in three sentences;
 - the tenant's own address, and what is already set up (the library sources, the AI, how people sign in);
-- the first things to do: join and create a passkey, invite colleagues, create the first engagement;
-- a link to **the guide** at `https://<tenant address>/welcome/guide`: the five steps of an audit and how to connect Claude or ChatGPT, with this instance's own MCP address filled in. The guide is the one public page of an instance besides the sign-in page; it shows the instance's name and address and nothing else;
-- who runs the instance and how to reach them;
-- the link to join, which works once and for 7 days.
+- the next things to do: invite colleagues, create the first engagement;
+- a link to **the guide** at `https://<tenant address>/welcome/guide`: the steps of an audit and how to connect Claude or ChatGPT, with this instance's own MCP address filled in. The guide is the one public page of an instance besides the sign-in page; it shows the instance's name and address and nothing else;
+- who runs the instance and how to reach them.
 
 **3. `bin/tenant pack <name>`** writes two files for you to send from your own address, so the invitation does not arrive from a stranger:
 
@@ -332,7 +330,7 @@ A tenant's first admin gets an invitation from software they have never seen. Th
 bin/tenant pack acme
 ```
 
-- `packs/acme/note.txt`: a short note in your name. It says which email to expect, from which sender and with which subject, and where the guide is.
+- `packs/acme/note.txt`: a short note in your name. It says what mcp-audit is, in three sentences; which email to expect, from which sender and with which subject; and where the guide is.
 - `packs/acme/statement.html`: **one page the tenant can keep**, filled in for this tenant: where the data is stored and how it is backed up; what you can and cannot see; that traffic goes through Cloudflare, which sees it unencrypted at its edge; what goes to the AI gateway and the model provider, and how to switch AI off for an engagement or use a model of their own; how to get an export, what deletion removes, and when. Attach it, or open it and print it to PDF.
 
 The command refuses to make a pack while a fact about you is missing, and names the settings. `--draft` writes it anyway, with the gaps marked, to read before the facts are final. Run the command again after you change a tenant's budget or your own facts: the statement carries the date.

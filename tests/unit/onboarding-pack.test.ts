@@ -6,6 +6,7 @@ import {
 	main,
 	missingFacts,
 	noteText,
+	WHAT_IT_IS,
 	periodWords,
 	statementHtml,
 	statementSections
@@ -145,6 +146,18 @@ describe('the note the operator sends by hand', () => {
 		);
 		expect(note).toContain('The guide is at https://mcpaudit-acme.example.test/welcome/guide.');
 		expect(note).toContain('Peak Audit Hosting\nhosting@peak.example.test');
+	});
+
+	it('says what mcp-audit is, in three sentences, since the invitation leads with Join alone', () => {
+		const note = noteText(factsFrom(ENV, PROFILE));
+		expect(note).toContain(`It is yours alone, at https://mcpaudit-acme.example.test.\n\n${WHAT_IT_IS}\n`);
+		expect(WHAT_IT_IS.split(/(?<=\.)\s+/)).toHaveLength(3);
+		expect(WHAT_IT_IS).toMatch(/^mcp-audit is an app for planning and running audits/);
+		// What the note says of the invitation is what the invitation holds (#103).
+		expect(note).toContain(
+			'That is the invitation: press Join in it to start. Below the button it says what is already set up.'
+		);
+		expect(note).not.toContain('it says what mcp-audit is');
 	});
 });
 
