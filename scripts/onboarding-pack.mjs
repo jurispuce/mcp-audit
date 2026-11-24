@@ -213,6 +213,13 @@ ${sections.map((s) => `<h2>${esc(s.title)}</h2>\n${s.text.map((t) => `<p>${esc(t
 `;
 }
 
+/**
+ * mcp-audit in three sentences, for someone who has never seen it. The invitation itself leads with
+ * Join and nothing else (#103), so the note the operator sends says what the app is (#100).
+ */
+export const WHAT_IT_IS =
+	'mcp-audit is an app for planning and running audits: the requirements of laws and standards, the auditee’s documents, the plan, the meetings, the evidence and the findings are kept in one place. An AI can do the reading and the drafting, and everything it writes is a proposal that an auditor accepts or rejects. Every change is kept in a history, so it is always clear who decided what.';
+
 /** A short note in the operator's own name, to send by hand next to the invitation. @param {PackFacts} f */
 export function noteText(f) {
 	return [
@@ -222,7 +229,9 @@ export function noteText(f) {
 		'',
 		`I have set up an mcp-audit instance for ${f.title}. It is yours alone, at ${f.address}.`,
 		'',
-		`You get an email${f.sender ? ` from ${f.sender}` : ''} with the subject "Your instance is ready (${f.title})". That is the invitation: it says what mcp-audit is and what is already set up, and it has the link to join. The link works once, for 7 days. If you cannot find the email, look in the spam folder, then tell me and I send a new one.`,
+		WHAT_IT_IS,
+		'',
+		`You get an email${f.sender ? ` from ${f.sender}` : ''} with the subject "Your instance is ready (${f.title})". That is the invitation: press Join in it to start. Below the button it says what is already set up. The link works once, for 7 days. If you cannot find the email, look in the spam folder, then tell me and I send a new one.`,
 		'',
 		`The guide is at ${f.address}/welcome/guide. It shows the five steps of an audit and how to connect your own Claude or ChatGPT.`,
 		'',

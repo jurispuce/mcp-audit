@@ -20,7 +20,7 @@ test('an instance set up from a profile is ready when its first admin joins', as
 	// Joining comes first and alone (#103): the join address is the first address in the email.
 	expect(mail.text.startsWith(`Join ${PROFILE_INSTANCE}\n`)).toBe(true);
 	expect(mail.text.indexOf('/join?t=')).toBeLessThan(mail.text.indexOf('/welcome/guide'));
-	// The invitation is also the welcome (#100): what the app is, what is set up, the guide, who runs it.
+	// Below Join, the invitation is also the welcome (#100): the address, what is set up, the guide, who runs it.
 	expect(mail.text).toContain(
 		`${PROFILE_INSTANCE} is your own mcp-audit instance for planning and running audits, at ${new URL(baseURL!).origin}`
 	);
