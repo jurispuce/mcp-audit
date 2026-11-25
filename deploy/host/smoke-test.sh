@@ -161,9 +161,9 @@ check "nothing of a tenant is published on the server" bash -c "[ -z \"\$(docker
 say "One tenant cannot reach another"
 reach='const [,u]=process.argv; fetch(u,{signal:AbortSignal.timeout(4000)}).then(()=>process.exit(0)).catch(()=>process.exit(7))'
 ip_b="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mcp-audit-tenant-smoke-b)"
-check "A reaches itself (the test can tell success)" docker exec mcp-audit-tenant-smoke-a node -e "$reach" http://127.0.0.1:3000/health
-check "A cannot reach B by name" bash -c "! docker exec mcp-audit-tenant-smoke-a node -e '$reach' http://mcp-audit-tenant-smoke-b:3000/health"
-check "A cannot reach B by address ($ip_b)" bash -c "! docker exec mcp-audit-tenant-smoke-a node -e '$reach' http://$ip_b:3000/health"
+check "A reaches itself (the test can tell success)" docker exec mcp-audit-tenant-smoke-a node -e "$reach" -- http://127.0.0.1:3000/health
+check "A cannot reach B by name" bash -c "! docker exec mcp-audit-tenant-smoke-a node -e '$reach' -- http://mcp-audit-tenant-smoke-b:3000/health"
+check "A cannot reach B by address ($ip_b)" bash -c "! docker exec mcp-audit-tenant-smoke-a node -e '$reach' -- http://$ip_b:3000/health"
 check "the tenants are on different networks" bash -c "[ \"\$(docker inspect -f '{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}}{{end}}' mcp-audit-tenant-smoke-a)\" = mcp-audit-tenant-smoke-a ]"
 
 say "The visitor's address comes from the tunnel's header"
@@ -178,7 +178,7 @@ say "Nobody else can name the visitor"
 # From inside tenant A, through the proxy, at tenant B: a different made-up visitor each time.
 forge='const http=require("http");const [,proxy,host,ip]=process.argv;const r=http.request({host:proxy,port:80,path:"/mcp",method:"POST",headers:{host,"content-type":"application/json","authorization":"Bearer mcpa_wrong","cf-connecting-ip":ip,"x-client-ip":ip,"x-forwarded-for":ip}},s=>{console.log(s.statusCode);s.resume()});r.on("error",()=>console.log("error"));r.end("{}")'
 last=""
-for i in $(seq 1 31); do last="$(docker exec mcp-audit-tenant-smoke-a node -e "$forge" "$proxy" "$host_b" "203.0.113.$i")"; done
+for i in $(seq 1 31); do last="$(docker exec mcp-audit-tenant-smoke-a node -e "$forge" -- "$proxy" "$host_b" "203.0.113.$i")"; done
 check "31 requests with made-up addresses count as one sender (429, got $last)" bash -c "[ \"$last\" = 429 ]"
 check "which leaves real visitors of B alone (401)" bash -c "[ \"$(wrong "$host_b" 198.51.100.9)\" = 401 ]"
 
@@ -203,7 +203,7 @@ spent() { ai_of "$1" | sed -n 's/^\$\([0-9.]*\) of.*/\1/p'; }
 key_of() { sed -n 's/^LITELLM_API_KEY=//p' "$work/tenants/$1/.env"; }
 # One question to the model from inside a tenant's container, with its own key unless one is given.
 ask='const [,u,k]=process.argv; fetch(u+"/chat/completions",{method:"POST",headers:{authorization:"Bearer "+(k||process.env.LITELLM_API_KEY),"content-type":"application/json"},body:JSON.stringify({model:"fake-tools",messages:[{role:"user",content:"hello"}]}),signal:AbortSignal.timeout(5000)}).then(async r=>console.log(r.status,(await r.json()).error?.type??"ok")).catch(()=>console.log("unreachable"))'
-ask_as() { docker exec "mcp-audit-tenant-$1" node -e "$ask" "http://$gateway:4000/v1" "${2:-}"; }
+ask_as() { docker exec "mcp-audit-tenant-$1" node -e "$ask" -- "http://$gateway:4000/v1" "${2:-}"; }
 # An attempt to raise its own budget, with its own key.
 raise='const [,u]=process.argv; const k=process.env.LITELLM_API_KEY; fetch(u+"/key/update",{method:"POST",headers:{authorization:"Bearer "+k,"content-type":"application/json"},body:JSON.stringify({key:k,max_budget:1000}),signal:AbortSignal.timeout(5000)}).then(r=>console.log(r.status)).catch(()=>console.log("unreachable"))'
 # Each instance checks its model through the gateway as it starts: wait until both have.
@@ -214,7 +214,7 @@ check "the tenants' keys differ" bash -c "[ -n '$(key_of smoke-a)' ] && [ '$(key
 check "the key is in the tenant's environment file, not in its profile" bash -c "! grep -q '$(key_of smoke-a)' '$work/tenants/smoke-a/tenant-profile.yaml'"
 check "no tenant holds the gateway's master key" bash -c "! docker exec mcp-audit-tenant-smoke-a printenv | grep -q sk-smoke-master && ! grep -rq sk-smoke-master '$work/tenants/smoke-a'"
 check "the gateway is not published on the server" bash -c "[ -z \"\$(docker port $gateway)\" ]"
-check "a tenant cannot change its own budget (401)" bash -c "[ \"\$(docker exec mcp-audit-tenant-smoke-a node -e '$raise' http://$gateway:4000)\" = 401 ]"
+check "a tenant cannot change its own budget (401)" bash -c "[ \"\$(docker exec mcp-audit-tenant-smoke-a node -e '$raise' -- http://$gateway:4000)\" = 401 ]"
 before_a="$(spent smoke-a)"; before_b="$(spent smoke-b)"
 check "tenant A asks the model" bash -c "[ '$(ask_as smoke-a)' = '200 ok' ]"
 check "that is counted for A ($before_a to $(spent smoke-a))" bash -c "[ '$(spent smoke-a)' != '$before_a' ]"
@@ -231,7 +231,7 @@ check "status says used up" bash -c "echo '$(ai_of smoke-a)' | grep -q 'USED UP'
 check "B still works" bash -c "[ '$(ask_as smoke-b)' = '200 ok' ]"
 tenant ai smoke-a --budget 10 > /dev/null
 check "the budget raised: A works again" bash -c "[ '$(ask_as smoke-a)' = '200 ok' ]"
-check "A still cannot reach B, with the gateway on both networks" bash -c "! docker exec mcp-audit-tenant-smoke-a node -e '$reach' http://mcp-audit-tenant-smoke-b:3000/health"
+check "A still cannot reach B, with the gateway on both networks" bash -c "! docker exec mcp-audit-tenant-smoke-a node -e '$reach' -- http://mcp-audit-tenant-smoke-b:3000/health"
 check "A is on its own network only" bash -c "[ \"\$(docker inspect -f '{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}}{{end}}' mcp-audit-tenant-smoke-a)\" = mcp-audit-tenant-smoke-a ]"
 
 say "Back up a tenant, change it, restore: the change is gone"
@@ -361,11 +361,11 @@ check "with the people it has and how much it holds" bash -c "echo \"$overview\"
 token_of() { sed -n 's/^OPERATOR_TOKEN=//p' "$work/tenants/$1/.env"; }
 # Ask an instance's operator endpoint from inside its own container: prints the status and the fields.
 numbers='const [,t]=process.argv; fetch("http://127.0.0.1:3000/api/operator/status",{headers:t?{authorization:"Bearer "+t}:{}}).then(async r=>{const j=await r.json();console.log(r.status,Object.keys(j).sort().join(","),JSON.stringify(j))}).catch(()=>console.log("unreachable"))'
-own="$(docker exec mcp-audit-tenant-smoke-a node -e "$numbers" "$(token_of smoke-a)")"
+own="$(docker exec mcp-audit-tenant-smoke-a node -e "$numbers" -- "$(token_of smoke-a)")"
 check "an instance answers its own operator token with the listed fields only" bash -c "echo '$own' | grep -q '^200 database_bytes,engagements,files_bytes,invited,last_activity,last_sign_in,users,version '"
 check "and with no name, address or title in it" bash -c "! echo '$own' | grep -q -i -e smoke -e '@' -e admin"
-check "another tenant's token is refused (401)" bash -c "docker exec mcp-audit-tenant-smoke-a node -e '$numbers' '$(token_of smoke-b)' | grep -q '^401 '"
-check "so is no token (401)" bash -c "docker exec mcp-audit-tenant-smoke-a node -e '$numbers' | grep -q '^401 '"
+check "another tenant's token is refused (401)" bash -c "docker exec mcp-audit-tenant-smoke-a node -e '$numbers' -- '$(token_of smoke-b)' | grep -q '^401 '"
+check "so is no token (401)" bash -c "docker exec mcp-audit-tenant-smoke-a node -e '$numbers' -- | grep -q '^401 '"
 check "the tenants' operator tokens differ" bash -c "[ -n '$(token_of smoke-a)' ] && [ '$(token_of smoke-a)' != '$(token_of smoke-b)' ]"
 check "through the tunnel the endpoint does not exist, even with the token (404)" bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Host: $host_a' -H 'authorization: Bearer $(token_of smoke-a)' http://127.0.0.1:$port/api/operator/status)\" = 404 ]"
 # A stopped tenant and a tenant without a backup.
