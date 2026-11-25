@@ -13,7 +13,9 @@ export const GET: RequestHandler = ({ url, locals }) => {
 			mcpUrl: `${url.origin}/mcp`,
 			signIn: signInMethod(),
 			instanceName: instanceName(),
-			version: APP_VERSION
+			version: APP_VERSION,
+			// The file works offline; the video stays on the instance, linked by its address (#106).
+			video: { mode: 'link', origin: url.origin }
 		}),
 		{
 			headers: {

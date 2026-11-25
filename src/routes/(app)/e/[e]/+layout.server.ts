@@ -6,6 +6,7 @@ import { listJobs } from '#lib/domain/jobs.ts';
 import { proposalSummary } from '#lib/domain/proposals.ts';
 import { linkReceivedDocuments } from '#lib/domain/received-documents.ts';
 import { appDatabase } from '#lib/server/db.ts';
+import { guideBar } from '#lib/server/guide-bar.ts';
 import { uiActor } from '#lib/server/http.ts';
 import type { LayoutServerLoad } from './$types';
 
@@ -17,7 +18,7 @@ const PROPOSE_RECEIVED = new Set([
 ]);
 
 /** The engagement every screen below /e/:e works in. Unknown or deleted ids are a 404. */
-export const load: LayoutServerLoad = ({ params, route, locals }) => {
+export const load: LayoutServerLoad = ({ params, route, locals, url, cookies }) => {
 	try {
 		const app = appDatabase();
 		const engagement = getEngagement(app, params.e);
@@ -28,6 +29,8 @@ export const load: LayoutServerLoad = ({ params, route, locals }) => {
 		return {
 			engagement,
 			proposals: proposalSummary(app, engagement.id),
+			// The guide bar (#106), when the person came here from a step of the guide.
+			guide: guideBar(app, engagement.id, url, cookies),
 			// Whether the AI buttons can run here: AI allowed on the engagement and a checked model set up.
 			ai: {
 				allowed: engagement.aiAllowed,

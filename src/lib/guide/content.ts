@@ -14,6 +14,16 @@ export interface GuideScreen {
 	path: string;
 }
 
+/**
+ * One thing a person does in a step. `screen` is where it is done, a path below /e/:e as in the
+ * step's `screens`; the guide's Go button opens it, and the guide bar shows the action there (#106).
+ * A screen also covers the pages below it: /run/events covers an event's own page.
+ */
+export interface GuideAction {
+	text: string;
+	screen?: string;
+}
+
 export interface GuideStep {
 	key: 'setup' | 'rules' | 'plan' | 'run' | 'conclude';
 	number: number;
@@ -22,7 +32,7 @@ export interface GuideStep {
 	summary: string;
 	/** Numbers of the Home checklist's phases this step covers. */
 	phases: number[];
-	you: string[];
+	you: GuideAction[];
 	ai: string[];
 	decide: string;
 	done: string;
@@ -89,10 +99,23 @@ export const STEPS: GuideStep[] = [
 		summary: 'Say what is audited, and against what.',
 		phases: [1, 2, 3, 4],
 		you: [
-			'Create the engagement: the auditee, the dates, the working language and the report language.',
-			'Select the requirements from the library, for example NIS 2 Article 21 or ISO 27001 Annex A.',
-			'Choose one scope or several. With several, say per requirement whether it gets one finding or one per scope.',
-			"Record the auditee's roles and at least one risk. Risks set how critical each requirement is."
+			{
+				text: 'Create the engagement: the auditee, the dates, the working language and the report language. Change them under **Edit details** on Home.',
+				screen: ''
+			},
+			{
+				text: 'Select the requirements from the library, for example NIS 2 Article 21 or ISO 27001 Annex A.',
+				screen: '/setup/requirements'
+			},
+			{
+				text: 'Choose one scope or several. With several, say per requirement whether it gets one finding or one per scope.',
+				screen: '/setup/scopes'
+			},
+			{ text: "Record the auditee's roles: who owns what.", screen: '/setup/auditee' },
+			{
+				text: 'Record at least one risk. Risks set how critical each requirement is.',
+				screen: '/setup/risks'
+			}
 		],
 		ai: [
 			"**Derive roles from documents** proposes the auditee's roles with the document each was found in.",
@@ -102,6 +125,7 @@ export const STEPS: GuideStep[] = [
 		decide: 'Which requirements and scopes are in the audit, and which proposed roles and risks you accept.',
 		done: 'Requirements are selected, at least one role and one risk are recorded, and scope handling is set.',
 		screens: [
+			{ label: 'Home', path: '' },
 			{ label: 'Set-up, Requirements', path: '/setup/requirements' },
 			{ label: 'Set-up, Scopes', path: '/setup/scopes' },
 			{ label: 'Set-up, Auditee', path: '/setup/auditee' },
@@ -115,9 +139,18 @@ export const STEPS: GuideStep[] = [
 		summary: 'Turn their policies and procedures into rules you can test.',
 		phases: [5],
 		you: [
-			"Upload the auditee's policies, procedures and registers. Title and kind can be added afterwards.",
-			'Review each proposed internal requirement: its quote, its section and the requirement it implements. Accept, edit or reject; select several to decide together.',
-			'When the auditee sends a new version, use **Upload new version** on the old document, so its rules are checked against the new text.'
+			{
+				text: "Upload the auditee's policies, procedures and registers. Title and kind can be added afterwards.",
+				screen: '/setup/documents'
+			},
+			{
+				text: 'Review each proposed internal requirement: its quote, its section and the requirement it implements. Accept, edit or reject; select several to decide together.',
+				screen: '/setup/documents'
+			},
+			{
+				text: 'When the auditee sends a new version, use **Upload new version** on the old document, so its rules are checked against the new text.',
+				screen: '/setup/documents'
+			}
 		],
 		ai: [
 			'**Extract requirements** proposes the rules the auditee set for itself, each with an exact quote and section.',
@@ -135,10 +168,22 @@ export const STEPS: GuideStep[] = [
 		summary: 'Agree who you meet, when, and what you need to see.',
 		phases: [6],
 		you: [
-			'Enter the planning inputs first: fieldwork days, working hours, lunch, about how many meetings, and exceptions.',
-			'Review the drafted events and the evidence planned for each. Edit, accept or remove them.',
-			'On Coverage, make sure every requirement is in an event, or remove it from the audit scope with a reason.',
-			'Export the audit plan as Word or PDF, send it, and mark the plan as sent, then agreed.'
+			{
+				text: 'Enter the planning inputs first: fieldwork days, working hours, lunch, about how many meetings, and exceptions.',
+				screen: '/plan/events'
+			},
+			{
+				text: 'Review the drafted events and the evidence planned for each. Edit, accept or remove them.',
+				screen: '/plan/events'
+			},
+			{
+				text: 'On Coverage, make sure every requirement is in an event, or remove it from the audit scope with a reason.',
+				screen: '/plan/coverage'
+			},
+			{
+				text: 'Export the audit plan as Word or PDF, send it, and mark the plan as sent, then agreed.',
+				screen: '/plan/document'
+			}
 		],
 		ai: [
 			'**Draft plan** fits the meetings into the fieldwork time: an opening meeting, a closing meeting, daily summaries and ten minutes for notes after each meeting, with the evidence to collect at each.',
@@ -159,10 +204,20 @@ export const STEPS: GuideStep[] = [
 		summary: 'Collect the evidence, meeting by meeting. Built for a phone.',
 		phases: [7],
 		you: [
-			'Open the event and choose **Mark held** when it starts.',
-			'Take notes as you go. Type / for a promise, a suspected issue or a document, and @ to mention a requirement, a role, a document or planned evidence.',
-			'Add files and photos, and set each planned evidence item to received, partial, promised or missing.',
-			'Export the post-event report for the people who attended: what was received, what is outstanding, who promised what.'
+			{ text: "Open today's event and choose **Mark held** when it starts.", screen: '/run/today' },
+			{
+				text: 'Take notes as you go. Type / for a promise, a suspected issue or a document, and @ to mention a requirement, a role, a document or planned evidence.',
+				screen: '/run/events'
+			},
+			{
+				text: 'Add files and photos, and set each planned evidence item to received, partial, promised or missing.',
+				screen: '/run/events'
+			},
+			{
+				text: 'Export the post-event report for the people who attended: what was received, what is outstanding, who promised what.',
+				screen: '/run/events'
+			},
+			{ text: 'Link what arrives later, such as transcripts, from the inbox.', screen: '/run/inbox' }
 		],
 		ai: [
 			'**Process event materials** links notes, files and transcripts to the planned evidence, with the place in the document.',
@@ -184,10 +239,22 @@ export const STEPS: GuideStep[] = [
 		summary: 'Decide what the evidence shows, requirement by requirement.',
 		phases: [8],
 		you: [
-			'Open Findings: one card per requirement and scope, with its evidence, internal rules and suspected issues.',
-			'Review each proposed finding and its rationale. Accept it as a draft, edit it or reject it.',
-			'Approve each finding. Approval locks it; reopen it if something changes.',
-			'Export the findings report. It holds approved findings only.'
+			{
+				text: 'Open Findings: one card per requirement and scope, with its evidence, internal rules and suspected issues.',
+				screen: '/findings/matrix'
+			},
+			{
+				text: 'Review each proposed finding and its rationale. Accept it as a draft, edit it or reject it.',
+				screen: '/findings/matrix'
+			},
+			{
+				text: 'Approve each finding. Approval locks it; reopen it if something changes.',
+				screen: '/findings/to-approve'
+			},
+			{
+				text: 'Export the findings report. It holds approved findings only.',
+				screen: '/findings/conclusions'
+			}
 		],
 		ai: [
 			'**Propose findings** drafts a finding with a rationale that cites the evidence, for one requirement or for all that have none.'
@@ -202,6 +269,75 @@ export const STEPS: GuideStep[] = [
 		]
 	}
 ];
+
+/**
+ * The explainer video (#106): 2:51, narrated, served by the instance itself from static/media. Its
+ * chapters line up with the steps, so each step's page plays its own part.
+ */
+export interface VideoChapter {
+	key: 'intro' | GuideStep['key'] | 'reuse' | 'where' | 'result';
+	title: string;
+	/** Seconds. */
+	start: number;
+	end: number;
+}
+
+export const VIDEO = {
+	src: '/media/explainer.mp4',
+	poster: '/media/explainer-poster.jpg',
+	captions: '/media/explainer.en.vtt',
+	title: 'How mcp-audit works',
+	duration: 171,
+	chapters: [
+		{ key: 'intro', title: 'AI proposes, you decide', start: 0, end: 35.2 },
+		{ key: 'setup', title: 'Set up', start: 35.2, end: 54.4 },
+		{ key: 'rules', title: "The auditee's own rules", start: 54.4, end: 71.2 },
+		{ key: 'plan', title: 'Plan', start: 71.2, end: 89.9 },
+		{ key: 'run', title: 'Run', start: 89.9, end: 107.5 },
+		{ key: 'conclude', title: 'Conclude', start: 107.5, end: 121 },
+		{ key: 'reuse', title: 'Reuse what you have', start: 121, end: 140.5 },
+		{ key: 'where', title: 'Where the AI runs', start: 140.5, end: 156.8 },
+		{ key: 'result', title: 'The result', start: 156.8, end: 171 }
+	] satisfies VideoChapter[]
+};
+
+export function chapterOf(key: VideoChapter['key']): VideoChapter {
+	return VIDEO.chapters.find((c) => c.key === key)!;
+}
+
+/** "1:11" */
+export function clock(seconds: number): string {
+	const s = Math.round(seconds);
+	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export function stepByKey(key: string | null | undefined): GuideStep | null {
+	return STEPS.find((s) => s.key === key) ?? null;
+}
+
+/** The screen's label as the app names it: "Plan, Events". */
+export function screenLabel(step: GuideStep, path: string): string {
+	return step.screens.find((x) => x.path === path)?.label ?? 'Home';
+}
+
+/**
+ * Where a person is, within a step: the actions done on the screen at `path` (a path below /e/:e),
+ * and the next action that is done somewhere else, for the guide bar (#106).
+ */
+export function whereInStep(
+	step: GuideStep,
+	path: string
+): { here: GuideAction[]; next: GuideAction | null } {
+	const covers = (screen: string) =>
+		screen === '' ? path === '' : path === screen || path.startsWith(`${screen}/`);
+	const withScreen = step.you.filter((a) => a.screen !== undefined);
+	const here = withScreen.filter((a) => covers(a.screen!));
+	const last = here.length ? withScreen.lastIndexOf(here[here.length - 1]!) : -1;
+	const next =
+		withScreen.slice(last + 1).find((a) => !covers(a.screen!)) ??
+		(here.length ? null : (withScreen[0] ?? null));
+	return { here, next };
+}
 
 /** The steps in one line, for the welcome. */
 export const STEPS_LINE = STEPS.map((s) => s.title).join(' → ');
