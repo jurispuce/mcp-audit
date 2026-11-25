@@ -99,6 +99,12 @@ export const ACTION_TOOLS: Record<AiAction, string[]> = {
 		'list_artifacts',
 		'get_artifact_text'
 	],
+	library_roles: [
+		'list_library_documents',
+		'get_library_document_text',
+		'upsert_sources',
+		'list_library_proposals'
+	],
 	library_extract: [
 		'list_library_documents',
 		'get_library_document_text',
@@ -145,8 +151,14 @@ export function taskText(
 			return ctx.unit_id
 				? `Propose a finding for assessment unit ${ctx.unit_id}, with rationale citing the evidence. Missing evidence means no reasonable assurance, never a non-conformity.`
 				: 'Propose a finding for each assessment unit that has none yet, with rationale citing the evidence. Missing evidence means no reasonable assurance, never a non-conformity.';
-		case 'library_extract':
-			return `Extract the requirements from library document ${ctx.document_id} into a source${ctx.source_code ? ` with code "${ctx.source_code}"` : ''}${ctx.source_title ? ` titled "${ctx.source_title}"` : ''}. Create the source with upsert_sources (pass document_id), then add the requirements with upsert_requirements, keeping the document's hierarchy and its exact reference codes and wording.`;
+		case 'library_roles':
+			return `Find whom library document ${ctx.document_id} applies to. Read its subject matter, scope and definitions, and the headings of the provisions that set obligations; skim the rest. Then create or update the source${ctx.source_code ? ` with code "${ctx.source_code}"` : ''}${ctx.source_title ? ` titled "${ctx.source_title}"` : ''} with upsert_sources (pass document_id) and its roles: each kind of organisation or person the document sets auditable obligations for, labelled as the document names them, with a one-line description citing where it is defined. If it addresses only one kind, record that one role. Do not add requirements: the auditor chooses which roles to import.`;
+		case 'library_extract': {
+			const roles = ctx.roles
+				? `Import only the requirements for these roles of the source: ${ctx.roles.split(',').join(', ')} (see list_library_documents for their labels). Give each requirement the keys of the roles it applies to; where one provision sets different obligations for different roles, make one requirement per role.`
+				: 'If the source lists roles (list_library_documents), give each requirement the keys of the roles it applies to; where one provision sets different obligations for different roles, make one requirement per role.';
+			return `Extract the auditable requirements from library document ${ctx.document_id} into a source${ctx.source_code ? ` with code "${ctx.source_code}"` : ''}${ctx.source_title ? ` titled "${ctx.source_title}"` : ''}. ${roles} Create or update the source with upsert_sources (pass document_id), then add the requirements with upsert_requirements in document order: the reference exactly as written, a short title, a self-contained text, the original passage as source_text where the text is reworded, and parent to keep the chapter and article headings that hold auditable requirements. Skip provisions that are not auditable, and list them with the reason in your summary.`;
+		}
 		case 'library_mapping':
 			return `Propose links from the requirements of source "${ctx.from_source}" to the source "${ctx.to_source}" with link_requirements. Give each link a one-line note; start it with "Low confidence:" where that applies. Do not invent links where nothing matches.`;
 	}

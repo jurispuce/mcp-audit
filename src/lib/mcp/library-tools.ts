@@ -25,7 +25,11 @@ export function registerLibraryImportTools(server: McpServer, app: AppDatabase, 
 					filename: d.filename,
 					text: d.textStatus,
 					text_length: d.textLength,
-					sources: d.sources.map((s) => ({ code: s.code, status: s.status }))
+					sources: d.sources.map((s) => ({
+						code: s.code,
+						status: s.status,
+						...(s.roles?.length ? { roles: s.roles } : {})
+					}))
 				}))
 			}))
 	);

@@ -20,9 +20,12 @@ import { createEntity, readRow, write, type Actor, type Row } from './write';
 /**
  * Import a source from a YAML file in the shape the audit skills use (library/sources/<id>.yaml):
  *
- *   id, title, type, edition, language, licence_note,
- *   requirements: [{ id, parent, title, text, locator, language, translation_of,
+ *   id, title, type, edition, language, licence_note, roles: [{ key, label, description }],
+ *   requirements: [{ id, parent, title, text, source_text, roles, locator, language, translation_of,
  *                    links: [{ type, to, coverage, note }], guidance, criteria }]
+ *
+ * `roles` (#108) lists whom the source addresses; a requirement's `roles` names the keys it applies
+ * to. `source_text` is the original passage when `text` is reworded to stand on its own.
  *
  * Matching is by source `id` (code) and requirement `id` (reference code), so re-importing the same
  * file changes nothing, and a changed requirement becomes a new version. Requirements missing from
@@ -50,6 +53,8 @@ interface FileRequirement {
 	parent?: unknown;
 	title?: unknown;
 	text?: unknown;
+	source_text?: unknown;
+	roles?: unknown;
 	locator?: unknown;
 	language?: unknown;
 	translation_of?: unknown;
@@ -105,6 +110,7 @@ export function importSourceYaml(
 			language: s(doc.language) || 'en',
 			licence_note: doc.licence_note ?? null
 		};
+		if (doc.roles !== undefined) sourceData.roles = doc.roles;
 
 		const existingSource = app.sqlite.prepare('SELECT * FROM source WHERE code = ?').get(code) as
 			Row | undefined;
@@ -197,12 +203,22 @@ function applyRequirements(
 			text: r.text == null ? null : String(r.text).trim(),
 			language: s(r.language) || language,
 			locator: r.locator ?? null,
+			quote: r.source_text == null ? null : String(r.source_text).trim(),
+			roles: r.roles ?? null,
 			// No status: a person's import is confirmed by default, an AI's is proposed (#69).
 			origin: 'external'
 		};
 		// A partial upsert changes only the fields it names.
 		if (partial && existing) {
-			for (const key of ['title', 'text', 'locator', 'language'] as const) if (!(key in r)) delete data[key];
+			const fields = {
+				title: 'title',
+				text: 'text',
+				locator: 'locator',
+				language: 'language',
+				source_text: 'quote',
+				roles: 'roles'
+			} as const;
+			for (const [key, column] of Object.entries(fields)) if (!(key in r)) delete data[column];
 		}
 		// A partial upsert keeps an existing requirement's place unless it is given.
 		if (!partial || !existing) data.position = partial ? siblingCount(app, sourceId, parentRef) : pos;
@@ -376,6 +392,10 @@ export interface UpsertRequirementInput {
 	locator?: string | null;
 	language?: string;
 	translation_of?: string | { source: string; id: string } | null;
+	/** The original passage, when `text` is reworded to stand on its own (#108). */
+	source_text?: string | null;
+	/** Keys of the source's roles it applies to; empty or null for all. */
+	roles?: string[] | null;
 }
 
 /**
@@ -404,7 +424,16 @@ export function upsertRequirements(
 		const exists = findRequirement(app, String(src.id), ref);
 		if (!exists && !s(i.title)) throw new ValidationError(`${ref} is new and needs a title.`);
 		const item: FileRequirement = { id: ref };
-		for (const key of ['title', 'text', 'parent', 'locator', 'language', 'translation_of'] as const) {
+		for (const key of [
+			'title',
+			'text',
+			'source_text',
+			'roles',
+			'parent',
+			'locator',
+			'language',
+			'translation_of'
+		] as const) {
 			if (key in i) (item as Record<string, unknown>)[key] = i[key];
 		}
 		return item;

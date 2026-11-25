@@ -54,6 +54,99 @@ function pick(input: Record<string, unknown>, existing: Row | null, col: string,
 	return key in input || !existing;
 }
 
+// ---- Roles (#108): whom a source addresses, and which of them a requirement applies to
+
+export interface SourceRole {
+	key: string;
+	label: string;
+	description: string | null;
+}
+
+const ROLE_KEY = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+const MAX_ROLES = 20;
+
+function asList(v: unknown): unknown[] | null {
+	if (v == null || v === '') return null;
+	if (Array.isArray(v)) return v;
+	if (typeof v === 'string') {
+		try {
+			const parsed = JSON.parse(v);
+			if (Array.isArray(parsed)) return parsed;
+		} catch {
+			// a plain string is one item
+		}
+		return v.split(',');
+	}
+	throw new ValidationError('Roles must be a list.', { roles: 'A list' });
+}
+
+/** A key from a label: "Essential entity" becomes "essential-entity". */
+export function roleKey(label: string): string {
+	return label
+		.normalize('NFKD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 32)
+		.replace(/-+$/, '');
+}
+
+/** A source's roles, checked, as stored JSON (null for none). */
+export function cleanSourceRoles(v: unknown): string | null {
+	const list = asList(v);
+	if (!list || list.length === 0) return null;
+	if (list.length > MAX_ROLES)
+		throw new ValidationError(`At most ${MAX_ROLES} roles.`, { roles: 'Too many' });
+	const seen = new Set<string>();
+	const roles: SourceRole[] = list.map((item) => {
+		const o = (typeof item === 'object' && item ? item : { label: item }) as Record<string, unknown>;
+		const label = str(o.label);
+		if (!label) throw new ValidationError('Each role needs a label.', { roles: 'Label required' });
+		const key = str(o.key).toLowerCase() || roleKey(label);
+		if (!ROLE_KEY.test(key))
+			throw new ValidationError(`Role key "${key}": lower-case letters, digits and dashes.`, {
+				roles: 'Invalid key'
+			});
+		if (seen.has(key)) throw new ValidationError(`Role "${key}" is listed twice.`, { roles: 'Duplicate' });
+		seen.add(key);
+		return { key, label: label.slice(0, 120), description: optional(o.description)?.slice(0, 500) ?? null };
+	});
+	return JSON.stringify(roles);
+}
+
+export function parseSourceRoles(v: unknown): SourceRole[] {
+	if (!v) return [];
+	try {
+		const list = JSON.parse(String(v));
+		return Array.isArray(list) ? (list as SourceRole[]) : [];
+	} catch {
+		return [];
+	}
+}
+
+/** A requirement's role keys, as stored JSON (null: it applies to everyone the source addresses). */
+export function cleanRequirementRoles(v: unknown): string | null {
+	const list = asList(v);
+	const keys = [...new Set((list ?? []).map((k) => str(k).toLowerCase()).filter(Boolean))];
+	return keys.length ? JSON.stringify(keys) : null;
+}
+
+export function parseRequirementRoles(v: unknown): string[] {
+	if (!v) return [];
+	try {
+		const list = JSON.parse(String(v));
+		return Array.isArray(list) ? list.map(String) : [];
+	} catch {
+		return [];
+	}
+}
+
+const rolesLine = (v: unknown) =>
+	parseSourceRoles(v)
+		.map((r) => r.label)
+		.join(', ');
+
 // ---- Entity definitions
 
 export const sourceDefinition: EntityDefinition = registerEntity({
@@ -70,16 +163,23 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 		'artifact_id',
 		'engagement_id',
 		'document_id',
-		'status'
+		'status',
+		'roles'
 	],
-	detailColumns: ['code', 'type', 'title', 'edition', 'language', 'licence_note'],
+	detailColumns: ['code', 'type', 'title', 'edition', 'language', 'licence_note', 'roles'],
 	fieldLabels: {
 		code: 'Code',
 		type: 'Type',
 		title: 'Title',
 		edition: 'Edition',
 		language: 'Language',
-		licence_note: 'Licence note'
+		licence_note: 'Licence note',
+		roles: 'Applies to'
+	},
+	formatValue(column, value) {
+		if (column === 'roles') return rolesLine(value);
+		if (column === 'deleted') return Number(value) === 1 ? 'Yes' : 'No';
+		return value == null ? '' : String(value);
 	},
 	parse(input, existing) {
 		const out: Row = {};
@@ -115,6 +215,7 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 			if (st !== 'proposed' && st !== 'active') throw new ValidationError('A source is proposed or active.');
 			out.status = st;
 		}
+		if ('roles' in input) out.roles = cleanSourceRoles(input.roles);
 		return out;
 	},
 	/** A source AI creates is proposed (#69); publishing it is a person's decision. */
@@ -150,9 +251,10 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		'recheck',
 		'recheck_passage',
 		'recheck_proposal',
-		'recheck_reason'
+		'recheck_reason',
+		'roles'
 	],
-	detailColumns: ['ref_code', 'title', 'text', 'language', 'locator', 'status'],
+	detailColumns: ['ref_code', 'title', 'text', 'quote', 'roles', 'language', 'locator', 'status'],
 	fieldLabels: {
 		ref_code: 'Reference',
 		title: 'Title',
@@ -163,7 +265,8 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		parent_id: 'Parent',
 		origin: 'Origin',
 		status: 'Status',
-		quote: 'Quote',
+		quote: 'Source text',
+		roles: 'Applies to',
 		position: 'Position',
 		recheck: 'Recheck',
 		recheck_passage: 'Closest passage in the new version',
@@ -174,6 +277,7 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 		if (column === 'language') return String(value ?? '').toUpperCase();
 		if (column === 'status') return value === 'proposed' ? 'Proposed' : 'Confirmed';
 		if (column === 'deleted') return Number(value) === 1 ? 'Yes' : 'No';
+		if (column === 'roles') return parseRequirementRoles(value).join(', ') || 'All';
 		return value == null ? '' : String(value);
 	},
 	parse(input, existing) {
@@ -228,10 +332,24 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 			out.recheck_proposal = v;
 		}
 		if ('recheck_reason' in input) out.recheck_reason = optional(input.recheck_reason);
+		if ('roles' in input) out.roles = cleanRequirementRoles(input.roles);
 		return out;
 	},
 	afterWrite(app, _actor, row) {
 		const id = String(row.id);
+		const keys = parseRequirementRoles(row.roles);
+		if (keys.length) {
+			const source = app.sqlite
+				.prepare('SELECT roles FROM source WHERE id = ?')
+				.get(String(row.source_id)) as { roles: string | null } | undefined;
+			const known = new Set(parseSourceRoles(source?.roles).map((r) => r.key));
+			const unknown = keys.filter((k) => !known.has(k));
+			if (unknown.length)
+				throw new ValidationError(
+					`Unknown role ${unknown.map((k) => `"${k}"`).join(', ')}: use the keys of the source's roles${known.size ? ` (${[...known].join(', ')})` : ', which has none yet'}.`,
+					{ roles: 'Unknown role' }
+				);
+		}
 		if (row.parent_id) {
 			const parent = readRow(app, requirementDefinition, String(row.parent_id));
 			if (!parent || parent.source_id !== row.source_id)
@@ -267,7 +385,8 @@ export const requirementDefinition: EntityDefinition = registerEntity({
 	search: (row) => ({
 		ref_code: row.ref_code as string,
 		title: row.title as string,
-		text: row.text as string | null
+		text: row.text as string | null,
+		quote: row.quote as string | null
 	}),
 	label: (row) => String(row.title),
 	refLine: (row) => `${row.ref_code} · ${String(row.language).toUpperCase()}`
@@ -431,6 +550,10 @@ export interface Source {
 	edition: string | null;
 	language: string;
 	licenceNote: string | null;
+	/** Whom the source addresses (#108), in the document's order. */
+	roles: SourceRole[];
+	/** The library document it was imported from. */
+	documentId: string | null;
 	status: 'proposed' | 'active';
 	version: number;
 	requirementCount: number;
@@ -446,6 +569,10 @@ export interface Requirement {
 	refCode: string;
 	title: string;
 	text: string | null;
+	/** The original passage when `text` is reworded to stand on its own (#108); internal: the quote. */
+	sourceText: string | null;
+	/** Keys of the source's roles it applies to; empty means all. */
+	roles: string[];
 	language: string;
 	translationOf: string | null;
 	parentId: string | null;
@@ -469,6 +596,8 @@ function toRequirement(r: Row): Requirement {
 		refCode: String(r.ref_code),
 		title: String(r.title),
 		text: (r.text as string | null) ?? null,
+		sourceText: (r.quote as string | null) ?? null,
+		roles: parseRequirementRoles(r.roles),
 		language: String(r.language),
 		translationOf: (r.translation_of as string | null) ?? null,
 		parentId: (r.parent_id as string | null) ?? null,
@@ -504,6 +633,8 @@ export function listSources(app: AppDatabase, options: { includeProposed?: boole
 		edition: (r.edition as string | null) ?? null,
 		language: String(r.language),
 		licenceNote: (r.licence_note as string | null) ?? null,
+		roles: parseSourceRoles(r.roles),
+		documentId: (r.document_id as string | null) ?? null,
 		status: r.status === 'proposed' ? 'proposed' : 'active',
 		version: Number(r.current_version),
 		requirementCount: Number(r.n),
@@ -864,6 +995,8 @@ export function upsertSources(
 		licence_note?: string;
 		/** The library document it is imported from. */
 		document_id?: string;
+		/** Whom it addresses (#108); replaces the list when given. */
+		roles?: { key?: string; label: string; description?: string | null }[] | null;
 	}[]
 ): { id: string; code: string; status: string; result: 'created' | 'updated' | 'unchanged' }[] {
 	return app.sqlite.transaction(() =>
@@ -875,7 +1008,7 @@ export function upsertSources(
 			if (row?.auditee_id)
 				throw new ValidationError(`${code} is an internal source; it is changed through its engagement.`);
 			const data: Record<string, unknown> = { code, title: s.title };
-			for (const key of ['type', 'edition', 'language', 'licence_note', 'document_id'] as const)
+			for (const key of ['type', 'edition', 'language', 'licence_note', 'document_id', 'roles'] as const)
 				if (s[key] !== undefined) data[key] = s[key];
 			if (!row) {
 				const created = createEntity(app, actor, sourceDefinition, {

@@ -75,12 +75,16 @@ export const actions: Actions = {
 	edit: async ({ request, locals }) => {
 		const data = await request.formData();
 		const id = String(data.get('id'));
-		const values = formValues(data, ['ref_code', 'title', 'text', 'parent']);
+		const values = formValues(data, ['ref_code', 'title', 'text', 'parent', 'source_text']);
+		const roles = data.has('roles_given') ? data.getAll('roles').map(String) : undefined;
 		try {
-			const r = editRequirement(appDatabase(), uiActor(locals), id, Number(data.get('base_version')), values);
+			const r = editRequirement(appDatabase(), uiActor(locals), id, Number(data.get('base_version')), {
+				...values,
+				roles
+			});
 			return ok(`${r.refCode} saved. It is still proposed until you accept it.`);
 		} catch (e) {
-			return formFailure(e, { ...values, id, action: 'edit' });
+			return formFailure(e, { ...values, ...(roles ? { roles: roles.join(',') } : {}), id, action: 'edit' });
 		}
 	},
 	acceptSelected: async ({ request, locals }) => selectedReview(request, locals, 'accept'),

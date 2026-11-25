@@ -365,10 +365,21 @@ export function editRequirement(
 	actor: Actor,
 	id: string,
 	baseVersion: number,
-	input: { ref_code?: string; title?: string; text?: string | null; parent?: string | null }
+	input: {
+		ref_code?: string;
+		title?: string;
+		text?: string | null;
+		parent?: string | null;
+		/** The original passage beside a reworded text (#108). */
+		source_text?: string | null;
+		/** Keys of the source's roles; empty for all. */
+		roles?: string[];
+	}
 ): Requirement {
 	const row = sharedRequirement(app, id);
 	const data: Record<string, unknown> = {};
+	if (input.source_text !== undefined) data.quote = input.source_text || null;
+	if (input.roles !== undefined) data.roles = input.roles;
 	if (input.ref_code !== undefined) data.ref_code = input.ref_code;
 	if (input.title !== undefined) data.title = input.title;
 	if (input.text !== undefined) data.text = input.text || null;

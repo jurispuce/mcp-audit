@@ -219,6 +219,28 @@ const SCRIPTS = {
 			];
 		}
 	],
+	// Whom the document applies to (#108): two roles, no requirements.
+	library_roles: [
+		({ ctx }) => [toolCall('get_library_document_text', { document_id: ctx.document_id })],
+		({ ctx }) => [
+			toolCall('upsert_sources', {
+				sources: [
+					{
+						code: ctx.source_code || 'fake-extract',
+						title: ctx.source_title || 'Extracted by the test model',
+						type: 'law',
+						language: 'en',
+						document_id: ctx.document_id,
+						roles: [
+							{ key: 'essential', label: 'Essential entity', description: 'As defined in point 1.' },
+							{ key: 'important', label: 'Important entity', description: 'As defined in point 2.' }
+						]
+					}
+				]
+			})
+		]
+	],
+	// With chosen roles (#108), only their requirements, each with its role and the original passage.
 	library_extract: [
 		({ ctx }) => [toolCall('get_library_document_text', { document_id: ctx.document_id })],
 		({ ctx }) => [
@@ -234,15 +256,25 @@ const SCRIPTS = {
 				]
 			})
 		],
-		({ ctx }) => [
-			toolCall('upsert_requirements', {
-				source: ctx.source_code || 'fake-extract',
-				requirements: [
-					{ ref: '1', title: 'Manage information security risk' },
-					{ ref: '2', title: 'Test backups regularly' }
-				]
-			})
-		]
+		({ ctx }) => {
+			const chosen = ctx.roles ? ctx.roles.split(',') : null;
+			const all = [
+				{
+					ref: '1',
+					title: 'Manage information security risk',
+					...(chosen
+						? {
+								roles: ['essential'],
+								text: 'The entity identifies, assesses and treats the risks to its network and information systems.',
+								source_text: 'The entity manages the risks referred to in point 3.'
+							}
+						: {})
+				},
+				{ ref: '2', title: 'Test backups regularly', ...(chosen ? { roles: ['important'] } : {}) }
+			];
+			const requirements = chosen ? all.filter((r) => r.roles.some((k) => chosen.includes(k))) : all;
+			return [toolCall('upsert_requirements', { source: ctx.source_code || 'fake-extract', requirements })];
+		}
 	],
 	library_mapping: [
 		({ ctx }) => [

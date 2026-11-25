@@ -2,6 +2,7 @@ import type { AppDatabase } from '#lib/db/client.ts';
 import { indexText } from '#lib/db/fts.ts';
 import { extractText, MAX_FILE_BYTES, pageOf, sha256, storeFile, type UploadFile } from './artifacts';
 import { NotFoundError, ValidationError } from './errors';
+import { parseSourceRoles, type SourceRole } from './library';
 import { registerEntity } from './registry';
 import { createEntity, readRow, updateEntity, type Actor, type EntityDefinition, type Row } from './write';
 
@@ -54,7 +55,7 @@ export interface LibraryDocument {
 	textStatus: string;
 	textLength: number;
 	/** Sources imported from this document. */
-	sources: { id: string; code: string; title: string; status: string }[];
+	sources: { id: string; code: string; title: string; status: string; roles: SourceRole[] }[];
 	version: number;
 	createdAt: Date;
 }
@@ -68,9 +69,16 @@ export function listLibraryDocuments(app: AppDatabase): LibraryDocument[] {
 		.all() as Row[];
 	const sources = app.sqlite
 		.prepare(
-			'SELECT id, code, title, status, document_id FROM source WHERE deleted = 0 AND document_id IS NOT NULL'
+			'SELECT id, code, title, status, roles, document_id FROM source WHERE deleted = 0 AND document_id IS NOT NULL'
 		)
-		.all() as { id: string; code: string; title: string; status: string; document_id: string }[];
+		.all() as {
+		id: string;
+		code: string;
+		title: string;
+		status: string;
+		roles: string | null;
+		document_id: string;
+	}[];
 	return rows.map((r) => ({
 		id: String(r.id),
 		title: String(r.title || r.filename),
@@ -80,7 +88,9 @@ export function listLibraryDocuments(app: AppDatabase): LibraryDocument[] {
 		size: Number(r.size),
 		textStatus: String(r.text_status),
 		textLength: Number(r.text_length ?? 0),
-		sources: sources.filter((s) => s.document_id === r.id).map(({ document_id: _d, ...s }) => s),
+		sources: sources
+			.filter((s) => s.document_id === r.id)
+			.map(({ document_id: _d, roles, ...s }) => ({ ...s, roles: parseSourceRoles(roles) })),
 		version: Number(r.current_version),
 		createdAt: new Date(Number(r.created_at))
 	}));

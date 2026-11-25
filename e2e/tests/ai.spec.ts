@@ -191,6 +191,57 @@ test('library: extract requirements from a document and propose a mapping, landi
 	await expect(page.getByTestId('mapping-summary')).toContainText('1 proposed link waits');
 });
 
+test('library: find the roles, import only the chosen one, and see the role and source text on each tile (#108)', async ({
+	page
+}) => {
+	const code = unique('rolelaw')
+		.toLowerCase()
+		.replace(/[^a-z0-9-]/g, '');
+	await page.goto('/library/import');
+	await page.getByLabel('Upload a law or standard').setInputFiles({
+		name: `${code}.pdf`,
+		mimeType: 'application/pdf',
+		buffer: Buffer.from(
+			makePdf(['1. Essential entities manage risks.', '2. Important entities test backups.'])
+		)
+	});
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByTestId(`libdoc-${code}.pdf`)).toBeVisible();
+	await page.getByLabel('Library document', { exact: true }).selectOption({ label: code });
+	await page.getByLabel('Source code for the import').fill(code);
+	await expect(page.getByTestId('import-no-roles')).toContainText('No roles found for this document yet');
+
+	await runAction(page, 'library_roles', 'Find roles');
+	const roles = page.getByTestId('import-roles');
+	await expect(roles.getByRole('checkbox', { name: 'All roles' })).toBeChecked();
+	await expect(roles.getByRole('checkbox', { name: /Essential entity/ })).toBeChecked();
+	await roles.getByRole('checkbox', { name: /Important entity/ }).uncheck();
+	await expect(roles.getByRole('checkbox', { name: 'All roles' })).not.toBeChecked();
+	await runAction(page, 'library_extract', 'Extract requirements');
+
+	await page.goto('/library/review');
+	const source = page.locator('article', { hasText: code }).first();
+	await expect(source.getByTestId('source-roles')).toContainText(
+		'Applies to: Essential entity, Important entity.'
+	);
+	await source.getByText('Preview and edit the requirements').click();
+	const tile = source.getByTestId('proposed-1');
+	await expect(tile.getByTestId('applies-to')).toHaveText(/Essential entity/);
+	await expect(source.getByTestId('proposed-2')).toHaveCount(0);
+	await expect(tile).toContainText('The entity identifies, assesses and treats the risks');
+	await tile.getByTestId('source-text').locator('summary').click();
+	await expect(tile.getByTestId('source-text')).toContainText(
+		'The entity manages the risks referred to in point 3.'
+	);
+
+	// The auditor widens it to both roles while reviewing.
+	await tile.getByRole('button', { name: 'Edit 1' }).click();
+	await tile.getByRole('checkbox', { name: 'Important entity' }).check();
+	await tile.getByRole('button', { name: 'Save changes' }).click();
+	await expect(page.getByRole('status')).toContainText('1 saved');
+	await expect(tile.getByTestId('applies-to')).toContainText('Important entity');
+});
+
 test('Risks: upload the auditee register, extract its risks with AI, accept them together (#78)', async ({
 	page
 }) => {

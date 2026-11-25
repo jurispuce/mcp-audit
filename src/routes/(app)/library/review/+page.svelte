@@ -65,6 +65,12 @@
 						? ` ${s.licenceNote}.`
 						: ''}
 				</p>
+				{#if s.roles.length}
+					<div class="au-row au-wrap" data-testid="source-roles">
+						<p class="au-muted">Applies to: {s.roles.map((r) => r.label).join(', ')}.</p>
+						<a class="au-linkbtn" href="/library/import">Extract for other roles on Import</a>
+					</div>
+				{/if}
 				<div class="au-row au-wrap">
 					<form method="POST" action="?/publish" use:enhance={keep}>
 						<input type="hidden" name="source" value={s.id} /><button
@@ -99,6 +105,7 @@
 						{#each s.rows as r (r.id)}
 							<ProposedRequirement
 								{r}
+								sourceRoles={s.roles}
 								depth={r.depth}
 								error={errorFor(r.id)}
 								selectForm={proposedIds(s.rows).length > 1 ? `select-${s.id}` : null}
@@ -138,6 +145,7 @@
 				{#each c.requirements as r (r.id)}
 					<ProposedRequirement
 						{r}
+						sourceRoles={c.source.roles}
 						before={r.before}
 						by={r.by}
 						error={errorFor(r.id)}

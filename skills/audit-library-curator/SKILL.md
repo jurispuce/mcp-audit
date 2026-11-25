@@ -18,7 +18,7 @@ Read `references/audit-rules.md` first. This skill works through the mcp-audit c
 | Improve guidance | `set_guidance` with the full new text; pass `base_version` from `get_requirement` so you never overwrite a newer edit |
 | Refine general criteria | `set_criteria` with `mode: add`, or `mode: replace` with the complete list when the auditor agreed to the whole set |
 | Map sources | first ask the auditor which existing source to map to; then `link_requirements` in batches, each with a one-line reason in `note` (start it with "Low confidence:" where it applies) |
-| Import a law or standard | `list_library_documents`, then `get_library_document_text` page by page (or the file the auditor gave you); then `upsert_sources` with `document_id`, then `upsert_requirements` with the reference as written, a short title, the text (licence permitting) and `parent` |
+| Import a law or standard | `list_library_documents`, then `get_library_document_text` page by page (or the file the auditor gave you); find the roles and ask which to import; then `upsert_sources` with `document_id` and `roles`, then `upsert_requirements` with the reference as written, a short title, a self-contained text, `source_text`, `roles` and `parent` (see step 4) |
 | Update a standard | `upsert_requirements` (only the fields you give change) |
 | See what waits for review | `list_library_proposals` |
 | Undo, explain a change | `get_history`, `revert`, `add_comment` |
@@ -57,7 +57,15 @@ Show the auditor each change as before and after, per requirement, and write onl
 
 ### 4. Import a source
 
-Keep the source's own structure through `parent` and its exact reference codes and wording. For public law store the text; for licensed standards, codes and titles unless the auditor confirms the licence allows more.
+Keep the source's own structure through `parent` and its exact reference codes. For public law store the text; for licensed standards, codes and titles unless the auditor confirms the licence allows more.
+
+**Roles first.** Read the subject matter, scope and definitions, and find whom the document sets auditable obligations for: for example essential and important entities, providers and deployers, or an entity and its IS auditor. Leave out the state, supervisors and other authorities unless the document is about them. Record the roles on the source with `upsert_sources` (`roles`: a short key, the label as the document names it, and a one-line description citing the definition). Then show the auditor the roles and ask which to import: all, one or several. A document with one addressee needs no question.
+
+**Auditable requirements only.** Import a provision only when it obliges a chosen role to do, have or document something an auditor can check with evidence. Skip recitals, scope and definitions, duties of the state or supervisors, delegations, penalties, amendments to other acts and transitional and final provisions. Keep a chapter or article as a heading (reference and title, no text) only where it holds auditable requirements. Tell the auditor what you skipped, by group, with the reason.
+
+**One role per requirement where it matters.** Give each requirement `roles`, the keys it applies to; leave it out when it applies to all of them. Where one provision sets different obligations for different roles, make one requirement per role, with the role key in square brackets after the reference, for example `Art. 5(1) [important]`.
+
+**Self-contained text.** Write `text` so it can be audited without the document at hand: spell out what a reference to another provision says, as far as the audit needs it, in the document's language and terms, adding nothing it does not say. Put the original passage in `source_text` whenever the text differs from it. Name references to other acts rather than copying them in.
 
 ### 5. Cross-source mapping
 

@@ -159,6 +159,11 @@ export const source = sqliteTable(
 		engagementId: text('engagement_id'),
 		/** The library document a shared source was imported from (#72). */
 		documentId: text('document_id'),
+		/**
+		 * Whom the source addresses (#108): JSON `[{ key, label, description }]` in the document's order,
+		 * for example essential and important entities. Null when not determined.
+		 */
+		roles: text('roles'),
 		/** A source AI created waits as proposed until a person publishes it (#69). */
 		status: text('status', { enum: ['proposed', 'active'] })
 			.notNull()
@@ -184,8 +189,14 @@ export const requirement = sqliteTable(
 		parentId: text('parent_id'),
 		origin: text('origin', { enum: ['external', 'internal'] }).notNull(),
 		status: text('status', { enum: ['proposed', 'confirmed'] }).notNull(),
-		/** Internal requirements: short quote in the original language. */
+		/**
+		 * The original passage, in the original language. Internal requirements: a short quote. Library
+		 * requirements (#108): the source text beside a self-contained `text`; null when `text` is the
+		 * original wording.
+		 */
 		quote: text('quote'),
+		/** Keys of the source's roles this requirement applies to (#108), as JSON; null means all of them. */
+		roles: text('roles'),
 		/** Order among siblings, as in the source. */
 		position: integer('position').notNull().default(0),
 		/**
