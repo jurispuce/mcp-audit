@@ -682,6 +682,39 @@ export function requirementTree(app: AppDatabase, sourceId: string): TreeNode[] 
 	return roots;
 }
 
+// ---- Selecting by role (#110)
+
+/** Whether a requirement applies to a role of its source. No role chosen, or no roles on it: yes. */
+export function appliesToRole(roles: readonly string[], role: string | null | undefined): boolean {
+	return !role || roles.length === 0 || roles.includes(role);
+}
+
+/** A role key of a source, checked: refused when the source has no such role. */
+export function assertSourceRole(source: { code: string; roles: SourceRole[] }, role: string): string {
+	const key = role.trim().toLowerCase();
+	if (!source.roles.some((r) => r.key === key))
+		throw new ValidationError(
+			source.roles.length
+				? `${source.code} has no role "${key}". Its roles: ${source.roles.map((r) => r.key).join(', ')}.`
+				: `${source.code} has no roles to choose from.`,
+			{ role: 'Unknown role' }
+		);
+	return key;
+}
+
+/** The ids of a source's requirements that apply to a role (all of them without one), in source order. */
+export function requirementIdsFor(app: AppDatabase, sourceId: string, role?: string | null): string[] {
+	const out: string[] = [];
+	const walk = (nodes: TreeNode[]) => {
+		for (const n of nodes) {
+			if (appliesToRole(n.roles, role)) out.push(n.id);
+			walk(n.children);
+		}
+	};
+	walk(requirementTree(app, sourceId));
+	return out;
+}
+
 export interface RequirementHit extends Requirement {
 	snippet: string;
 }
@@ -690,7 +723,14 @@ export interface RequirementHit extends Requirement {
 export function searchRequirements(
 	app: AppDatabase,
 	query: string,
-	options: { sourceId?: string; limit?: number; excludeId?: string; includeProposed?: boolean } = {}
+	options: {
+		sourceId?: string;
+		limit?: number;
+		excludeId?: string;
+		includeProposed?: boolean;
+		/** Only requirements that apply to this role of their source (#110). */
+		role?: string;
+	} = {}
 ): RequirementHit[] {
 	const hits = searchText(app.sqlite, query, { entityTypes: ['requirement'], limit: 200 });
 	const best = new Map<string, string>();
@@ -708,7 +748,10 @@ export function searchRequirements(
 		.map((id) => byId.get(id))
 		.filter(
 			(r): r is Requirement =>
-				!!r && (!options.sourceId || r.sourceId === options.sourceId) && r.id !== options.excludeId
+				!!r &&
+				(!options.sourceId || r.sourceId === options.sourceId) &&
+				r.id !== options.excludeId &&
+				appliesToRole(r.roles, options.role)
 		)
 		.slice(0, options.limit ?? 50)
 		.map((r) => ({ ...r, snippet: best.get(r.id) ?? '' }));
