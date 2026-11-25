@@ -55,6 +55,11 @@ export const AI_ACTIONS = {
 		skill: 'audit-assurance-review',
 		scope: 'engagement'
 	},
+	library_roles: {
+		label: 'Find whom a library document applies to',
+		skill: 'audit-library-curator',
+		scope: 'library'
+	},
 	library_extract: {
 		label: 'Extract requirements from a library document',
 		skill: 'audit-library-curator',

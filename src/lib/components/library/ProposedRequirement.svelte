@@ -8,10 +8,16 @@
 			refCode: string;
 			title: string;
 			text: string | null;
+			/** The original passage, when the text is reworded to stand on its own (#108). */
+			sourceText?: string | null;
+			/** Keys of the source's roles it applies to; empty means all. */
+			roles?: string[];
 			version: number;
 			status: string;
 			parentRef?: string | null;
 		};
+		/** Whom the source addresses, to show and choose the requirement's roles. */
+		sourceRoles?: { key: string; label: string }[];
 		before?: { title: string; text: string | null; refCode: string } | null;
 		depth?: number;
 		by?: string | null;
@@ -23,6 +29,7 @@
 	let {
 		r,
 		before = null,
+		sourceRoles = [],
 		depth = 0,
 		by = null,
 		error = null,
@@ -45,6 +52,11 @@
 			if (result.type === 'success') editing = false;
 		};
 	const p = $derived(`pr-${r.id.slice(0, 8)}`);
+	const roleLabel = (key: string) => sourceRoles.find((x) => x.key === key)?.label ?? key;
+	const appliesTo = $derived(
+		sourceRoles.length ? (r.roles?.length ? r.roles.map(roleLabel) : ['All roles']) : []
+	);
+	const editRoles = $derived(v.roles !== undefined ? v.roles.split(',').filter(Boolean) : (r.roles ?? []));
 	/** Each row is its own component, so the shared selection is updated item by item (bind:group would only see this row). */
 	function toggle(id: string, on: boolean) {
 		selected = on ? [...selected.filter((x) => x !== id), id] : selected.filter((x) => x !== id);
@@ -66,6 +78,12 @@
 			<h3 class="au-item__title">
 				<a class="au-titlelink" href="?item=requirement:{r.id}" data-sveltekit-reset="false">{r.title}</a>
 			</h3>
+			{#if appliesTo.length}
+				<p class="au-role-chips" data-testid="applies-to">
+					<span class="au-visually-hidden">Applies to:</span>
+					{#each appliesTo as label (label)}<span class="au-badge au-badge--neutral">{label}</span>{/each}
+				</p>
+			{/if}
 		</div>
 		{#if r.status === 'proposed'}<span class="au-badge au-badge--ai">Proposed</span>{:else}<span
 				class="au-badge au-badge--ok">Accepted</span
@@ -80,6 +98,12 @@
 		</p>
 	{:else if r.text}
 		<p class="au-item__body au-item__body--full">{r.text}</p>
+	{/if}
+	{#if r.sourceText}
+		<details class="au-sourcetext" data-testid="source-text">
+			<summary>Source text</summary>
+			<p>{r.sourceText}</p>
+		</details>
 	{/if}
 	{#if error?.message}<div class="au-alert au-alert--danger" role="alert">{error.message}</div>{/if}
 	<div class="au-item__actions">
@@ -120,6 +144,32 @@
 						rows="8"
 						defaultValue={v.text ?? r.text ?? ''}></textarea>
 				</div>
+				<div class="au-field au-wide">
+					<label for="{p}-source">Source text (the original passage, when the text is reworded)</label
+					><textarea
+						id="{p}-source"
+						name="source_text"
+						class="au-textarea--grow"
+						rows="4"
+						defaultValue={v.source_text ?? r.sourceText ?? ''}></textarea>
+				</div>
+				{#if sourceRoles.length}
+					<fieldset class="au-roles au-wide">
+						<legend>Applies to (none ticked: all roles)</legend>
+						<input type="hidden" name="roles_given" value="1" />
+						{#each sourceRoles as role (role.key)}
+							<label class="au-check-row"
+								><input
+									type="checkbox"
+									name="roles"
+									value={role.key}
+									checked={editRoles.includes(role.key)}
+								/>
+								{role.label}</label
+							>
+						{/each}
+					</fieldset>
+				{/if}
 				<div class="au-row au-wide">
 					<button class="au-btn au-btn--primary au-btn--small" type="submit">Save changes</button>
 					<button class="au-btn au-btn--ghost au-btn--small" type="button" onclick={() => (editing = false)}

@@ -118,4 +118,58 @@ describe('library import and mapping through MCP (#72, #74)', () => {
 			{ code: 'mk397', status: 'active' }
 		]);
 	});
+
+	it("records whom a source applies to, and each requirement's roles and source text (#108)", async () => {
+		await call('upsert_sources', {
+			sources: [
+				{
+					code: 'nkdl',
+					title: 'Nacionālās kiberdrošības likums',
+					type: 'law',
+					language: 'lv',
+					roles: [
+						{ key: 'essential', label: 'Būtiskais subjekts', description: 'Defined in Art. 1(3).' },
+						{ label: 'Svarīgais subjekts' }
+					]
+				}
+			]
+		});
+		expect(getSourceByCode(app, 'nkdl')!.roles).toEqual([
+			{ key: 'essential', label: 'Būtiskais subjekts', description: 'Defined in Art. 1(3).' },
+			{ key: 'svarigais-subjekts', label: 'Svarīgais subjekts', description: null }
+		]);
+		const added = await call('upsert_requirements', {
+			source: 'nkdl',
+			requirements: [
+				{ ref: '11', title: 'Pārvaldības pasākumi' },
+				{
+					ref: '11(1) [essential]',
+					title: 'Riska pārvaldība',
+					parent: '11',
+					roles: ['essential'],
+					text: 'Subjekts nosaka, novērtē un apstrādā riskus tīklu un informācijas sistēmām.',
+					source_text: 'Subjekts pārvalda šā likuma 10. pantā minētos riskus.'
+				}
+			]
+		});
+		expect(added.isError).toBe(false);
+		const refused = await call('upsert_requirements', {
+			source: 'nkdl',
+			requirements: [{ ref: '12', title: 'X', roles: ['provider'] }]
+		});
+		expect(refused.text).toContain('Unknown role "provider"');
+
+		const r = (await call('get_requirement', { requirement: 'nkdl:11(1) [essential]' })).data;
+		expect(r).toMatchObject({
+			source_text: 'Subjekts pārvalda šā likuma 10. pantā minētos riskus.',
+			applies_to: [{ key: 'essential', label: 'Būtiskais subjekts' }]
+		});
+		expect((await call('get_requirement', { requirement: 'nkdl:11' })).data.applies_to).toBe(
+			'all roles of the source'
+		);
+		expect((await call('get_requirement', { requirement: 'nis2:Art. 21' })).data.applies_to).toBeNull();
+		// The original passage is searchable too.
+		const hit = (await call('search_requirements', { query: 'minētos', source: 'nkdl' })).data.results;
+		expect(hit).toMatchObject([{ ref: '11(1) [essential]', roles: ['essential'] }]);
+	});
 });

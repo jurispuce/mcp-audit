@@ -4,7 +4,7 @@ import { AI_ACTIONS, isAiAction, resolveModel, type AiAction } from './ai-settin
 import { getEngagement } from './engagements';
 import { ForbiddenError, NotFoundError, ValidationError } from './errors';
 import { isHuman } from './guards';
-import { getSourceByCode } from './library';
+import { getSourceByCode, listSources } from './library';
 import { assertLibraryDocument } from './library-documents';
 import { getEvent } from './planning';
 import { isAdmin } from './users';
@@ -36,6 +36,8 @@ export interface JobContext {
 	to_source?: string;
 	/** extract_internal on a new version: the sections with no internal requirement yet. */
 	sections?: string;
+	/** library_extract (#108): the keys of the source's roles to import, comma-separated. */
+	roles?: string;
 }
 
 export interface Job {
@@ -120,6 +122,35 @@ function str(v: unknown): string | undefined {
 	return typeof v === 'string' && v.trim() ? v.trim() : undefined;
 }
 
+/**
+ * The roles chosen for an extraction (#108): keys of the roles found for the source being imported
+ * (by its code, else the source made from the document). Returned comma-separated, in source order.
+ */
+function chosenRoles(app: AppDatabase, ctx: JobContext, input: string): string {
+	const wanted = new Set(
+		input
+			.split(',')
+			.map((k) => k.trim().toLowerCase())
+			.filter(Boolean)
+	);
+	const source =
+		(ctx.source_code ? getSourceByCode(app, ctx.source_code) : null) ??
+		listSources(app, { includeProposed: true }).find((s) => s.documentId === ctx.document_id) ??
+		null;
+	const known = source?.roles ?? [];
+	const unknown = [...wanted].filter((k) => !known.some((r) => r.key === k));
+	if (!known.length || unknown.length)
+		throw new ValidationError(
+			known.length
+				? `Unknown role ${unknown.join(', ')}. Choose among the roles found for the source.`
+				: 'Find the roles first: no roles are recorded for this source yet.'
+		);
+	return known
+		.filter((r) => wanted.has(r.key))
+		.map((r) => r.key)
+		.join(',');
+}
+
 /** Check what an action needs to know and return only those fields. */
 function validContext(app: AppDatabase, action: AiAction, input: Record<string, unknown>): JobContext {
 	const ctx: JobContext = {};
@@ -162,6 +193,7 @@ function validContext(app: AppDatabase, action: AiAction, input: Record<string, 
 		case 'propose_findings':
 			if (str(input.unit_id)) ctx.unit_id = str(input.unit_id);
 			break;
+		case 'library_roles':
 		case 'library_extract': {
 			const doc = str(input.document_id);
 			if (!doc) throw new ValidationError('Choose the library document to extract from.');
@@ -177,6 +209,8 @@ function validContext(app: AppDatabase, action: AiAction, input: Record<string, 
 				ctx.source_code = code;
 			}
 			if (str(input.source_title)) ctx.source_title = str(input.source_title)!.slice(0, 200);
+			if (action === 'library_extract' && str(input.roles))
+				ctx.roles = chosenRoles(app, ctx, str(input.roles)!);
 			break;
 		}
 		case 'library_mapping': {

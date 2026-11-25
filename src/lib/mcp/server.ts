@@ -153,6 +153,7 @@ export function createMcpServer(
 						source: r.sourceCode,
 						language: r.language,
 						status: r.status,
+						...(r.roles.length ? { roles: r.roles } : {}),
 						snippet: r.snippet
 					}))
 				};
@@ -176,11 +177,18 @@ export function createMcpServer(
 				const parent = r.parentId ? getRequirement(app, r.parentId) : null;
 				const children = findChildren(app, r.sourceId, r.id);
 				const guidance = getGuidance(app, id);
+				const sourceRoles = getSourceByCode(app, r.sourceCode)?.roles ?? [];
 				return {
 					id: r.id,
 					ref: r.refCode,
 					title: r.title,
 					text: r.text,
+					source_text: r.sourceText,
+					applies_to: r.roles.length
+						? r.roles.map((k) => ({ key: k, label: sourceRoles.find((x) => x.key === k)?.label ?? k }))
+						: sourceRoles.length
+							? 'all roles of the source'
+							: null,
 					language: r.language,
 					source: { code: r.sourceCode, title: r.sourceTitle },
 					status: r.status,
@@ -237,7 +245,31 @@ export function createMcpServer(
 							document_id: z
 								.string()
 								.optional()
-								.describe('The library document it is imported from (list_library_documents).')
+								.describe('The library document it is imported from (list_library_documents).'),
+							roles: z
+								.array(
+									z.object({
+										key: z
+											.string()
+											.optional()
+											.describe(
+												'Short lower-case key, for example "essential". Made from the label when left out.'
+											),
+										label: z
+											.string()
+											.min(1)
+											.describe('As the document names the addressee, for example "Essential entity".'),
+										description: z
+											.string()
+											.optional()
+											.describe('One line: who this is, citing the definition.')
+									})
+								)
+								.max(20)
+								.optional()
+								.describe(
+									'Whom the source addresses, when it sets obligations for more than one kind of entity or person. Replaces the list.'
+								)
 						})
 					)
 					.min(1)
@@ -267,7 +299,25 @@ export function createMcpServer(
 						z.object({
 							ref: z.string().min(1).describe('Reference code, for example "Art. 21(2)(b)" or "A.5.15".'),
 							title: z.string().optional().describe('Required for a new requirement.'),
-							text: z.string().nullable().optional(),
+							text: z
+								.string()
+								.nullable()
+								.optional()
+								.describe(
+									'What is required, self-contained for an audit: references to other provisions spelled out as far as the audit needs them.'
+								),
+							source_text: z
+								.string()
+								.nullable()
+								.optional()
+								.describe(
+									'The original passage as written, when text is reworded; omit when text is the original wording.'
+								),
+							roles: z
+								.array(z.string())
+								.nullable()
+								.optional()
+								.describe("Keys of the source's roles it applies to; omit or empty for all of them."),
 							parent: z
 								.string()
 								.nullable()

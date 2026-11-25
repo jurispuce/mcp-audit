@@ -80,7 +80,7 @@ test('upload a law, import it through Claude, review, edit and publish it, then 
 	await r51.getByRole('button', { name: 'Edit 5.1' }).click();
 	// Title and text use the card's full width, so a long text can be read while editing.
 	const titleBox = (await r51.getByLabel('Title').boundingBox())!;
-	const textBox = (await r51.getByLabel('Text').boundingBox())!;
+	const textBox = (await r51.getByLabel('Text', { exact: true }).boundingBox())!;
 	expect(Math.abs(textBox.width - titleBox.width)).toBeLessThan(2);
 	expect(textBox.y).toBeGreaterThan(titleBox.y);
 	await r51.getByLabel('Title').fill('Risk assessment once a year');

@@ -441,3 +441,17 @@ details.au-item > summary { cursor: pointer; min-height: var(--touch-target); di
 .au-guidebar__actions form { margin: 0; }
 .au-guidebar { position: relative; }
 @media (max-width: 599px) { .au-guidebar__actions form { position: absolute; top: var(--space-2); right: var(--space-2); } }
+/* Library import in steps (#108): find roles, choose them, extract */
+.au-import-steps { margin: 0; padding-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
+.au-import-steps > li { display: flex; flex-direction: column; gap: var(--space-2); }
+.au-import-steps > li > p { margin: 0; }
+.au-roles { margin: 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); display: flex; flex-direction: column; gap: var(--space-1); }
+.au-roles legend { padding: 0 var(--space-1); }
+.au-roles__role { align-items: flex-start; padding-top: var(--space-2); }
+.au-roles__role > span { display: flex; flex-direction: column; }
+.au-roles__desc { font-size: 13px; line-height: 18px; }
+/* Roles a requirement applies to, and its source text (#108) */
+.au-role-chips { margin: var(--space-1) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.au-sourcetext { position: relative; z-index: 1; margin: 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--border-strong); background: var(--surface-sunken); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.au-sourcetext summary { cursor: pointer; min-height: var(--touch-target); display: flex; align-items: center; font: 600 13px/18px var(--font-sans); color: var(--ink-muted); }
+.au-sourcetext p { margin: var(--space-1) 0 0; white-space: pre-line; }

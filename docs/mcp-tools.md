@@ -7,7 +7,7 @@ About 47 tools, grouped by phase. Write tools accept several items per call.
 | Group | Tools | Purpose |
 | --- | --- | --- |
 | Orientation | list_engagements, get_engagement_overview | Overview returns phase progress, counts and what is missing next. |
-| Library | search_requirements, get_requirement, upsert_sources, upsert_requirements, link_requirements, set_guidance, set_criteria | get_requirement returns text with links, guidance and criteria. Sources, requirements and links written by AI are proposed until reviewed. |
+| Library | search_requirements, get_requirement, upsert_sources, upsert_requirements, link_requirements, set_guidance, set_criteria | get_requirement returns text with links, guidance and criteria, the source text and whom it applies to. upsert_sources takes `roles`; upsert_requirements takes `roles` (keys of the source's roles) and `source_text` (#108). Sources, requirements and links written by AI are proposed until reviewed. |
 | Library import | list_library_documents, get_library_document_text, list_library_proposals | Read the laws and standards uploaded on Library, Import, and see what waits on Library, Review and Mapping. |
 | Set-up | select_requirements, upsert_scopes, set_scope_handling, upsert_people, upsert_risks, record_soa, get_soa_check | set_scope_handling regenerates assessment units. upsert_people takes roles; name and email are optional. Risks written by AI are proposed and set no criticality until the auditor accepts them (#78). record_soa stores the lines of an ISO/IEC 27001 or 27701 Statement of Applicability; get_soa_check reports conflicts with the audit scope (excluded or not listed); keeping or removing a conflicting requirement is the auditor's, in the app (#81). |
 | Artifacts | list_artifacts, get_artifact_text, register_artifact | Text is returned in pages with locators. register_artifact stores text or a transcript, including one fetched from a third-party MCP server, or records a mentioned document. With `replaces`, the text is a new version of that document: the internal requirements taken from the old version move to it, and each quote is checked against the new text (found: unchanged; not found: needs review, with the closest passage). Written through MCP, each of those changes is a proposal. `replaces` may also name a document of an earlier engagement whose internal requirements are carried over: they are copied into this engagement under the same INT codes and checked the same way, and carry-over then takes the newest version. |
@@ -62,7 +62,8 @@ Five engagement buttons and two library buttons, each running the matching skill
 | Draft plan | Plan, Events | audit-plan-builder | Proposed events and planned evidence |
 | Process event materials | Event screen | audit-event-debrief | Proposed evidence links, statuses, draft report |
 | Propose finding(s) | Findings | audit-assurance-review | Proposed findings with rationale |
-| Extract requirements | Library, Import | audit-library-curator | A proposed source with its requirements, reviewed on Library, Review |
+| Find roles | Library, Import | audit-library-curator | A proposed source with whom the document applies to, for the auditor to choose from (#108) |
+| Extract requirements | Library, Import | audit-library-curator | The auditable requirements for the roles chosen, self-contained, with the original passage as source text, reviewed on Library, Review |
 | Propose mapping | Library, Mapping | audit-library-curator | Proposed links to the chosen source, reviewed on Library, Mapping |
 
 How it works:

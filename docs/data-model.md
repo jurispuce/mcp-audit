@@ -35,8 +35,8 @@ erDiagram
 
 | Entity | Key fields | Notes |
 | --- | --- | --- |
-| Source | type (law, standard, internal document), title, edition, language, licence_note, auditee_id, artifact_id | auditee_id is empty for external sources. Internal sources belong to one auditee and never appear in another client's engagement. |
-| Requirement | source_id, ref_code, title, text, language, translation_of, locator, parent_id, origin (external, internal), status (proposed, confirmed) | ref_code such as "A.5.15". parent_id gives the tree. Internal requirements also carry a short `quote` in the original language. |
+| Source | type (law, standard, internal document), title, edition, language, licence_note, auditee_id, artifact_id, roles | auditee_id is empty for external sources. Internal sources belong to one auditee and never appear in another client's engagement. `roles` (#108) lists whom the source addresses, as `{ key, label, description }` in the document's order, for example essential and important entities. |
+| Requirement | source_id, ref_code, title, text, language, translation_of, locator, parent_id, origin (external, internal), status (proposed, confirmed), quote, roles | ref_code such as "A.5.15". parent_id gives the tree. `quote` is the original passage: for internal requirements a short quote; for library requirements (#108) the source text beside a `text` reworded to stand on its own (empty when `text` is the original wording). `roles` (#108) are the keys of the source's roles it applies to; empty means all. |
 | RequirementLink | from_id, to_id, type, coverage, note | Directional. Types: details, explains, implements, equivalent, conflicts. `coverage` (full, partial) applies to implements. |
 | Guidance | requirement_id, body | The auditor's "how to audit this". Versioned separately. |
 | Criterion | requirement_id, engagement_id, text, expected_evidence | engagement_id empty means general. |

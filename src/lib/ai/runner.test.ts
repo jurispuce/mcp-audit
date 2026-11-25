@@ -21,7 +21,7 @@ import type { Actor } from '#lib/domain/write.ts';
 import { fakeLlmFetch } from '../../../e2e/fake-llm.mjs';
 import { makePdf } from '../../../tests/fixtures/make-docs';
 import type { FetchLike } from './llm';
-import { ACTION_TOOLS, cancelJob, skillInstructions, startJob } from './runner';
+import { ACTION_TOOLS, cancelJob, skillInstructions, startJob, taskText } from './runner';
 
 let app: AppDatabase;
 let dir: string;
@@ -144,6 +144,66 @@ describe('AI job runner (#64)', () => {
 		expect(from.map((j) => j.action)).toEqual(['library_mapping', 'library_extract']);
 		const links = linksOf(app, findRequirement(app, src.id, '1')!.id);
 		expect(links.some((l) => l.status === 'proposed')).toBe(true);
+	});
+
+	it('finds the roles of a library document, then extracts only the chosen ones with their source text (#108)', async () => {
+		const [up] = await uploadLibraryDocuments(app, human, dir, [
+			{ name: 'law.pdf', type: 'application/pdf', bytes: makePdf(['1. Risk management', '2. Backups']) }
+		]);
+		const doc = up!.document!.id;
+		const tryExtract = (roles: string) =>
+			startJob(
+				app,
+				human,
+				{ action: 'library_extract', context: { document_id: doc, source_code: 'rolelaw', roles } },
+				deps
+			);
+		expect(() => tryExtract('essential')).toThrow('Find the roles first');
+
+		const roles = startJob(
+			app,
+			human,
+			{ action: 'library_roles', context: { document_id: doc, source_code: 'rolelaw' } },
+			deps
+		);
+		await roles.done;
+		expect(getJob(app, roles.job.id).status).toBe('succeeded');
+		const found = getSourceByCode(app, 'rolelaw')!;
+		expect(found).toMatchObject({ status: 'proposed', requirementCount: 0 });
+		expect(found.roles.map((r) => r.label)).toEqual(['Essential entity', 'Important entity']);
+
+		expect(() => tryExtract('essential,provider')).toThrow('Unknown role provider');
+		const { job, done } = tryExtract('essential');
+		expect(job.context.roles).toBe('essential');
+		await done;
+		expect(getJob(app, job.id).status).toBe('succeeded');
+		const src = getSourceByCode(app, 'rolelaw')!;
+		expect(src.requirementCount).toBe(1);
+		expect(findRequirement(app, src.id, '1')).toMatchObject({
+			roles: ['essential'],
+			sourceText: 'The entity manages the risks referred to in point 3.'
+		});
+	});
+
+	it('tells the model which roles to import, and how to make requirements auditable and self-contained (#108)', () => {
+		const roles = taskText('library_roles', { document_id: 'd1', source_code: 'nkdl' });
+		expect(roles).toContain('Do not add requirements');
+		expect(roles).toContain('upsert_sources');
+		const some = taskText('library_extract', { document_id: 'd1', roles: 'essential,important' });
+		expect(some).toContain(
+			'Import only the requirements for these roles of the source: essential, important'
+		);
+		expect(some).toContain('one requirement per role');
+		const all = taskText('library_extract', { document_id: 'd1' });
+		expect(all).toContain('If the source lists roles');
+		for (const t of [some, all]) {
+			expect(t).toContain('self-contained text');
+			expect(t).toContain('source_text');
+			expect(t).toContain('Skip provisions that are not auditable');
+		}
+		expect(ACTION_TOOLS.library_roles).not.toContain('upsert_requirements');
+		expect(skillInstructions(app, 'library_roles')).toContain('## Find roles');
+		expect(skillInstructions(app, 'library_extract')).toContain('Auditable only');
 	});
 
 	it('refuses when AI is off, no model is set, the person is not a person, or it is already running', async () => {

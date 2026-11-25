@@ -32,13 +32,33 @@
 		document.getElementById('extract-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	};
 	const doc = $derived(data.documents.find((d) => d.id === documentId) ?? null);
+	/** The source made from the chosen document (the one with the typed code, else the first), and its roles (#108). */
+	const docSource = $derived(
+		doc ? (doc.sources.find((s) => s.code === code.trim().toLowerCase()) ?? doc.sources[0] ?? null) : null
+	);
+	const roles = $derived(docSource?.roles ?? []);
+	let chosen = $state<string[]>([]);
+	// A new set of roles starts with all of them ticked.
+	let rolesKey = '';
+	$effect.pre(() => {
+		const k = `${docSource?.id ?? ''}:${roles.map((r) => r.key).join(',')}`;
+		if (k !== rolesKey) {
+			rolesKey = k;
+			chosen = roles.map((r) => r.key);
+		}
+	});
+	const allChosen = $derived(roles.length > 0 && chosen.length === roles.length);
+	const sourceCode = $derived(code.trim().toLowerCase() || docSource?.code || undefined);
 	const targetSource = $derived(data.sources.find((s) => s.code === target) ?? null);
 	$effect.pre(() => {
 		if (!documentId && data.documents.length) documentId = result?.uploaded ?? data.documents[0]!.id;
 	});
 	const codeOrPlaceholder = $derived(code.trim().toLowerCase() || '<code>');
 	const importPrompt = $derived(
-		`Use the mcp-audit tools to import requirements into the library. Read the library document "${doc?.title ?? '<document>'}"${doc ? ` (id ${doc.id})` : ''} with get_library_document_text, page by page. Create the source with upsert_sources (code "${codeOrPlaceholder}", ${title.trim() ? `title "${title.trim()}"` : 'the title'}, type law or standard, the language, a licence note, and document_id${doc ? ` "${doc.id}"` : ''}). Then add every requirement with upsert_requirements: the reference as written (article, paragraph, point, control), a short title, the text, and the parent reference so the structure is kept. For a licensed standard store codes and titles only unless I confirm the licence allows the text. Everything you write is proposed; tell me how many requirements wait on Library, Review.`
+		`Use the mcp-audit tools and the audit-library-curator skill to import requirements into the library. Read the library document "${doc?.title ?? '<document>'}"${doc ? ` (id ${doc.id})` : ''} with get_library_document_text, page by page.
+1. Find whom it sets auditable obligations for (its roles, such as essential and important entities). Create the source with upsert_sources (code "${codeOrPlaceholder}", ${title.trim() ? `title "${title.trim()}"` : 'the title'}, type law or standard, the language, a licence note, document_id${doc ? ` "${doc.id}"` : ''} and the roles), then show me the roles and ask which to import.
+2. For the roles I choose, add the auditable requirements only with upsert_requirements: the reference as written, a short title, a self-contained text (spell out what references to other provisions say, as far as the audit needs), the original passage as source_text where the text is reworded, the roles each applies to, and the parent heading so the structure is kept. Skip recitals, definitions, duties of authorities and final provisions, and tell me what you skipped.
+For a licensed standard store codes and titles only unless I confirm the licence allows the text. Everything you write is proposed; tell me how many requirements wait on Library, Review.`
 	);
 	const mapPrompt = $derived(
 		`Use the mcp-audit tools to map source "${codeOrPlaceholder}" to "${targetSource?.title ?? '<target>'}" (source ${targetSource?.code ?? '<target code>'}). Read both with search_requirements and get_requirement. For each requirement of ${codeOrPlaceholder}, propose links to ${targetSource?.code ?? '<target code>'} with link_requirements: implements (with coverage full or partial), details, explains or equivalent, and a one-line reason in note; start the reason with "Low confidence:" where it applies. Do not force a link where the texts only share a topic. Tell me how many links wait on Library, Mapping.`
@@ -168,21 +188,92 @@
 	<div class="au-import-ways">
 		<div class="au-item au-stack">
 			<h3 class="au-section__title">With the in-app AI</h3>
-			<p class="au-muted">
-				Reads the chosen document and writes a proposed source with its requirements, keeping the document's
-				structure and reference codes.
-			</p>
-			<AiAction
-				action="library_extract"
-				label="Extract requirements"
-				context={{
-					document_id: documentId,
-					source_code: code.trim().toLowerCase() || undefined,
-					source_title: title.trim() || undefined
-				}}
-				validate={() =>
-					documentId ? null : 'Upload the document in step 1 and choose it above, then extract.'}
-			/>
+			<ol class="au-import-steps">
+				<li>
+					<p>
+						<strong>Find roles.</strong>
+						<span class="au-muted"
+							>Reads whom the document applies to, such as essential and important entities, and creates the
+							proposed source.</span
+						>
+					</p>
+					<AiAction
+						action="library_roles"
+						label={roles.length ? 'Find roles again' : 'Find roles'}
+						context={{
+							document_id: documentId,
+							source_code: sourceCode,
+							source_title: title.trim() || undefined
+						}}
+						validate={() =>
+							documentId ? null : 'Upload the document in step 1 and choose it above, then find its roles.'}
+					/>
+				</li>
+				<li>
+					{#if roles.length}
+						<fieldset class="au-roles" data-testid="import-roles">
+							<legend><strong>Choose the roles to import.</strong></legend>
+							<label class="au-check-row au-roles__role">
+								<input
+									type="checkbox"
+									checked={allChosen}
+									indeterminate={chosen.length > 0 && !allChosen}
+									onchange={(e) => (chosen = e.currentTarget.checked ? roles.map((r) => r.key) : [])}
+								/>
+								<span>All roles</span>
+							</label>
+							{#each roles as r (r.key)}
+								<label class="au-check-row au-roles__role">
+									<input type="checkbox" value={r.key} bind:group={chosen} />
+									<span
+										>{r.label}{#if r.description}<span class="au-muted au-roles__desc">{r.description}</span
+											>{/if}</span
+									>
+								</label>
+							{/each}
+						</fieldset>
+					{:else}
+						<p>
+							<strong>Choose the roles to import.</strong>
+							<span class="au-muted" data-testid="import-no-roles"
+								>{doc
+									? 'No roles found for this document yet. Find them first; extracting without roles imports what applies to everyone it addresses.'
+									: 'Choose a document first.'}</span
+							>
+						</p>
+					{/if}
+				</li>
+				<li>
+					<p>
+						<strong>Extract requirements.</strong>
+						<span class="au-muted"
+							>Only auditable requirements{roles.length ? ' for the roles ticked' : ''}, each worded to stand
+							on its own, with the original passage kept beside it.</span
+						>
+					</p>
+					<AiAction
+						action="library_extract"
+						label="Extract requirements"
+						context={{
+							document_id: documentId,
+							source_code: sourceCode,
+							source_title: title.trim() || undefined,
+							roles: roles.length
+								? roles
+										.filter((r) => chosen.includes(r.key))
+										.map((r) => r.key)
+										.join(',')
+								: undefined
+						}}
+						validate={() =>
+							!documentId
+								? 'Upload the document in step 1 and choose it above, then extract.'
+								: roles.length && !chosen.length
+									? 'Tick at least one role to import.'
+									: null}
+					/>
+				</li>
+			</ol>
 		</div>
 		<div class="au-item au-stack">
 			<h3 class="au-section__title">With Claude Desktop or Claude Code</h3>
