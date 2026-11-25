@@ -1,29 +1,9 @@
 import { redirect } from '@sveltejs/kit';
-import { listEngagements } from '#lib/domain/engagements.ts';
-import { engagementOverview } from '#lib/domain/overview.ts';
 import { setWelcomed } from '#lib/domain/users.ts';
 import { appDatabase } from '#lib/server/db.ts';
 import { formFailure, uiActor } from '#lib/server/http.ts';
-import type { Actions, PageServerLoad } from './$types';
-
-export const load: PageServerLoad = async ({ parent }) => {
-	const app = appDatabase();
-	const { engagement } = await parent();
-	return {
-		// Progress per step comes from the same phase checklist as Home.
-		phases: engagement
-			? engagementOverview(app, engagement.id).phases.map((p) => ({
-					number: p.number,
-					title: p.title,
-					fact: p.fact,
-					done: p.done
-				}))
-			: null,
-		engagements: engagement
-			? []
-			: listEngagements(app).map((e) => ({ id: e.id, name: e.name, auditeeName: e.auditeeName }))
-	};
-};
+import { GUIDE_COOKIE } from '#lib/server/guide-bar.ts';
+import type { Actions } from './$types';
 
 /** A path inside this app, or the engagements screen. */
 function localPath(value: FormDataEntryValue | null): string {
@@ -47,6 +27,12 @@ export const actions: Actions = {
 			303,
 			to === 'guide' ? `/guide${q}` : to === 'connect' ? `/guide/connect${q}` : localPath(data.get('back'))
 		);
+	},
+	/** The guide bar's Close (#106): the bar goes, and stays gone until Go in the guide turns it on again. */
+	closeBar: async ({ request, cookies }) => {
+		const data = await request.formData();
+		cookies.delete(GUIDE_COOKIE, { path: '/' });
+		redirect(303, localPath(data.get('back')));
 	},
 	showWelcome: async ({ locals }) => {
 		try {

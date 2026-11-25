@@ -38,7 +38,9 @@ Copy these as the route table. `:e` is the engagement id.
 /library/mapping               Map one source to another; review proposed links, map by hand
 /library/import                Library documents, import with Claude, YAML import
 /settings                      Account, Users and AI (admins), Access tokens
-/guide                         Audit steps; ?e=<engagement> shows its progress and opens its screens
+/guide                         Audit steps: the video and the five steps; ?e=<engagement> shows its progress
+/guide/<step>                  One step (setup, rules, plan, run, conclude); ?e= gives each action Go to its screen
+/e/:e/<screen>?guide=<step>    A screen opened from the guide: turns on the guide bar for that step
 /guide/connect                 Connect your AI: Claude, ChatGPT, Claude Code, Claude Desktop
 /guide/download                The guide as one self-contained HTML file
 /e/:e                          Home (phase checklist)

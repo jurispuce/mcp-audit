@@ -16,7 +16,8 @@ export const GET: RequestHandler = ({ url }) => {
 			mcpUrl: `${instance.origin}/mcp`,
 			signIn: signInMethod(),
 			instanceName: instance.name,
-			version: APP_VERSION
+			version: APP_VERSION,
+			video: { mode: 'embed' }
 		}),
 		{
 			headers: {

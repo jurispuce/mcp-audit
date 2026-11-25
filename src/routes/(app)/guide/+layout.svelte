@@ -7,6 +7,9 @@
 		{ path: '/guide', label: 'Audit steps' },
 		{ path: '/guide/connect', label: 'Connect your AI' }
 	]);
+	// A step's page (/guide/plan) belongs to Audit steps; Connect your AI is its own tab.
+	const active = (path: string) =>
+		path === '/guide' ? page.url.pathname !== '/guide/connect' : page.url.pathname === path;
 </script>
 
 <section class="au-screen">
@@ -16,7 +19,7 @@
 	</header>
 	<nav class="au-tabbar" aria-label="Guide">
 		{#each tabs as t (t.path)}
-			<a href="{t.path}{q}" aria-current={page.url.pathname === t.path ? 'page' : undefined}>{t.label}</a>
+			<a href="{t.path}{q}" aria-current={active(t.path) ? 'page' : undefined}>{t.label}</a>
 		{/each}
 	</nav>
 	{@render children()}

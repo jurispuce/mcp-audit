@@ -7,6 +7,8 @@ import {
 	PREPARE,
 	RULES,
 	STEPS,
+	VIDEO,
+	clock,
 	connectorReady,
 	desktopConfig,
 	fill,
@@ -33,6 +35,19 @@ export interface StandaloneOptions {
 	version?: string;
 	/** Link the app's typefaces from Google Fonts. Off for the download, which must work offline. */
 	webFonts?: boolean;
+	/**
+	 * The explainer video (#106), served by the instance: `embed` shows it in the page (the public
+	 * page, on the instance itself); `link` points to it at `origin` (the downloaded file).
+	 */
+	video?: { mode: 'embed' } | { mode: 'link'; origin: string };
+}
+
+function videoBlock(video: StandaloneOptions['video']): string {
+	if (!video) return '';
+	if (video.mode === 'embed')
+		return `<figure class="video"><video controls preload="metadata" playsinline poster="${VIDEO.poster}" src="${VIDEO.src}" aria-label="${esc(VIDEO.title)}"><track kind="captions" srclang="en" label="English" src="${VIDEO.captions}" default></video><figcaption>${esc(VIDEO.title)}, ${clock(VIDEO.duration)}, with captions.</figcaption></figure>`;
+	const href = `${video.origin.replace(/\/+$/, '')}${VIDEO.src}`;
+	return `<p class="where">Watch the video, ${esc(VIDEO.title)} (${clock(VIDEO.duration)}): <a href="${esc(href)}">${esc(href)}</a></p>`;
 }
 
 export const GUIDE_TITLE = 'mcp-audit Guide';
@@ -79,6 +94,9 @@ h4, .label { font: 600 .75rem/1.5 var(--sans); letter-spacing: .07em; text-trans
 a { color: var(--accent) }
 .eyebrow { font: 500 .8125rem/1.5 var(--mono); color: var(--muted) }
 .lede { font-size: 1.125rem; max-width: 62ch; color: var(--muted) }
+.video { margin: 0; display: flex; flex-direction: column; gap: .5rem; max-width: 48rem }
+.video video { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; background: var(--sunken); border: 1px solid var(--border); border-radius: 12px }
+.video figcaption { font-size: .8125rem; color: var(--muted) }
 .top, section { display: flex; flex-direction: column; gap: 1rem; min-width: 0 }
 .rules, .cards { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .75rem }
 .rules li, .cards li { display: flex; flex-direction: column; gap: .25rem; padding: .75rem 1rem; background: var(--surface); border-left: 3px solid var(--accent); border-radius: 4px; min-width: 0 }
@@ -140,7 +158,7 @@ function stepPanel(s: (typeof STEPS)[number]): string {
 	return `<article class="panel" id="step-${s.key}" data-step="${s.key}" role="tabpanel" aria-labelledby="tab-${s.key}">
 <header><span class="num">${s.number}</span><h3>${esc(s.title)}</h3><p>${esc(s.summary)}</p></header>
 <div class="cols">
-<div><h4>You do</h4><ol>${s.you.map((l) => `<li>${text(l)}</li>`).join('')}</ol></div>
+<div><h4>You do</h4><ol>${s.you.map((a) => `<li>${text(a.text)}</li>`).join('')}</ol></div>
 <div class="ai"><h4>AI can</h4><ul>${s.ai.map((l) => `<li>${text(l)}</li>`).join('')}</ul></div>
 </div>
 <dl class="facts"><dt class="label">You decide</dt><dd>${esc(s.decide)}</dd><dt class="label">Done when</dt><dd>${esc(s.done)}</dd></dl>
@@ -268,12 +286,13 @@ function script(): string {
 }
 
 /**
- * The policy a browser needs to show the guide as a page (#100): its own styles, and the one script
- * it carries, named by its hash. Nothing is loaded from anywhere.
+ * The policy a browser needs to show the guide as a page (#100): its own styles, the one script it
+ * carries, named by its hash, and the explainer video from the instance itself (#106). Nothing is
+ * loaded from anywhere else.
  */
 export function guidePolicy(): string {
 	const hash = createHash('sha256').update(script()).digest('base64');
-	return `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+	return `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; img-src 'self' data:; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 }
 
 export function guideParts(opts: StandaloneOptions = {}): { head: string; body: string } {
@@ -289,6 +308,7 @@ ${opts.webFonts ? '<link rel="stylesheet" href="https://fonts.googleapis.com/css
 <h1>Run an audit in five steps</h1>
 <p class="lede">${esc(GUIDE_INTRO)}</p>
 <ul class="rules">${RULES.map((r) => `<li><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></li>`).join('')}</ul>
+${videoBlock(opts.video)}
 </header>
 
 <details class="prepare"><summary>${esc(PREPARE.title)} <span class="badge">${esc(PREPARE.summary)}</span></summary>

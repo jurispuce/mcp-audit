@@ -55,7 +55,7 @@ test('a new person is welcomed once: any choice dismisses it, and the guide can 
 	await other.close();
 });
 
-test('the guide shows the five steps with the engagement’s progress and opens its screens', async ({
+test('the guide is an overview, a video and a page per step, with the engagement’s progress', async ({
 	page
 }) => {
 	await loginAs(page, ADMIN);
@@ -72,30 +72,57 @@ test('the guide shows the five steps with the engagement’s progress and opens 
 	await expect(page.getByTestId('guide-progress')).toContainText(/: \d of 5 steps done/);
 	await expect(page.getByRole('list', { name: 'Three rules' }).getByRole('listitem')).toHaveCount(3);
 
-	const steps = page.locator('details[data-testid^="guide-step-"]');
-	await expect(steps).toHaveCount(5);
-	// Exactly one step is next, and it is the one that is open.
-	const current = page.locator('details[data-state="current"]');
-	await expect(current).toHaveCount(1);
-	await expect(current).toHaveAttribute('open', '');
-	await expect(current.locator('summary')).toContainText('Next');
-	await expect(current.getByRole('list', { name: /^Progress in / })).toBeVisible();
+	// The video, served by the instance, with captions and chapters.
+	const video = page.getByTestId('explainer-video');
+	await expect(video.locator('video')).toHaveAttribute('src', '/media/explainer.mp4');
+	await expect(video.locator('track[kind="captions"]')).toHaveAttribute('src', '/media/explainer.en.vtt');
+	await expect(video.getByRole('list', { name: 'Chapters' }).getByRole('listitem')).toHaveCount(9);
 
+	// Five tiles; exactly one is next, and Continue opens it.
+	const tiles = page.locator('[data-testid^="guide-tile-"]');
+	await expect(tiles).toHaveCount(5);
+	await expect(page.locator('[data-testid^="guide-tile-"][data-state="current"]')).toHaveCount(1);
+	const next = (await page
+		.locator('[data-testid^="guide-tile-"][data-state="current"]')
+		.getAttribute('data-testid'))!.replace('guide-tile-', '');
+	await page.getByTestId('guide-continue').click();
+	await expect(page).toHaveURL(`/guide/${next}?e=${e.id}`);
+	await expect(page.getByTestId(`guide-step-${next}`)).toHaveAttribute('data-state', 'current');
+
+	// Any step opens directly; the stepper and Previous/Next move along.
+	await page.goto(`/guide/plan?e=${e.id}`);
 	const plan = page.getByTestId('guide-step-plan');
-	if ((await plan.getAttribute('open')) === null) await plan.locator('summary').click();
-	await expect(plan).toContainText('You decide');
+	await expect(plan.getByRole('heading', { name: 'Plan' })).toBeVisible();
+	await expect(plan).toContainText('Step 3 of 5');
 	await expect(plan).toContainText('No AI can change the plan status.');
-	await plan.getByRole('link', { name: 'Open Plan, Coverage' }).click();
-	await expect(page).toHaveURL(`/e/${e.id}/plan/coverage`);
+	await expect(plan.getByRole('list', { name: /^Progress in / })).toBeVisible();
+	const stepper = page.getByTestId('guide-stepper');
+	await expect(stepper.getByRole('link')).toHaveCount(5);
+	await expect(stepper.getByRole('link', { name: /Plan/ })).toHaveAttribute('aria-current', 'step');
+	// The step's own part of the video.
+	await expect(plan.getByTestId('explainer-video')).toHaveAttribute('data-chapter', 'plan');
+	await expect(plan.locator('video')).toHaveAttribute('src', '/media/explainer.mp4#t=71.2,89.9');
+	await page.getByRole('link', { name: 'Next: 4. Run' }).click();
+	await expect(page).toHaveURL(`/guide/run?e=${e.id}`);
+	await page.getByRole('link', { name: 'Previous: 3. Plan' }).click();
+	await page
+		.getByTestId('guide-stepper')
+		.getByRole('link', { name: /Conclude/ })
+		.click();
+	await expect(page).toHaveURL(`/guide/conclude?e=${e.id}`);
+	expect((await page.goto('/guide/nonsense'))!.status()).toBe(404);
 
-	// Without an engagement: a choice of engagements, the first step open, no progress.
-	await page.goto('/guide');
-	await expect(page.getByRole('navigation', { name: 'Engagement' })).toBeVisible();
-	await expect(page.getByTestId('guide-step-setup')).toHaveAttribute('open', '');
-	await expect(page.getByTestId('guide-step-setup')).toContainText('Screens: Set-up, Requirements');
-	await expect(page.locator('details[data-state="current"]')).toHaveCount(0);
+	// Without an engagement: the steps read the same, and a step asks which engagement to work in.
+	await page.goto('/guide/plan');
+	await expect(page.getByTestId('guide-choose')).toContainText('Choose the engagement to work in');
+	await expect(page.getByTestId('guide-step-plan').getByRole('link', { name: /^Go:/ })).toHaveCount(0);
+	await page.getByTestId('guide-choose').getByRole('link', { name: e.name }).click();
+	await expect(page).toHaveURL(`/guide/plan?e=${e.id}`);
+	await expect(page.getByTestId('guide-step-plan').getByRole('link', { name: /^Go:/ }).first()).toBeVisible();
 
 	// Before you start: admin items link for an admin only.
+	await page.goto('/guide');
+	await expect(page.getByTestId('guide-start')).toHaveAttribute('href', '/guide/setup');
 	await page.getByTestId('guide-prepare').locator('summary').click();
 	await expect(
 		page.getByTestId('guide-prepare').getByRole('link', { name: 'Settings, Users' })
@@ -108,6 +135,73 @@ test('the guide shows the five steps with the engagement’s progress and opens 
 		0
 	);
 	await expect(page.getByTestId('guide-prepare').getByRole('link', { name: 'Library' })).toBeVisible();
+});
+
+test('Go from a step opens its screen with the guide bar, which stays until it is closed', async ({
+	page
+}) => {
+	await loginAs(page, ADMIN);
+	const e = await sampleCopy(page.request);
+	await page.goto(`/guide/plan?e=${e.id}`);
+	const actions = page.getByTestId('guide-action');
+	await expect(actions).toHaveCount(4);
+	await actions.nth(2).getByRole('link', { name: 'Go: Plan, Coverage' }).click();
+	await expect(page).toHaveURL(`/e/${e.id}/plan/coverage?guide=plan`);
+
+	const bar = page.getByTestId('guide-bar');
+	await expect(bar).toHaveAttribute('data-step', 'plan');
+	await expect(bar).toContainText('Guide · Step 3 of 5');
+	await expect(bar.getByTestId('guide-bar-hint')).toContainText('make sure every requirement is in an event');
+	// The next action is on another screen.
+	await bar.getByTestId('guide-bar-next').click();
+	await expect(page).toHaveURL(`/e/${e.id}/plan/document`);
+	await expect(page.getByTestId('guide-bar').getByTestId('guide-bar-hint')).toContainText(
+		'Export the audit plan'
+	);
+
+	// It stays on the engagement's other screens, and after a reload, with what belongs there.
+	await page.goto(`/e/${e.id}/plan/events`);
+	await expect(page.getByTestId('guide-bar-hint')).toContainText('Enter the planning inputs first');
+	await page.goto(`/e/${e.id}/findings/matrix`);
+	await expect(page.getByTestId('guide-bar-hint')).toContainText("This step's work is on Plan, Events");
+	await page.reload();
+	await expect(page.getByTestId('guide-bar')).toBeVisible();
+
+	// Back to the guide, at the step.
+	await page.getByTestId('guide-bar').getByRole('link', { name: 'Back to the guide' }).click();
+	await expect(page).toHaveURL(`/guide/plan?e=${e.id}`);
+
+	// Another engagement has no bar: it belongs to the one it was started in.
+	const other = await sampleCopy(page.request);
+	await page.goto(`/e/${other.id}/plan/coverage`);
+	await expect(page.getByTestId('guide-bar')).toHaveCount(0);
+
+	// Another step's Go switches it; Close removes it, and it stays away.
+	await page.goto(`/guide/run?e=${e.id}`);
+	await page.getByRole('link', { name: 'Go: Run, Today' }).click();
+	await expect(page.getByTestId('guide-bar')).toHaveAttribute('data-step', 'run');
+	await page.getByTestId('guide-bar').getByRole('button', { name: 'Close the guide bar' }).click();
+	await expect(page.getByTestId('guide-bar')).toHaveCount(0);
+	await expect(page).toHaveURL(`/e/${e.id}/run/today`);
+	await page.goto(`/e/${e.id}/run/inbox`);
+	await expect(page.getByTestId('guide-bar')).toHaveCount(0);
+});
+
+test('the explainer video and its captions are served by the instance, to anyone', async ({
+	playwright,
+	baseURL
+}) => {
+	const anonymous = await playwright.request.newContext({ baseURL });
+	const video = await anonymous.get('/media/explainer.mp4', { headers: { range: 'bytes=0-1023' } });
+	// Seeking needs ranges.
+	expect(video.status()).toBe(206);
+	expect(video.headers()['content-type']).toBe('video/mp4');
+	expect((await video.body()).length).toBe(1024);
+	const captions = await anonymous.get('/media/explainer.en.vtt');
+	expect(captions.ok()).toBe(true);
+	expect(await captions.text()).toMatch(/^WEBVTT/);
+	expect((await anonymous.get('/media/explainer-poster.jpg')).ok()).toBe(true);
+	await anonymous.dispose();
 });
 
 test('Connect your AI: this instance’s address, one assistant at a time, ChatGPT marked as not verified', async ({
