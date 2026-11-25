@@ -11,7 +11,7 @@ import { createPersonalToken, resolvePersonalToken } from '#lib/domain/auth.ts';
 import { createEngagement, updateEngagement, type Engagement } from '#lib/domain/engagements.ts';
 import { addInternal, listInternal } from '#lib/domain/internal.ts';
 import { getItemHistory } from '#lib/domain/items.ts';
-import { importBuiltInSource } from '#lib/domain/library-import.ts';
+import { importBuiltInSource, importSourceYaml } from '#lib/domain/library-import.ts';
 import { listPeople } from '#lib/domain/people.ts';
 import { acceptRisk } from '#lib/domain/risks.ts';
 import { listAssessmentUnits } from '#lib/domain/selection.ts';
@@ -347,5 +347,49 @@ describe('artifact tools (#43)', () => {
 		expect(
 			(await call('get_history', { entity_type: 'engagement', entity_id: e.id, engagement_id: e.id })).isError
 		).toBe(false);
+	});
+});
+
+describe('selecting by role (#110)', () => {
+	it('selects a whole source, or only what applies to one of its roles, and refuses an unknown role', async () => {
+		importSourceYaml(
+			app,
+			human,
+			`id: nkdl
+title: NKDL
+type: law
+roles:
+  - { key: essential, label: Essential entity }
+  - { key: important, label: Important entity }
+requirements:
+  - { id: "11", title: Measures }
+  - { id: "11(1)", parent: "11", title: Risk management }
+  - { id: "12 [essential]", parent: "11", title: Audit every two years, roles: [essential] }
+  - { id: "12 [important]", parent: "11", title: Audit on request, roles: [important] }
+`
+		);
+		const found = await call('search_requirements', { query: 'audit', source: 'nkdl', role: 'important' });
+		expect(found.data.results.map((r: { ref: string }) => r.ref)).toEqual(['12 [important]']);
+		expect((await call('search_requirements', { query: 'audit', role: 'important' })).text).toContain(
+			'Name the source'
+		);
+
+		const bad = await call('select_requirements', {
+			engagement_id: e.id,
+			select_source: { source: 'nkdl', role: 'provider' }
+		});
+		expect(bad.text).toContain('nkdl has no role "provider". Its roles: essential, important.');
+
+		const sel = await call('select_requirements', {
+			engagement_id: e.id,
+			select_source: { source: 'nkdl', role: 'important' }
+		});
+		expect(sel.data).toMatchObject({ selected: 3, already: 0 });
+		const units = listAssessmentUnits(app, e.id).map((u) => u.refCode);
+		expect(units).toEqual(expect.arrayContaining(['11', '11(1)', '12 [important]']));
+		expect(units).not.toContain('12 [essential]');
+
+		const all = await call('select_requirements', { engagement_id: e.id, select_source: { source: 'nkdl' } });
+		expect(all.data).toMatchObject({ selected: 1, already: 3 });
 	});
 });

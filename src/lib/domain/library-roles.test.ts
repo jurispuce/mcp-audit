@@ -4,7 +4,9 @@ import { createTestDatabase } from '#lib/db/test-db.ts';
 import { ValidationError } from './errors';
 import { getHistory } from './history';
 import {
+	appliesToRole,
 	cleanSourceRoles,
+	requirementIdsFor,
 	findRequirement,
 	getSourceByCode,
 	requirementDefinition,
@@ -144,5 +146,33 @@ describe('requirements with roles and source text (#108)', () => {
 		});
 		publishSource(app, human, src.id);
 		expect(getSourceByCode(app, 'nkdl')!.status).toBe('active');
+	});
+});
+
+describe('which requirements apply to a role (#110)', () => {
+	it('role-specific ones for that role, and shared ones and headings for every role', () => {
+		expect(appliesToRole([], 'important')).toBe(true);
+		expect(appliesToRole(['essential'], null)).toBe(true);
+		expect(appliesToRole(['essential'], 'important')).toBe(false);
+		expect(appliesToRole(['essential', 'important'], 'important')).toBe(true);
+
+		importSourceYaml(app, human, YAML);
+		const src = getSourceByCode(app, 'nkdl')!;
+		const refs = (role: string | null) =>
+			requirementIdsFor(app, src.id, role).map(
+				(id) =>
+					(
+						app.sqlite.prepare('SELECT ref_code FROM requirement WHERE id = ?').get(id) as {
+							ref_code: string;
+						}
+					).ref_code
+			);
+		expect(refs(null)).toEqual(['11', '11(1)', '12(2) [important]']);
+		expect(refs('essential')).toEqual(['11', '11(1)']);
+		expect(refs('important')).toEqual(['11', '11(1)', '12(2) [important]']);
+		expect(searchRequirements(app, 'Ziņošana', { role: 'essential' })).toEqual([]);
+		expect(searchRequirements(app, 'Ziņošana', { role: 'important' }).map((r) => r.refCode)).toEqual([
+			'12(2) [important]'
+		]);
 	});
 });

@@ -32,6 +32,7 @@ Any record opens as an item sheet (right panel on desktop, full screen on a phon
 
 ### Set-up, Requirements
 - Sources with their requirements; select all or individual requirements. Selection pins the library version.
+- A source with roles (#108) has an **Applies to** choice: All roles, or one role, such as important entity. With a role chosen, only the requirements for it (and those for all roles) are listed, and **Select all** takes just those. The choice is kept in the address as `?role.<source code>=<role key>` (#110). Each selected requirement shows the roles it applies to.
 - With multiple scopes: per requirement, "one finding" or "per scope".
 - Confirmed internal requirements listed below with what they implement.
 - *Prototype only:* fixed sample library (NIS 2 Art. 21(2), eleven ISO 27001 Annex A controls), no requirement links, selection not versioned.

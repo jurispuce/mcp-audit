@@ -23,7 +23,12 @@ import {
 	setImplements,
 	updateInternal
 } from '#lib/domain/internal.ts';
-import { resolveRequirementRef } from '#lib/domain/library.ts';
+import {
+	assertSourceRole,
+	listSources,
+	requirementIdsFor,
+	resolveRequirementRef
+} from '#lib/domain/library.ts';
 import { engagementOverview } from '#lib/domain/overview.ts';
 import { addPerson, listPeople, updatePerson, type PersonInput } from '#lib/domain/people.ts';
 import {
@@ -188,25 +193,37 @@ export function registerSetupTools(server: McpServer, app: AppDatabase, actor: A
 		{
 			title: 'Select requirements',
 			description:
-				'Select requirements for the engagement (pinned at the current library version) and/or deselect others. Selecting a parent does not select its children: list each one. Assessment units are regenerated.',
+				'Select requirements for the engagement (pinned at the current library version) and/or deselect others. Selecting a parent does not select its children: list each one, or use select_source. Assessment units are regenerated.',
 			inputSchema: {
 				engagement_id: engagementId,
 				select: z.array(reqRef).max(500).optional(),
+				select_source: z
+					.object({
+						source: z.string().min(1).describe('Source code, for example "nis2".'),
+						role: z
+							.string()
+							.optional()
+							.describe(
+								"A key of the source's roles (get_requirement shows them as applies_to): only the requirements that apply to it, plus those for all roles."
+							)
+					})
+					.optional()
+					.describe('Select every requirement of a published source, or every one for a role of it.'),
 				deselect: z.array(reqRef).max(500).optional()
 			}
 		},
-		({ engagement_id, select, deselect }) =>
+		({ engagement_id, select, select_source, deselect }) =>
 			run(() => {
 				const e = engagement(engagement_id);
 				return app.sqlite.transaction(() => {
-					const sel = select?.length
-						? selectRequirements(
-								app,
-								actor,
-								e.id,
-								select.map((r) => requirement(e, r))
-							)
-						: { selected: 0, already: 0 };
+					const ids = (select ?? []).map((r) => requirement(e, r));
+					if (select_source) {
+						const src = listSources(app).find((x) => x.code === select_source.source.toLowerCase());
+						if (!src) throw new NotFoundError(`No published source ${select_source.source}.`);
+						const role = select_source.role ? assertSourceRole(src, select_source.role) : null;
+						ids.push(...requirementIdsFor(app, src.id, role));
+					}
+					const sel = ids.length ? selectRequirements(app, actor, e.id, ids) : { selected: 0, already: 0 };
 					const de = deselect?.length
 						? deselectRequirements(
 								app,

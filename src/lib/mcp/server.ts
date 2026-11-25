@@ -4,13 +4,14 @@ import { z } from 'zod';
 import type { AppDatabase } from '#lib/db/client.ts';
 import { mcpActor, type SessionUser } from '#lib/domain/auth.ts';
 import { addComment } from '#lib/domain/comments.ts';
-import { DomainError, NotFoundError } from '#lib/domain/errors.ts';
+import { DomainError, NotFoundError, ValidationError } from '#lib/domain/errors.ts';
 import { assertAiAllowed } from '#lib/domain/guards.ts';
 import { assertCanReadRequirement, assertItemReadable } from '#lib/domain/guards.ts';
 import { authorshipLabel } from '#lib/domain/history.ts';
 import { getItemHistory, revertItem } from '#lib/domain/items.ts';
 import {
 	addLink,
+	assertSourceRole,
 	criteriaOf,
 	getRequirement,
 	getSourceByCode,
@@ -133,19 +134,27 @@ export function createMcpServer(
 			inputSchema: {
 				query: z.string().min(1),
 				source: z.string().optional().describe('Limit to one source code, for example "nis2".'),
+				role: z
+					.string()
+					.optional()
+					.describe(
+						'With source: only requirements that apply to this role of the source (a key, such as "important"), and those for all roles.'
+					),
 				limit: z.number().int().min(1).max(50).optional()
 			},
 			annotations: { readOnlyHint: true }
 		},
-		({ query, source, limit }) =>
+		({ query, source, role, limit }) =>
 			run(() => {
 				const src = source ? getSourceByCode(app, source) : null;
 				if (source && !src) throw new NotFoundError(`No source ${source}.`);
+				if (role && !src) throw new ValidationError('Name the source whose role it is.');
 				return {
 					results: searchRequirements(app, query, {
 						sourceId: src?.id,
 						limit: limit ?? 20,
-						includeProposed: true
+						includeProposed: true,
+						role: role && src ? assertSourceRole(src, role) : undefined
 					}).map((r) => ({
 						id: r.id,
 						ref: r.refCode,

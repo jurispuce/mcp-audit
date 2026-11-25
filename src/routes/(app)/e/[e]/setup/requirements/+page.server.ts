@@ -5,7 +5,14 @@ import { keepInScope, soaCheck } from '#lib/domain/soa.ts';
 import { loadConfig } from '#lib/server/config.ts';
 import { listScopes } from '#lib/domain/engagements.ts';
 import { listInternal } from '#lib/domain/internal.ts';
-import { listSources, requirementTree, type TreeNode } from '#lib/domain/library.ts';
+import {
+	assertSourceRole,
+	getRequirement,
+	listSources,
+	requirementIdsFor,
+	requirementTree,
+	type TreeNode
+} from '#lib/domain/library.ts';
 import { criticalityOf } from '#lib/domain/risks.ts';
 import {
 	CRITICALITY,
@@ -25,19 +32,29 @@ import type { Actions, PageServerLoad } from './$types';
 function flatten(
 	nodes: TreeNode[],
 	depth = 0
-): { id: string; refCode: string; title: string; depth: number }[] {
+): { id: string; refCode: string; title: string; roles: string[]; depth: number }[] {
 	return nodes.flatMap((n) => [
-		{ id: n.id, refCode: n.refCode, title: n.title, depth },
+		{ id: n.id, refCode: n.refCode, title: n.title, roles: n.roles, depth },
 		...flatten(n.children, depth + 1)
 	]);
 }
 
-export const load: PageServerLoad = ({ params }) => {
+export const load: PageServerLoad = ({ params, url }) => {
 	const app = appDatabase();
 	const crit = criticalityOf(app, params.e);
+	const sources = listSources(app);
 	return {
-		selected: listSelected(app, params.e).map((s) => ({ ...s, crit: crit.get(s.requirementId)! })),
-		sources: listSources(app).map((s) => ({ ...s, items: flatten(requirementTree(app, s.id)) })),
+		selected: listSelected(app, params.e).map((s) => ({
+			...s,
+			crit: crit.get(s.requirementId)!,
+			appliesTo: getRequirement(app, s.requirementId).roles
+		})),
+		sources: sources.map((s) => {
+			// The role chosen for this source (#110), from ?role.<code>=<key>; an unknown one is ignored.
+			const wanted = url.searchParams.get(`role.${s.code}`);
+			const role = wanted && s.roles.some((r) => r.key === wanted) ? wanted : null;
+			return { ...s, role, items: flatten(requirementTree(app, s.id)) };
+		}),
 		units: countUnits(app, params.e),
 		scopes: listScopes(app, params.e).length,
 		internal: listInternal(app, params.e).filter((r) => r.status === 'confirmed'),
@@ -111,12 +128,13 @@ export const actions: Actions = {
 		const app = appDatabase();
 		let ids = data.getAll('requirement').map(String);
 		const all = data.get('all_of');
-		if (all) {
-			const src = listSources(app).find((s) => s.id === String(all));
-			ids = src ? flatten(requirementTree(app, src.id)).map((r) => r.id) : [];
-		}
-		if (!ids.length) return formFailure(new ValidationError('Tick at least one requirement.'));
 		try {
+			if (all) {
+				const src = listSources(app).find((s) => s.id === String(all));
+				const role = String(data.get('role') ?? '');
+				ids = src ? requirementIdsFor(app, src.id, role ? assertSourceRole(src, role) : null) : [];
+			}
+			if (!ids.length) return formFailure(new ValidationError('Tick at least one requirement.'));
 			const r = selectRequirements(app, uiActor(locals), params.e, ids);
 			return { success: `${r.selected} selected${r.already ? `, ${r.already} already selected` : ''}.` };
 		} catch (e) {

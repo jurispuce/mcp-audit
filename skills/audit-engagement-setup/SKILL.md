@@ -23,6 +23,8 @@ Check with `search_requirements` that the sources the auditor wants are in the l
 
 Propose a selection and let the auditor cut it. Selecting everything is a valid answer; so is one clause. Prefer a smaller, defensible selection: the auditor has to reach a finding on every selected requirement in every scope. Then `select_requirements` with `select` and `deselect` lists of `"<source>:<reference>"`; each is pinned at the library's current version, so later library changes do not silently alter this engagement.
 
+**Roles.** A source can set different obligations for different kinds of auditee (its roles, such as essential and important entities). `get_requirement` shows them as `applies_to`. Ask the auditor which role the auditee has in that source, then select by it: `search_requirements` with `source` and `role`, or `select_requirements` with `select_source: { source, role }` to take every requirement for that role (and those for all roles) at once. Never select another role's requirements without the auditor saying so.
+
 ### 4. Scopes
 
 Ask whether the organisation works the same way everywhere.
