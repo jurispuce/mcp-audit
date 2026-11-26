@@ -1,7 +1,17 @@
 import { fail } from '@sveltejs/kit';
 import { ValidationError } from '#lib/domain/errors.ts';
-import { listSources } from '#lib/domain/library.ts';
-import { listLibraryDocuments, uploadLibraryDocuments } from '#lib/domain/library-documents.ts';
+import {
+	addSourceRole,
+	createImportSource,
+	listSources,
+	removeSourceRole,
+	updateSourceRole
+} from '#lib/domain/library.ts';
+import {
+	assertLibraryDocument,
+	listLibraryDocuments,
+	uploadLibraryDocuments
+} from '#lib/domain/library-documents.ts';
 import { importSourceYaml } from '#lib/domain/library-import.ts';
 import { listLibraryProposals } from '#lib/domain/library-review.ts';
 import { loadConfig } from '#lib/server/config.ts';
@@ -76,6 +86,65 @@ export const actions: Actions = {
 				success: `${added.length} ${added.length === 1 ? 'document' : 'documents'} added.${notes.length ? ` ${notes.join(' ')}` : ''}`,
 				uploaded: added[0]?.document?.id ?? null
 			};
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	// Correcting the roles of a document's source by hand (#112).
+	addRole: async ({ request, locals }) => {
+		const data = await request.formData();
+		const label = String(data.get('label') ?? '').trim();
+		const description = String(data.get('description') ?? '').trim() || null;
+		const app = appDatabase();
+		const actor = uiActor(locals);
+		try {
+			if (!label) throw new ValidationError('Give the role a name.', { label: 'Required' });
+			const source = String(data.get('source') ?? '');
+			if (source) addSourceRole(app, actor, source, Number(data.get('base_version')), { label, description });
+			else {
+				const documentId = String(data.get('document_id') ?? '');
+				assertLibraryDocument(app, documentId);
+				createImportSource(app, actor, {
+					documentId,
+					code: String(data.get('code') ?? ''),
+					title:
+						String(data.get('title') ?? '').trim() || String(data.get('document_title') ?? 'Imported source'),
+					role: { label, description }
+				});
+			}
+			return { success: `Role ${label} added.` };
+		} catch (e) {
+			return formFailure(e, { label, description: description ?? '', action: 'addRole' });
+		}
+	},
+	updateRole: async ({ request, locals }) => {
+		const data = await request.formData();
+		const label = String(data.get('label') ?? '').trim();
+		try {
+			updateSourceRole(
+				appDatabase(),
+				uiActor(locals),
+				String(data.get('source')),
+				Number(data.get('base_version')),
+				String(data.get('key')),
+				{ label, description: String(data.get('description') ?? '').trim() || null }
+			);
+			return { success: `Role ${label} saved.` };
+		} catch (e) {
+			return formFailure(e);
+		}
+	},
+	removeRole: async ({ request, locals }) => {
+		const data = await request.formData();
+		try {
+			removeSourceRole(
+				appDatabase(),
+				uiActor(locals),
+				String(data.get('source')),
+				Number(data.get('base_version')),
+				String(data.get('key'))
+			);
+			return { success: 'Role removed.' };
 		} catch (e) {
 			return formFailure(e);
 		}

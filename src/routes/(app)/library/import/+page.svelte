@@ -11,6 +11,7 @@
 		message?: string;
 		success?: string;
 		uploaded?: string | null;
+		values?: Record<string, string>;
 		report?: {
 			source: { created: boolean; title: string; code: string };
 			requirements: Record<string, number>;
@@ -22,11 +23,20 @@
 		};
 	};
 	const result = $derived((form ?? null) as Result | null);
+	/** A refused role edit (#112) keeps the panel open with what was typed. */
+	const editError = $derived(result?.message && result.values?.action === 'addRole' ? result : null);
+	/** The role editor stays open while the auditor works in it, and opens on a refused edit. */
+	let editOpen = $state(false);
+	$effect(() => {
+		if (editError) editOpen = true;
+	});
 
 	let documentId = $state('');
 	let code = $state('');
 	let title = $state('');
 	let target = $state('');
+	/** What the auditor asks Find roles to look for (#112). */
+	let hint = $state('');
 	const pick = (id: string) => {
 		documentId = id;
 		document.getElementById('extract-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -197,13 +207,25 @@ For a licensed standard store codes and titles only unless I confirm the licence
 							proposed source.</span
 						>
 					</p>
+					<div class="au-field">
+						<label for="roles-hint">What to look for (optional)</label>
+						<input
+							id="roles-hint"
+							bind:value={hint}
+							maxlength="500"
+							placeholder="For example: management, personnel, suppliers"
+							autocomplete="off"
+						/>
+					</div>
 					<AiAction
 						action="library_roles"
 						label={roles.length ? 'Find roles again' : 'Find roles'}
+						hint={roles.length ? 'Keeps the roles below and adds the ones it finds missing.' : undefined}
 						context={{
 							document_id: documentId,
 							source_code: sourceCode,
-							source_title: title.trim() || undefined
+							source_title: title.trim() || undefined,
+							hint: hint.trim() || undefined
 						}}
 						validate={() =>
 							documentId ? null : 'Upload the document in step 1 and choose it above, then find its roles.'}
@@ -241,6 +263,85 @@ For a licensed standard store codes and titles only unless I confirm the licence
 									: 'Choose a document first.'}</span
 							>
 						</p>
+					{/if}
+					{#if doc}
+						<details class="au-roles-edit" data-testid="edit-roles" bind:open={editOpen}>
+							<summary>{roles.length ? 'Correct the roles' : 'Or add the roles yourself'}</summary>
+							{#if docSource && roles.length}
+								<ul class="au-list" aria-label="Roles of {docSource.title}">
+									{#each roles as r (r.key)}
+										<li class="au-roles-edit__role" data-testid="role-{r.key}">
+											<form method="POST" action="?/updateRole" class="au-row au-wrap" use:enhance>
+												<input type="hidden" name="source" value={docSource.id} />
+												<input type="hidden" name="base_version" value={docSource.version} />
+												<input type="hidden" name="key" value={r.key} />
+												<div class="au-field">
+													<label for="role-label-{r.key}">Role</label>
+													<input id="role-label-{r.key}" name="label" defaultValue={r.label} required />
+												</div>
+												<div class="au-field au-grow">
+													<label for="role-desc-{r.key}">Description</label>
+													<input
+														id="role-desc-{r.key}"
+														name="description"
+														defaultValue={r.description ?? ''}
+													/>
+												</div>
+												<button class="au-btn au-btn--small" type="submit" aria-label="Save role {r.label}"
+													>Save</button
+												>
+											</form>
+											<form method="POST" action="?/removeRole" use:enhance>
+												<input type="hidden" name="source" value={docSource.id} />
+												<input type="hidden" name="base_version" value={docSource.version} />
+												<input type="hidden" name="key" value={r.key} />
+												<button
+													class="au-btn au-btn--small au-btn--ghost"
+													type="submit"
+													aria-label="Remove role {r.label}">Remove</button
+												>
+											</form>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+							<form method="POST" action="?/addRole" class="au-row au-wrap au-roles-edit__add" use:enhance>
+								{#if docSource}
+									<input type="hidden" name="source" value={docSource.id} />
+									<input type="hidden" name="base_version" value={docSource.version} />
+								{:else}
+									<input type="hidden" name="document_id" value={doc.id} />
+									<input type="hidden" name="document_title" value={doc.title} />
+									<input type="hidden" name="code" value={code.trim().toLowerCase()} />
+									<input type="hidden" name="title" value={title.trim()} />
+								{/if}
+								<div class="au-field">
+									<label for="new-role-label">New role</label>
+									<input
+										id="new-role-label"
+										name="label"
+										placeholder="For example: Top management"
+										defaultValue={editError?.values?.label ?? ''}
+										required
+									/>
+								</div>
+								<div class="au-field au-grow">
+									<label for="new-role-desc">Description (optional)</label>
+									<input
+										id="new-role-desc"
+										name="description"
+										placeholder="Who this is, and where the document defines it"
+										defaultValue={editError?.values?.description ?? ''}
+									/>
+								</div>
+								<button class="au-btn au-btn--small au-btn--primary" type="submit">Add role</button>
+							</form>
+							{#if !docSource}
+								<p class="au-muted">
+									This creates the proposed source with the code and title above, as Find roles would.
+								</p>
+							{/if}
+						</details>
 					{/if}
 				</li>
 				<li>

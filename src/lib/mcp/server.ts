@@ -277,7 +277,7 @@ export function createMcpServer(
 								.max(20)
 								.optional()
 								.describe(
-									'Whom the source addresses, when it sets obligations for more than one kind of entity or person. Replaces the list.'
+									'Whom the source addresses, when it sets obligations for more than one kind of entity or person. The roles a source already has are kept as they are: you can add roles, while removing or renaming one is done by a person on Library, Import.'
 								)
 						})
 					)

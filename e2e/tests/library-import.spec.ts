@@ -195,3 +195,66 @@ test('an AI change to a published requirement shows what it was, and rejecting i
 		.click();
 	await expect(page.getByTestId('item-sheet')).toContainText('There is a policy.');
 });
+
+test('set the roles by hand without AI: add, rename, remove; a role in use cannot be removed (#112)', async ({
+	page
+}) => {
+	const code = unique('handroles')
+		.toLowerCase()
+		.replace(/[^a-z0-9-]/g, '');
+	await page.goto('/library/import');
+	await page.getByLabel('Upload a law or standard').setInputFiles({
+		name: `${code}.pdf`,
+		mimeType: 'application/pdf',
+		buffer: Buffer.from(makePdf(['A.5.1 Policies', 'A.5.19 Supplier relationships']))
+	});
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByTestId(`libdoc-${code}.pdf`)).toBeVisible();
+	await page.getByLabel('Library document', { exact: true }).selectOption({ label: code });
+	await page.getByLabel('Source code for the import').fill(code);
+	await page.getByLabel('Source title (optional)').fill(`ISO 27002 ${code}`);
+
+	// No roles yet: add them yourself, which makes the proposed source.
+	const edit = page.getByTestId('edit-roles');
+	await edit.getByText('Or add the roles yourself').click();
+	await edit.getByLabel('New role').fill('Organisation');
+	await edit.getByRole('button', { name: 'Add role' }).click();
+	await expect(page.getByRole('status')).toHaveText('Role Organisation added.');
+	await expect(
+		page.getByTestId('import-roles').getByRole('checkbox', { name: 'Organisation' })
+	).toBeChecked();
+
+	// The panel stays open for the next change.
+	await edit.getByLabel('New role').fill('Supplier');
+	await edit.getByLabel('Description (optional)').fill('A.5.19 to A.5.22');
+	await edit.getByRole('button', { name: 'Add role' }).click();
+	await expect(page.getByTestId('import-roles')).toContainText('SupplierA.5.19 to A.5.22');
+
+	// Rename keeps the key; the role in use cannot be removed.
+	const role = edit.getByTestId('role-organisation');
+	await role.getByRole('textbox', { name: 'Role', exact: true }).fill('The organisation');
+	await role.getByRole('button', { name: 'Save role Organisation' }).click();
+	await expect(page.getByRole('status')).toHaveText('Role The organisation saved.');
+	await expect(
+		page.getByTestId('import-roles').getByRole('checkbox', { name: 'The organisation' })
+	).toBeVisible();
+
+	await page.goto('/library/import');
+	await page
+		.getByLabel('Or paste the YAML')
+		.fill(
+			`id: ${code}\ntitle: ISO 27002 ${code}\nrequirements:\n  - { id: "A.5.19", title: Supplier relationships, roles: [supplier] }\n`
+		);
+	await page.getByRole('button', { name: 'Import source' }).click();
+	await expect(page.getByTestId('import-report')).toBeVisible();
+	await page.getByLabel('Library document', { exact: true }).selectOption({ label: code });
+	await page.getByTestId('edit-roles').getByText('Correct the roles').click();
+	await page.getByTestId('role-supplier').getByRole('button', { name: 'Remove role Supplier' }).click();
+	await expect(page.getByRole('alert')).toContainText('"supplier" is used by 1 requirement');
+	await page
+		.getByTestId('role-organisation')
+		.getByRole('button', { name: 'Remove role The organisation' })
+		.click();
+	await expect(page.getByRole('status')).toHaveText('Role removed.');
+	await expect(page.getByTestId('role-organisation')).toHaveCount(0);
+});

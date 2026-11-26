@@ -103,7 +103,9 @@ export function cleanSourceRoles(v: unknown): string | null {
 		const o = (typeof item === 'object' && item ? item : { label: item }) as Record<string, unknown>;
 		const label = str(o.label);
 		if (!label) throw new ValidationError('Each role needs a label.', { roles: 'Label required' });
-		const key = str(o.key).toLowerCase() || roleKey(label);
+		// A label with no Latin letters (for example in Cyrillic) gets a numbered key.
+		let key = str(o.key).toLowerCase() || roleKey(label);
+		if (!key) for (let n = 1; !key || seen.has(key); n++) key = `role-${n}`;
 		if (!ROLE_KEY.test(key))
 			throw new ValidationError(`Role key "${key}": lower-case letters, digits and dashes.`, {
 				roles: 'Invalid key'
@@ -220,12 +222,41 @@ export const sourceDefinition: EntityDefinition = registerEntity({
 	},
 	/** A source AI creates is proposed (#69); publishing it is a person's decision. */
 	judgement: (_row, op) => (op === 'create' ? { column: 'status', proposed: 'proposed' } : null),
-	authorize(_app, actor, op) {
+	authorize(app, actor, op) {
 		if (actor.channel !== 'ui' || actor.agent) {
 			const data = 'data' in op ? (op.data as Record<string, unknown>) : {};
 			if (data.status === 'active')
 				throw new ForbiddenError('Publishing a source is done by a person in the app.');
+			// AI only adds roles (#112): removing, renaming or rewriting one is a person's decision.
+			if ('roles' in data && op.op === 'update') {
+				const before = parseSourceRoles(readRow(app, sourceDefinition, op.id)?.roles);
+				const after = new Map(parseSourceRoles(cleanSourceRoles(data.roles)).map((r) => [r.key, r]));
+				const changed = before.filter((r) => {
+					const now = after.get(r.key);
+					return !now || now.label !== r.label || now.description !== r.description;
+				});
+				if (changed.length)
+					throw new ForbiddenError(
+						`AI can add roles but not remove or change them (${changed.map((r) => r.label).join(', ')}); a person does that on Library, Import.`
+					);
+			}
 		}
+	},
+	/** A role that requirements use cannot be removed (#112). */
+	afterWrite(app, _actor, row) {
+		const keys = new Set(parseSourceRoles(row.roles).map((r) => r.key));
+		const counts = new Map<string, number>();
+		const rows = app.sqlite
+			.prepare('SELECT roles FROM requirement WHERE source_id = ? AND deleted = 0 AND roles IS NOT NULL')
+			.all(String(row.id)) as { roles: string }[];
+		for (const r of rows)
+			for (const k of parseRequirementRoles(r.roles))
+				if (!keys.has(k)) counts.set(k, (counts.get(k) ?? 0) + 1);
+		if (counts.size)
+			throw new ValidationError(
+				`${[...counts].map(([k, n]) => `"${k}" is used by ${n} ${n === 1 ? 'requirement' : 'requirements'}`).join('; ')}. Change those requirements first, then remove the role.`,
+				{ roles: 'In use' }
+			);
 	},
 	search: (row) => ({ title: row.title as string, code: row.code as string }),
 	label: (row) => String(row.title),
@@ -1025,6 +1056,106 @@ export function resolveRequirementRef(app: AppDatabase, ref: string): string {
 	throw new NotFoundError(`No requirement "${value}". Use an id or "<source code>:<reference>".`);
 }
 
+/** The roles a source has, then those of `added` it does not have yet: existing ones stay as they are. */
+export function mergeRoles(existing: SourceRole[], added: SourceRole[]): SourceRole[] {
+	const keys = new Set(existing.map((r) => r.key));
+	return [...existing, ...added.filter((r) => !keys.has(r.key))];
+}
+
+// ---- Editing a source's roles by hand (#112)
+
+function sourceForRoles(app: AppDatabase, sourceId: string): Row {
+	const row = readRow(app, sourceDefinition, sourceId);
+	if (!row || Number(row.deleted) === 1) throw new NotFoundError('Source not found');
+	if (row.auditee_id) throw new ValidationError('An internal source has no roles.');
+	return row;
+}
+
+/** Add a role to a source. Its key is made from the label unless given. */
+export function addSourceRole(
+	app: AppDatabase,
+	actor: Actor,
+	sourceId: string,
+	baseVersion: number,
+	role: { key?: string; label: string; description?: string | null }
+): SourceRole[] {
+	const row = sourceForRoles(app, sourceId);
+	const roles = [
+		...parseSourceRoles(row.roles),
+		{ key: role.key ?? '', label: role.label, description: role.description ?? null }
+	];
+	const res = updateEntity(app, actor, sourceDefinition, sourceId, baseVersion, { roles });
+	return parseSourceRoles(res.row.roles);
+}
+
+/** Change a role's label or description; its key stays, so the requirements keep it. */
+export function updateSourceRole(
+	app: AppDatabase,
+	actor: Actor,
+	sourceId: string,
+	baseVersion: number,
+	key: string,
+	change: { label?: string; description?: string | null }
+): SourceRole[] {
+	const row = sourceForRoles(app, sourceId);
+	const roles = parseSourceRoles(row.roles);
+	const role = roles.find((r) => r.key === key);
+	if (!role) throw new NotFoundError(`No role "${key}".`);
+	if (change.label !== undefined) role.label = change.label;
+	if (change.description !== undefined) role.description = change.description || null;
+	const res = updateEntity(app, actor, sourceDefinition, sourceId, baseVersion, { roles });
+	return parseSourceRoles(res.row.roles);
+}
+
+/**
+ * The proposed source for a library document, made by a person who adds its first role by hand
+ * (#112): reviewed and published with the import like one AI made.
+ */
+export function createImportSource(
+	app: AppDatabase,
+	actor: Actor,
+	input: {
+		documentId: string;
+		code: string;
+		title: string;
+		role: { label: string; description?: string | null };
+	}
+): string {
+	const code = input.code.trim().toLowerCase();
+	if (!code) throw new ValidationError('Enter the source code for the import first.', { code: 'Required' });
+	if (app.sqlite.prepare('SELECT 1 FROM source WHERE code = ?').get(code))
+		throw new ValidationError(`A source with code ${code} exists already; choose another code.`, {
+			code: 'In use'
+		});
+	const created = createEntity(app, actor, sourceDefinition, {
+		code,
+		title: input.title,
+		type: 'law',
+		language: 'en',
+		document_id: input.documentId,
+		status: 'proposed',
+		roles: [input.role]
+	});
+	return String(created.row.id);
+}
+
+/** Remove a role; refused while requirements use it. */
+export function removeSourceRole(
+	app: AppDatabase,
+	actor: Actor,
+	sourceId: string,
+	baseVersion: number,
+	key: string
+): SourceRole[] {
+	const row = sourceForRoles(app, sourceId);
+	const roles = parseSourceRoles(row.roles);
+	if (!roles.some((r) => r.key === key)) throw new NotFoundError(`No role "${key}".`);
+	const res = updateEntity(app, actor, sourceDefinition, sourceId, baseVersion, {
+		roles: roles.filter((r) => r.key !== key)
+	});
+	return parseSourceRoles(res.row.roles);
+}
+
 /** Create or update external sources matched by code. */
 export function upsertSources(
 	app: AppDatabase,
@@ -1053,6 +1184,9 @@ export function upsertSources(
 			const data: Record<string, unknown> = { code, title: s.title };
 			for (const key of ['type', 'edition', 'language', 'licence_note', 'document_id', 'roles'] as const)
 				if (s[key] !== undefined) data[key] = s[key];
+			// AI adds to the roles a source has, keeping each as it is (#112).
+			if (s.roles != null && row?.roles && (actor.agent || actor.channel !== 'ui'))
+				data.roles = mergeRoles(parseSourceRoles(row.roles), parseSourceRoles(cleanSourceRoles(s.roles)));
 			if (!row) {
 				const created = createEntity(app, actor, sourceDefinition, {
 					type: 'standard',

@@ -4,8 +4,12 @@ import { createTestDatabase } from '#lib/db/test-db.ts';
 import { ValidationError } from './errors';
 import { getHistory } from './history';
 import {
+	addSourceRole,
 	appliesToRole,
 	cleanSourceRoles,
+	createImportSource,
+	removeSourceRole,
+	updateSourceRole,
 	requirementIdsFor,
 	findRequirement,
 	getSourceByCode,
@@ -18,7 +22,7 @@ import {
 import { importSourceYaml, upsertRequirements } from './library-import';
 import { editRequirement, publishSource } from './library-review';
 import { createFirstAdmin } from './users';
-import type { Actor } from './write';
+import { updateEntity, type Actor } from './write';
 
 /** Roles of a source, and each requirement's roles and source text (#108). */
 
@@ -174,5 +178,84 @@ describe('which requirements apply to a role (#110)', () => {
 		expect(searchRequirements(app, 'Ziņošana', { role: 'important' }).map((r) => r.refCode)).toEqual([
 			'12(2) [important]'
 		]);
+	});
+});
+
+describe('correcting the roles (#112)', () => {
+	const ai = (): Actor => ({ ...human, channel: 'mcp', agent: 'Claude' });
+	const version = (code: string) =>
+		(app.sqlite.prepare('SELECT current_version AS v FROM source WHERE code = ?').get(code) as { v: number })
+			.v;
+
+	it('a person adds, renames and removes roles; one in use stays, and the message says how many use it', () => {
+		importSourceYaml(app, human, YAML);
+		const src = getSourceByCode(app, 'nkdl')!;
+		const added = addSourceRole(app, human, src.id, version('nkdl'), {
+			label: 'Top management',
+			description: 'The board'
+		});
+		expect(added.map((r) => r.key)).toEqual(['essential', 'important', 'top-management']);
+		const renamed = updateSourceRole(app, human, src.id, version('nkdl'), 'essential', {
+			label: 'Būtiskais subjekts (essential)'
+		});
+		expect(renamed[0]).toMatchObject({ key: 'essential', label: 'Būtiskais subjekts (essential)' });
+		// The requirements keep the key.
+		expect(findRequirement(app, src.id, '11(1)')!.roles).toEqual(['essential', 'important']);
+
+		expect(() => removeSourceRole(app, human, src.id, version('nkdl'), 'important')).toThrow(
+			'"important" is used by 2 requirements'
+		);
+		expect(removeSourceRole(app, human, src.id, version('nkdl'), 'top-management').map((r) => r.key)).toEqual(
+			['essential', 'important']
+		);
+		const [latest] = getHistory(app, sourceDefinition, src.id);
+		expect(latest!.changes[0]).toMatchObject({ label: 'Applies to' });
+	});
+
+	it('AI only adds roles: the ones there stay exactly as they are', () => {
+		upsertSources(app, human, [
+			{
+				code: 'iso27002',
+				title: 'ISO 27002',
+				roles: [{ key: 'organization', label: 'The organisation (edited)' }]
+			}
+		]);
+		upsertSources(app, ai(), [
+			{
+				code: 'iso27002',
+				title: 'ISO 27002',
+				roles: [{ key: 'organization', label: 'Organization' }, { label: 'Supplier' }]
+			}
+		]);
+		expect(getSourceByCode(app, 'iso27002')!.roles).toEqual([
+			{ key: 'organization', label: 'The organisation (edited)', description: null },
+			{ key: 'supplier', label: 'Supplier', description: null }
+		]);
+		// Writing the list directly does not get round it.
+		const src = getSourceByCode(app, 'iso27002')!;
+		expect(() =>
+			updateEntity(app, ai(), sourceDefinition, src.id, src.version, { roles: [{ label: 'Supplier' }] })
+		).toThrow(/AI can add roles but not remove or change them \(The organisation \(edited\)\)/);
+	});
+
+	it('a person can set the roles before any AI run: the proposed source is made with the first one', () => {
+		const id = createImportSource(app, human, {
+			documentId: 'doc-1',
+			code: 'ISO27002',
+			title: 'ISO 27002',
+			role: { label: 'Организация' }
+		});
+		const src = getSourceByCode(app, 'iso27002')!;
+		expect(src).toMatchObject({ id, status: 'proposed', documentId: 'doc-1' });
+		// A label without Latin letters gets a numbered key.
+		expect(src.roles).toEqual([{ key: 'role-1', label: 'Организация', description: null }]);
+		expect(() =>
+			createImportSource(app, human, {
+				documentId: 'doc-1',
+				code: 'iso27002',
+				title: 'X',
+				role: { label: 'A' }
+			})
+		).toThrow('exists already');
 	});
 });

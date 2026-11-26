@@ -24,6 +24,8 @@ The first of two steps: find whom the document applies to, so the auditor can ch
    - a one-line `description` citing where it is defined.
 
    Leave out bodies that are not audited against the document (the state, supervisors, the Commission), unless their obligations are what the document is about. A document with one addressee gets one role.
+   When the task names what the auditor wants you to look for, check each: add it as a role when the document sets auditable obligations for it, and say in the summary which you did not add and why.
+   When the source already has roles, the auditor may have set or corrected them: keep every one exactly as it is and pass it along with the roles you add. You can add roles; removing or renaming one is the auditor's.
 3. Add no requirements. Summary: the roles, and anything that made them unclear.
 
 ## Extract requirements from a library document
@@ -37,8 +39,9 @@ The first of two steps: find whom the document applies to, so the auditor can ch
    - Write `text` so it can be audited without opening the document. Spell out what a reference says ("the measures referred to in Article 21(2)" becomes the list of those measures, "in accordance with paragraph 1" brings in what paragraph 1 requires) as far as the audit needs it. Keep the document's language and terms, and add nothing it does not say.
    - When the text differs from the original, put the original passage, as written, in `source_text`. When the original already stands on its own, give it as `text` and leave `source_text` out.
    - A reference to another act (another law, a standard) is named, not copied in.
-5. Add the requirements with `upsert_requirements` in document order, in batches: the reference exactly as written, a short title, the text, `source_text`, `roles`, and `parent` (the heading it sits under).
-6. Summary: how many requirements, for which roles, the structure you found, and the provisions you skipped as not auditable, with the reason for each group. Mention anything you could not read or were unsure how to split.
+5. When the source already has requirements (`search_requirements` with the source), you are extracting for more roles: keep the existing requirements, add the chosen role keys to those that also apply to those roles (pass each one's full `roles` list), and add only the requirements that are new for them.
+6. Add the requirements with `upsert_requirements` in document order, in batches: the reference exactly as written, a short title, the text, `source_text`, `roles`, and `parent` (the heading it sits under).
+7. Summary: how many requirements, for which roles, the structure you found, and the provisions you skipped as not auditable, with the reason for each group. Mention anything you could not read or were unsure how to split.
 
 ## Propose mapping
 
