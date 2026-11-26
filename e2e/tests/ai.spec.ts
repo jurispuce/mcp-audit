@@ -242,6 +242,41 @@ test('library: find the roles, import only the chosen one, and see the role and 
 	await expect(tile.getByTestId('applies-to')).toContainText('Important entity');
 });
 
+test('Find roles again with what to look for keeps the roles the auditor corrected and adds the missing ones (#112)', async ({
+	page
+}) => {
+	const code = unique('hintlaw')
+		.toLowerCase()
+		.replace(/[^a-z0-9-]/g, '');
+	await page.goto('/library/import');
+	await page.getByLabel('Upload a law or standard').setInputFiles({
+		name: `${code}.pdf`,
+		mimeType: 'application/pdf',
+		buffer: Buffer.from(makePdf(['1. Entities manage risks.', '5. Suppliers report incidents.']))
+	});
+	await page.getByRole('button', { name: 'Upload', exact: true }).click();
+	await expect(page.getByTestId(`libdoc-${code}.pdf`)).toBeVisible();
+	await page.getByLabel('Library document', { exact: true }).selectOption({ label: code });
+	await page.getByLabel('Source code for the import').fill(code);
+	await runAction(page, 'library_roles', 'Find roles');
+
+	const edit = page.getByTestId('edit-roles');
+	await edit.getByText('Correct the roles').click();
+	await edit
+		.getByTestId('role-essential')
+		.getByRole('textbox', { name: 'Role', exact: true })
+		.fill('Būtiskais subjekts');
+	await edit.getByRole('button', { name: 'Save role Essential entity' }).click();
+	await expect(page.getByRole('status')).toHaveText('Role Būtiskais subjekts saved.');
+
+	await page.getByLabel('What to look for (optional)').fill('suppliers');
+	await runAction(page, 'library_roles', 'Find roles again');
+	const roles = page.getByTestId('import-roles');
+	await expect(roles.getByRole('checkbox', { name: /Būtiskais subjekts/ })).toBeVisible();
+	await expect(roles.getByRole('checkbox', { name: /Supplier/ })).toBeVisible();
+	await expect(roles.getByRole('checkbox', { name: /Essential entity/ })).toHaveCount(0);
+});
+
 test('Risks: upload the auditee register, extract its risks with AI, accept them together (#78)', async ({
 	page
 }) => {

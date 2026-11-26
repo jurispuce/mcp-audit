@@ -55,7 +55,14 @@ export interface LibraryDocument {
 	textStatus: string;
 	textLength: number;
 	/** Sources imported from this document. */
-	sources: { id: string; code: string; title: string; status: string; roles: SourceRole[] }[];
+	sources: {
+		id: string;
+		code: string;
+		title: string;
+		status: string;
+		roles: SourceRole[];
+		version: number;
+	}[];
 	version: number;
 	createdAt: Date;
 }
@@ -69,7 +76,7 @@ export function listLibraryDocuments(app: AppDatabase): LibraryDocument[] {
 		.all() as Row[];
 	const sources = app.sqlite
 		.prepare(
-			'SELECT id, code, title, status, roles, document_id FROM source WHERE deleted = 0 AND document_id IS NOT NULL'
+			'SELECT id, code, title, status, roles, document_id, current_version FROM source WHERE deleted = 0 AND document_id IS NOT NULL'
 		)
 		.all() as {
 		id: string;
@@ -78,6 +85,7 @@ export function listLibraryDocuments(app: AppDatabase): LibraryDocument[] {
 		status: string;
 		roles: string | null;
 		document_id: string;
+		current_version: number;
 	}[];
 	return rows.map((r) => ({
 		id: String(r.id),
@@ -90,7 +98,11 @@ export function listLibraryDocuments(app: AppDatabase): LibraryDocument[] {
 		textLength: Number(r.text_length ?? 0),
 		sources: sources
 			.filter((s) => s.document_id === r.id)
-			.map(({ document_id: _d, roles, ...s }) => ({ ...s, roles: parseSourceRoles(roles) })),
+			.map(({ document_id: _d, roles, current_version, ...s }) => ({
+				...s,
+				roles: parseSourceRoles(roles),
+				version: Number(current_version)
+			})),
 		version: Number(r.current_version),
 		createdAt: new Date(Number(r.created_at))
 	}));

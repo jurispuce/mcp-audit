@@ -38,6 +38,8 @@ export interface JobContext {
 	sections?: string;
 	/** library_extract (#108): the keys of the source's roles to import, comma-separated. */
 	roles?: string;
+	/** library_roles (#112): what the auditor asks the run to look for. */
+	hint?: string;
 }
 
 export interface Job {
@@ -209,6 +211,7 @@ function validContext(app: AppDatabase, action: AiAction, input: Record<string, 
 				ctx.source_code = code;
 			}
 			if (str(input.source_title)) ctx.source_title = str(input.source_title)!.slice(0, 200);
+			if (action === 'library_roles' && str(input.hint)) ctx.hint = str(input.hint)!.slice(0, 500);
 			if (action === 'library_extract' && str(input.roles))
 				ctx.roles = chosenRoles(app, ctx, str(input.roles)!);
 			break;

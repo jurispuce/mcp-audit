@@ -172,6 +172,20 @@ describe('AI job runner (#64)', () => {
 		expect(found).toMatchObject({ status: 'proposed', requirementCount: 0 });
 		expect(found.roles.map((r) => r.label)).toEqual(['Essential entity', 'Important entity']);
 
+		// Run again, asked to look for suppliers (#112): the roles there stay, Supplier is added.
+		const again = startJob(
+			app,
+			human,
+			{ action: 'library_roles', context: { document_id: doc, source_code: 'rolelaw', hint: 'suppliers' } },
+			deps
+		);
+		expect(again.job.context.hint).toBe('suppliers');
+		await again.done;
+		expect(getSourceByCode(app, 'rolelaw')!.roles.map((r) => r.key)).toEqual([
+			'essential',
+			'important',
+			'supplier'
+		]);
 		expect(() => tryExtract('essential,provider')).toThrow('Unknown role provider');
 		const { job, done } = tryExtract('essential');
 		expect(job.context.roles).toBe('essential');
@@ -188,6 +202,11 @@ describe('AI job runner (#64)', () => {
 	it('tells the model which roles to import, and how to make requirements auditable and self-contained (#108)', () => {
 		const roles = taskText('library_roles', { document_id: 'd1', source_code: 'nkdl' });
 		expect(roles).toContain('Do not add requirements');
+		expect(roles).toContain('keep them as they are');
+		expect(roles).not.toContain('look in particular');
+		expect(taskText('library_roles', { document_id: 'd1', hint: 'management, suppliers' })).toContain(
+			'The auditor asks you to look in particular for: management, suppliers.'
+		);
 		expect(roles).toContain('upsert_sources');
 		const some = taskText('library_extract', { document_id: 'd1', roles: 'essential,important' });
 		expect(some).toContain(
@@ -196,6 +215,7 @@ describe('AI job runner (#64)', () => {
 		expect(some).toContain('one requirement per role');
 		const all = taskText('library_extract', { document_id: 'd1' });
 		expect(all).toContain('If the source lists roles');
+		expect(all).toContain('If the source already has requirements');
 		for (const t of [some, all]) {
 			expect(t).toContain('self-contained text');
 			expect(t).toContain('source_text');

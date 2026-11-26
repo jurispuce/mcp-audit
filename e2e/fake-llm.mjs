@@ -233,7 +233,11 @@ const SCRIPTS = {
 						document_id: ctx.document_id,
 						roles: [
 							{ key: 'essential', label: 'Essential entity', description: 'As defined in point 1.' },
-							{ key: 'important', label: 'Important entity', description: 'As defined in point 2.' }
+							{ key: 'important', label: 'Important entity', description: 'As defined in point 2.' },
+							// What the auditor asked to look for (#112): a supplier role when they name suppliers.
+							...(/supplier/i.test(ctx.hint ?? '')
+								? [{ key: 'supplier', label: 'Supplier', description: 'Named in point 5.' }]
+								: [])
 						]
 					}
 				]
