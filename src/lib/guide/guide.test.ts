@@ -196,9 +196,11 @@ describe('the guide as a path to follow (#106)', () => {
 		// The steps' chapters come in the steps' order.
 		const steps = c.filter((x) => STEPS.some((s) => s.key === x.key)).map((x) => x.key);
 		expect(steps).toEqual(STEPS.map((s) => s.key));
-		expect(chapterOf('plan')).toMatchObject({ start: 71.2, end: 89.9 });
-		expect(clock(71.2)).toBe('1:11');
-		expect(clock(VIDEO.duration)).toBe('2:51');
+		expect(chapterOf('plan')).toMatchObject({ start: 102.2, end: 117.2 });
+		expect(clock(102.2)).toBe('1:42');
+		expect(clock(VIDEO.duration)).toBe('2:57');
+		// At most three minutes.
+		expect(VIDEO.duration).toBeLessThanOrEqual(180);
 	});
 
 	it('ships the video, its poster and valid captions in the app', () => {

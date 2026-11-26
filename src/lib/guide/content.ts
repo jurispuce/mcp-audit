@@ -271,11 +271,11 @@ export const STEPS: GuideStep[] = [
 ];
 
 /**
- * The explainer video (#106): 2:51, narrated, served by the instance itself from static/media. Its
+ * The explainer video (#106, v3): 2:57, narrated, served by the instance itself from static/media. Its
  * chapters line up with the steps, so each step's page plays its own part.
  */
 export interface VideoChapter {
-	key: 'intro' | GuideStep['key'] | 'reuse' | 'where' | 'result';
+	key: 'intro' | 'where' | 'library' | GuideStep['key'] | 'assistant' | 'result';
 	title: string;
 	/** Seconds. */
 	start: number;
@@ -287,17 +287,18 @@ export const VIDEO = {
 	poster: '/media/explainer-poster.jpg',
 	captions: '/media/explainer.en.vtt',
 	title: 'How mcp-audit works',
-	duration: 171,
+	duration: 177,
 	chapters: [
-		{ key: 'intro', title: 'AI proposes, you decide', start: 0, end: 35.2 },
-		{ key: 'setup', title: 'Set up', start: 35.2, end: 54.4 },
-		{ key: 'rules', title: "The auditee's own rules", start: 54.4, end: 71.2 },
-		{ key: 'plan', title: 'Plan', start: 71.2, end: 89.9 },
-		{ key: 'run', title: 'Run', start: 89.9, end: 107.5 },
-		{ key: 'conclude', title: 'Conclude', start: 107.5, end: 121 },
-		{ key: 'reuse', title: 'Reuse what you have', start: 121, end: 140.5 },
-		{ key: 'where', title: 'Where the AI runs', start: 140.5, end: 156.8 },
-		{ key: 'result', title: 'The result', start: 156.8, end: 171 }
+		{ key: 'intro', title: 'AI proposes, you decide', start: 0, end: 29.8 },
+		{ key: 'where', title: 'Your AI, your choice', start: 29.8, end: 53.2 },
+		{ key: 'library', title: 'The library', start: 53.2, end: 66.6 },
+		{ key: 'setup', title: 'Set up', start: 66.6, end: 87 },
+		{ key: 'rules', title: "The auditee's own rules", start: 87, end: 102.2 },
+		{ key: 'plan', title: 'Plan', start: 102.2, end: 117.2 },
+		{ key: 'run', title: 'Run', start: 117.2, end: 133.3 },
+		{ key: 'conclude', title: 'Conclude', start: 133.3, end: 151.6 },
+		{ key: 'assistant', title: 'Ask your own assistant', start: 151.6, end: 164.2 },
+		{ key: 'result', title: 'The result', start: 164.2, end: 177 }
 	] satisfies VideoChapter[]
 };
 

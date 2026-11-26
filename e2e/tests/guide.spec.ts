@@ -76,7 +76,7 @@ test('the guide is an overview, a video and a page per step, with the engagement
 	const video = page.getByTestId('explainer-video');
 	await expect(video.locator('video')).toHaveAttribute('src', '/media/explainer.mp4');
 	await expect(video.locator('track[kind="captions"]')).toHaveAttribute('src', '/media/explainer.en.vtt');
-	await expect(video.getByRole('list', { name: 'Chapters' }).getByRole('listitem')).toHaveCount(9);
+	await expect(video.getByRole('list', { name: 'Chapters' }).getByRole('listitem')).toHaveCount(10);
 
 	// Five tiles; exactly one is next, and Continue opens it.
 	const tiles = page.locator('[data-testid^="guide-tile-"]');
@@ -101,7 +101,7 @@ test('the guide is an overview, a video and a page per step, with the engagement
 	await expect(stepper.getByRole('link', { name: /Plan/ })).toHaveAttribute('aria-current', 'step');
 	// The step's own part of the video.
 	await expect(plan.getByTestId('explainer-video')).toHaveAttribute('data-chapter', 'plan');
-	await expect(plan.locator('video')).toHaveAttribute('src', '/media/explainer.mp4#t=71.2,89.9');
+	await expect(plan.locator('video')).toHaveAttribute('src', '/media/explainer.mp4#t=102.2,117.2');
 	await page.getByRole('link', { name: 'Next: 4. Run' }).click();
 	await expect(page).toHaveURL(`/guide/run?e=${e.id}`);
 	await page.getByRole('link', { name: 'Previous: 3. Plan' }).click();
